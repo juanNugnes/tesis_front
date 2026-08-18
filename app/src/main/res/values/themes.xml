@@ -1,0 +1,1 @@
+<resources><style name="Theme.Habitos" parent="android:style/Theme.Material.Light.NoActionBar"><item name="android:fontFamily">sans</item><item name="android:windowLightStatusBar">false</item><item name="android:navigationBarColor">#0B0A1A</item><item name="android:statusBarColor">#6D28D9</item></style></resources>
