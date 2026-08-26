@@ -1,7 +1,11 @@
 package com.juan.habitos.ui.state
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.juan.habitos.data.remote.CreateProfileRequest
+import com.juan.habitos.data.remote.HabitsApi
+import com.juan.habitos.data.remote.ProfileSettingsRequest
 import com.juan.habitos.domain.model.*
 import com.juan.habitos.domain.repository.*
 import kotlinx.coroutines.flow.*
@@ -10,7 +14,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 data class ProfileUiState(val name: String = "", val avatar: String? = null, val age: Int? = null, val schoolSchedules: Set<SchoolSchedule> = emptySet(), val bedtime: BedtimeRange? = null) { val valid get() = name.trim().isNotEmpty() && avatar != null && age in 6..12 && schoolSchedules.isNotEmpty() }
-class ProfileViewModel(private val repository: ProfileRepository) : ViewModel() {
+class ProfileViewModel(private val repository: ProfileRepository, private val habitsApi: HabitsApi? = null) : ViewModel() {
     private val _state = MutableStateFlow(ProfileUiState()); val state = _state.asStateFlow()
     fun setName(value: String) { _state.update { it.copy(name = value) } }
     fun selectAvatar(value: String) { _state.update { it.copy(avatar = value) } }
@@ -18,6 +22,33 @@ class ProfileViewModel(private val repository: ProfileRepository) : ViewModel() 
     fun toggleSchoolSchedule(value: SchoolSchedule) { _state.update { it.copy(schoolSchedules = if (value in it.schoolSchedules) it.schoolSchedules - value else it.schoolSchedules + value) } }
     fun selectBedtime(value: BedtimeRange) { _state.update { it.copy(bedtime = if (it.bedtime == value) null else value) } }
     fun save(onSaved: () -> Unit) { val s = state.value; if (s.valid) viewModelScope.launch { repository.save(Profile(s.name.trim(), s.avatar!!, s.age!!, s.schoolSchedules, s.bedtime)); onSaved() } }
+    fun createTestProfile(onSuccess: () -> Unit) {
+        val api = habitsApi ?: run { Log.e("PROFILE_API", "HabitsApi no está configurada"); return }
+        viewModelScope.launch {
+            val request = CreateProfileRequest(
+                alias = "test android",
+                age = 6,
+                avatar = "fox",
+                settings = ProfileSettingsRequest(
+                    school_start = "08:00:00",
+                    school_end = "12:30:00",
+                    sleep_start = "22:00:00",
+                    sleep_end = "07:00:00",
+                ),
+            )
+            try {
+                val response = api.createProfile(request)
+                if (response.code() == 200 || response.code() == 201) {
+                    Log.i("PROFILE_API", "Perfil creado correctamente. HTTP ${response.code()}")
+                    onSuccess()
+                } else {
+                    Log.e("PROFILE_API", "Error al crear perfil. HTTP ${response.code()}")
+                }
+            } catch (exception: Exception) {
+                Log.e("PROFILE_API", "No se pudo conectar con el backend", exception)
+            }
+        }
+    }
 }
 
 data class PinUiState(val digits: String = "", val error: Boolean = false)
