@@ -9,8 +9,6 @@ import com.juan.habitos.data.remote.ProfileSettingsRequest
 import com.juan.habitos.domain.model.*
 import com.juan.habitos.domain.repository.*
 import kotlinx.coroutines.flow.*
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 data class ProfileUiState(val name: String = "", val avatar: String? = null, val age: Int? = null, val schoolSchedules: Set<SchoolSchedule> = emptySet(), val bedtime: BedtimeRange? = null) { val valid get() = name.trim().isNotEmpty() && avatar != null && age in 6..12 && schoolSchedules.isNotEmpty() }
@@ -61,19 +59,29 @@ class PinViewModel(private val pinStore: PinStore) : ViewModel() {
 
 enum class DayPeriod { MORNING, AFTERNOON, NIGHT }
 data class DayPeriodUsageUiModel(val period: DayPeriod, val minutes: Int)
-data class PauseRecommendationUiModel(val emoji: String, val text: String, val durationMinutes: Int)
-sealed interface PauseState {
-    data class Suggested(val recommendation: PauseRecommendationUiModel) : PauseState
-    data class Running(val recommendation: PauseRecommendationUiModel, val remainingSeconds: Int) : PauseState
-    data class Completed(val recommendation: PauseRecommendationUiModel) : PauseState
+data class SuggestedActivityUiModel(val emoji: String, val text: String, val suggestedDurationMinutes: Int? = null)
+sealed interface ActivityState {
+    data class Suggested(val activity: SuggestedActivityUiModel) : ActivityState
+    data class Running(val activity: SuggestedActivityUiModel) : ActivityState
 }
 
-private val pauseRecommendations = listOf(
-    PauseRecommendationUiModel("🧘", "Estirá el cuerpo", 5),
-    PauseRecommendationUiModel("🚶", "Caminá un poquito", 5),
-    PauseRecommendationUiModel("💧", "Tomá agua y descansá la vista", 5),
-    PauseRecommendationUiModel("🪟", "Mirá por la ventana y descansá los ojos", 5),
-    PauseRecommendationUiModel("🙆", "Mové los brazos y hombros", 5),
+private val suggestedActivities = listOf(
+    SuggestedActivityUiModel("🎵", "Bailá una canción"),
+    SuggestedActivityUiModel("🤸", "Armá una secuencia de movimientos"),
+    SuggestedActivityUiModel("⚽", "Jugá con una pelota"),
+    SuggestedActivityUiModel("🎭", "Inventá un personaje"),
+    SuggestedActivityUiModel("🦄", "Creá un animal imaginario"),
+    SuggestedActivityUiModel("🎨", "Dibujá algo que te guste"),
+    SuggestedActivityUiModel("✍️", "Inventá una historia"),
+    SuggestedActivityUiModel("📖", "Elegí algo para leer"),
+    SuggestedActivityUiModel("📚", "Volvé a una historia que te guste"),
+    SuggestedActivityUiModel("🧩", "Jugá con algo que tengas cerca"),
+    SuggestedActivityUiModel("🧱", "Construí algo"),
+    SuggestedActivityUiModel("🧸", "Creá una historia con tus juguetes"),
+    SuggestedActivityUiModel("👫", "Jugá con alguien"),
+    SuggestedActivityUiModel("💬", "Contá algo de tu día"),
+    SuggestedActivityUiModel("🤝", "Ayudá con algo"),
+    SuggestedActivityUiModel("🎧", "Escuchá una historia"),
 )
 data class ChildHomeUiState(
     val profile: Profile = Profile("", "🦊", 9),
@@ -85,46 +93,85 @@ data class ChildHomeUiState(
         DayPeriodUsageUiModel(DayPeriod.NIGHT, 30),
     ),
     val apps: List<AppUsage> = emptyList(),
-    val recommendation: Recommendation? = null,
-    val pauseState: PauseState = PauseState.Suggested(pauseRecommendations.first()),
-    val completedBreaks: Int = 2,
-    val suggestedBreaks: Int = 3,
+    val activityState: ActivityState = ActivityState.Suggested(suggestedActivities[5]),
+    val chosenActivities: Int = 2,
 )
-class ChildViewModel(profileRepo: ProfileRepository, private val usageRepo: UsageRepository, private val timerTickMillis: Long = 1_000L) : ViewModel() {
+class ChildViewModel(profileRepo: ProfileRepository, private val usageRepo: UsageRepository) : ViewModel() {
     private val _state = MutableStateFlow(ChildHomeUiState()); val state = _state.asStateFlow()
-    private var pauseJob: Job? = null
-    init { viewModelScope.launch { profileRepo.profile.filterNotNull().collect { profile -> _state.update { it.copy(profile = profile) } } }; viewModelScope.launch { _state.update { it.copy(usage = usageRepo.daily(), apps = usageRepo.apps(), recommendation = usageRepo.recommendation()) } } }
-    fun showAnotherPauseIdea() {
-        val current = (state.value.pauseState as? PauseState.Suggested)?.recommendation ?: return
-        val nextIndex = (pauseRecommendations.indexOf(current) + 1).mod(pauseRecommendations.size)
-        _state.update { it.copy(pauseState = PauseState.Suggested(pauseRecommendations[nextIndex])) }
+    init { viewModelScope.launch { profileRepo.profile.filterNotNull().collect { profile -> _state.update { it.copy(profile = profile) } } }; viewModelScope.launch { _state.update { it.copy(usage = usageRepo.daily(), apps = usageRepo.apps()) } } }
+    fun showAnotherActivity() {
+        val current = (state.value.activityState as? ActivityState.Suggested)?.activity ?: return
+        val nextIndex = (suggestedActivities.indexOf(current) + 1).mod(suggestedActivities.size)
+        _state.update { it.copy(activityState = ActivityState.Suggested(suggestedActivities[nextIndex])) }
     }
-    fun startPause() {
-        val recommendation = (state.value.pauseState as? PauseState.Suggested)?.recommendation ?: return
-        pauseJob?.cancel()
-        pauseJob = viewModelScope.launch {
-            var remaining = recommendation.durationMinutes * 60
-            _state.update { it.copy(pauseState = PauseState.Running(recommendation, remaining)) }
-            while (remaining > 0) {
-                delay(timerTickMillis)
-                remaining--
-                _state.update { it.copy(pauseState = PauseState.Running(recommendation, remaining)) }
-            }
-            // TODO: validate a future pause with real Android device-usage signals when available.
-            _state.update { it.copy(pauseState = PauseState.Completed(recommendation), completedBreaks = it.completedBreaks + 1) }
-            delay(2_000L)
-            _state.update { it.copy(pauseState = PauseState.Suggested(recommendation)) }
-        }
+    fun startActivity() {
+        val activity = (state.value.activityState as? ActivityState.Suggested)?.activity ?: return
+        _state.update { it.copy(activityState = ActivityState.Running(activity), chosenActivities = it.chosenActivities + 1) }
     }
-    fun cancelPause() {
-        val recommendation = (state.value.pauseState as? PauseState.Running)?.recommendation ?: return
-        pauseJob?.cancel()
-        pauseJob = null
-        _state.update { it.copy(pauseState = PauseState.Suggested(recommendation)) }
+    fun finishActivity() {
+        val activity = (state.value.activityState as? ActivityState.Running)?.activity ?: return
+        _state.update { it.copy(activityState = ActivityState.Suggested(activity)) }
     }
 }
 
-data class AdultDashboardUiState(val profile: Profile = Profile("", "🦊", 9), val period: DashboardPeriod = DashboardPeriod.TODAY, val usage: DailyUsage = DailyUsage(0,180,0), val apps: List<AppUsage> = emptyList(), val alerts: List<Alert> = emptyList())
+data class AdultAppUsageUiModel(val name: String, val icon: String, val minutes: Int)
+data class CategoryUsageUiModel(val name: String, val percentage: Int)
+data class AdultAppsTabUiState(
+    val applications: List<AdultAppUsageUiModel> = listOf(
+        AdultAppUsageUiModel("YouTube", "▶️", 80),
+        AdultAppUsageUiModel("Roblox", "🎮", 46),
+        AdultAppUsageUiModel("Khan Academy", "📚", 31),
+        AdultAppUsageUiModel("WhatsApp", "💬", 22),
+    ),
+    val categories: List<CategoryUsageUiModel> = listOf(
+        CategoryUsageUiModel("Entretenimiento", 42),
+        CategoryUsageUiModel("Juegos", 28),
+        CategoryUsageUiModel("Social", 17),
+        CategoryUsageUiModel("Educación", 13),
+    ),
+    val comparisonApp: String = "YouTube",
+    val comparisonTodayMinutes: Int = 80,
+    val comparisonHabitualMinutes: Int = 45,
+)
+data class NightUsageDayUiModel(val label: String, val minutes: Int)
+data class AdultNightTabUiState(
+    val bedtime: String = "22:00",
+    val usageAfterBedtimeMinutes: Int = 38,
+    val lastActivity: String = "23:42",
+    val activeNightsThisWeek: Int = 3,
+    val recentDays: List<NightUsageDayUiModel> = listOf(
+        NightUsageDayUiModel("Hoy", 38),
+        NightUsageDayUiModel("Ayer", 12),
+        NightUsageDayUiModel("Lunes", 0),
+        NightUsageDayUiModel("Domingo", 44),
+    ),
+)
+data class AnalysisFactorUiModel(val icon: String, val title: String, val description: String)
+data class BehaviorComparisonUiModel(val label: String, val value: String)
+data class AdultAttentionTabUiState(
+    val factors: List<AnalysisFactorUiModel> = listOf(
+        AnalysisFactorUiModel("📈", "Tiempo de uso", "Se observó un aumento respecto de períodos anteriores."),
+        AnalysisFactorUiModel("📱", "Frecuencia", "Se registraron más sesiones respecto de su comportamiento habitual."),
+        AnalysisFactorUiModel("🌙", "Horario", "Se registró actividad posterior al horario habitual de acostarse."),
+        AnalysisFactorUiModel("🎮", "Categorías", "La distribución entre categorías se mantuvo similar a períodos anteriores."),
+    ),
+    val comparisons: List<BehaviorComparisonUiModel> = listOf(
+        BehaviorComparisonUiModel("Tiempo de uso", "+28 %"),
+        BehaviorComparisonUiModel("Sesiones", "+18 %"),
+        BehaviorComparisonUiModel("Uso nocturno", "Mayor"),
+        BehaviorComparisonUiModel("Entretenimiento", "Similar"),
+    ),
+)
+data class AdultDashboardUiState(
+    val profile: Profile = Profile("", "🦊", 9),
+    val period: DashboardPeriod = DashboardPeriod.TODAY,
+    val usage: DailyUsage = DailyUsage(0,180,0),
+    val apps: List<AppUsage> = emptyList(),
+    val alerts: List<Alert> = emptyList(),
+    val appsTab: AdultAppsTabUiState = AdultAppsTabUiState(),
+    val nightTab: AdultNightTabUiState = AdultNightTabUiState(),
+    val attentionTab: AdultAttentionTabUiState = AdultAttentionTabUiState(),
+)
 class AdultViewModel(profileRepo: ProfileRepository, private val usageRepo: UsageRepository, private val alertRepo: AlertRepository) : ViewModel() {
     private val _state = MutableStateFlow(AdultDashboardUiState()); val state = _state.asStateFlow()
     init { viewModelScope.launch { profileRepo.profile.filterNotNull().collect { p -> _state.update { it.copy(profile = p) } } }; load() }

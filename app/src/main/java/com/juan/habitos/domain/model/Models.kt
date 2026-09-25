@@ -8,9 +8,21 @@ data class Profile(
     val age: Int,
     val schoolSchedules: Set<SchoolSchedule> = emptySet(),
     val bedtime: BedtimeRange? = null,
+    val schoolStart: String? = null,
+    val schoolEnd: String? = null,
+    val sleepStart: String? = null,
+    val sleepEnd: String? = null,
 )
 data class AppUsage(val name: String, val packageName: String, val minutes: Int, val category: String, val icon: String)
 data class DailyUsage(val currentMinutes: Int, val expectedMinutes: Int, val sessionCount: Int)
 data class Recommendation(val title: String, val description: String, val activity: String)
-data class Alert(val id: String, val title: String)
+data class Alert(
+    val id: String,
+    val type: String,
+    val icon: String,
+    val title: String,
+    val description: String,
+    val detail: String,
+    val recommendation: String,
+)
 enum class DashboardPeriod { TODAY, WEEK }

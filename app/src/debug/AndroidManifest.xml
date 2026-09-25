@@ -1,10 +1,5 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <application android:usesCleartextTraffic="true">
-        <activity android:name="com.juan.habitos.diagnostics.UsageDiagnosticsActivity" android:exported="true" android:label="Diagnóstico de uso">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-        </activity>
+        <activity android:name="com.juan.habitos.diagnostics.UsageDiagnosticsActivity" android:exported="false" android:label="Diagnóstico de uso" />
     </application>
 </manifest>

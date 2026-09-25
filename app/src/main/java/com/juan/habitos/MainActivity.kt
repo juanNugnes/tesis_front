@@ -30,14 +30,14 @@ private inline fun <reified T : ViewModel> factory(crossinline create: () -> T) 
     val app = LocalContext.current.applicationContext as HabitosApplication
     val scope = rememberCoroutineScope()
     var start by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(Unit) { start = if (app.profileRepository.onboardingComplete.first()) "child" else "profile" }
+    LaunchedEffect(Unit) { app.initializeDemoIfNeeded(); start = if (app.profileRepository.onboardingComplete.first()) "child" else "profile" }
     val startRoute = start ?: return
     val nav = rememberNavController()
     NavHost(nav, startRoute) {
-        composable("profile") { val vm: ProfileViewModel = viewModel(factory = factory { ProfileViewModel(app.profileRepository, app.habitsApi) }); val state by vm.state.collectAsStateWithLifecycle(); ProfileScreen(state, vm::setName, vm::selectAvatar, vm::selectAge, vm::toggleSchoolSchedule, vm::selectBedtime) { vm.createTestProfile { vm.save { nav.navigate("createPin") } } } }
+        composable("profile") { val vm: ProfileViewModel = viewModel(factory = factory { ProfileViewModel(app.profileRepository, app.habitsApi) }); val state by vm.state.collectAsStateWithLifecycle(); ProfileScreen(state, vm::setName, vm::selectAvatar, vm::selectAge, vm::toggleSchoolSchedule, vm::selectBedtime) { if (BuildConfig.DEMO_MODE) vm.save { nav.navigate("createPin") } else vm.createTestProfile { vm.save { nav.navigate("createPin") } } } }
         composable("createPin") { val vm: PinViewModel = viewModel(factory = factory { PinViewModel(app.pinStore) }); val state by vm.state.collectAsStateWithLifecycle(); CreatePinScreen(state, { vm.digit(it, true) { nav.navigate("permissions") } }, vm::delete) }
         composable("permissions") { var granted by rememberSaveable { mutableStateOf(emptySet<Int>()) }; val manager = remember { AndroidPermissionManager(app) }; PermissionsScreen(granted, { index -> manager.request(index); granted = granted + index }, { scope.launch { app.profileRepository.completeOnboarding(); nav.navigate("child") { popUpTo("profile") { inclusive = true } } } }) }
-        composable("child") { val vm: ChildViewModel = viewModel(factory = factory { ChildViewModel(app.profileRepository, app.usageRepository) }); val state by vm.state.collectAsStateWithLifecycle(); ChildHomeScreen(state, { nav.navigate("adultPin") }, vm::showAnotherPauseIdea, vm::startPause, vm::cancelPause) }
+        composable("child") { val vm: ChildViewModel = viewModel(factory = factory { ChildViewModel(app.profileRepository, app.usageRepository) }); val state by vm.state.collectAsStateWithLifecycle(); ChildHomeScreen(state, { nav.navigate("adultPin") }, vm::showAnotherActivity, vm::startActivity, vm::finishActivity) }
         composable("adultPin") { val vm: PinViewModel = viewModel(factory = factory { PinViewModel(app.pinStore) }); val state by vm.state.collectAsStateWithLifecycle(); DisposableEffect(Unit) { vm.clear(); onDispose {} }; AdultPinScreen(state, { vm.digit(it, false) { nav.navigate("adult") { popUpTo("adultPin") { inclusive = true } } } }, vm::delete) { nav.popBackStack() } }
         composable("adult") { val vm: AdultViewModel = viewModel(factory = factory { AdultViewModel(app.profileRepository, app.usageRepository, app.alertRepository) }); val state by vm.state.collectAsStateWithLifecycle(); AdultDashboardScreen(state, vm::period) { nav.navigate("child") { popUpTo("child") { inclusive = true } } } }
     }
