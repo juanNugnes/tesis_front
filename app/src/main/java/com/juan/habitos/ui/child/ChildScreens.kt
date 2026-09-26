@@ -4,16 +4,22 @@ import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.*
+import androidx.compose.animation.*
+import androidx.compose.animation.core.*
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.*
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.*
 import com.juan.habitos.ui.components.*
 import com.juan.habitos.ui.state.*
 import com.juan.habitos.ui.theme.*
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 private val ChildCardColor = Color.White.copy(alpha = .11f)
 private val ChildBorderColor = Color.White.copy(alpha = .20f)
@@ -26,43 +32,79 @@ private val ChildBorderColor = Color.White.copy(alpha = .20f)
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         item { ChildHeader(state, onLock) }
-        item { Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) { UsageProgressCircle(state.usage); Spacer(Modifier.height(14.dp)); Text("Tiempo de pantalla hoy", color = Color.White, fontWeight = FontWeight.Bold) } }
-        item { UsageComparison(state.usage.currentMinutes, state.habitualUsageMinutes) }
+        item { DaySceneCard(state.profile.avatar, state.chosenActivities) }
+        item { DayUsageSummary(state.usage.currentMinutes, state.habitualUsageMinutes) }
+        item { ActivitySuggestionCard(state.profile.avatar, state.activityState, onAnotherActivity, onStartActivity, onFinishActivity) }
         item { DayPeriodUsageCard(state.periodUsage) }
-        item { ActivitySuggestionCard(state.activityState, onAnotherActivity, onStartActivity, onFinishActivity) }
         item { ActivityHistory(state.chosenActivities) }
-        item { AppsTodayCard(state) }
         item { Spacer(Modifier.navigationBarsPadding()) }
     }
 }
 
-@Composable private fun ChildHeader(state: ChildHomeUiState, onLock: () -> Unit) { Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text("¡Buenas tardes!", color = Color.White.copy(.72f), fontSize = 14.sp); Text("${state.profile.avatar}  ${state.profile.name}", color = Color.White, fontSize = 27.sp, fontWeight = FontWeight.Bold) }; FilledTonalIconButton(onLock, colors = IconButtonDefaults.filledTonalIconButtonColors(containerColor = Color.White.copy(.15f), contentColor = Color.White)) { Text("🔒") } } }
+@Composable private fun ChildHeader(state: ChildHomeUiState, onLock: () -> Unit) { Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) { Surface(Modifier.size(64.dp), shape = CircleShape, color = Color(0xFFFFF4D8), border = BorderStroke(2.dp, Color.White.copy(.55f))) { Box(contentAlignment = Alignment.Center) { Text(state.profile.avatar, fontSize = 34.sp) } }; Spacer(Modifier.width(14.dp)); Text("¡Hola, ${state.profile.name}!", Modifier.weight(1f), color = Color.White, fontSize = 27.sp, fontWeight = FontWeight.Bold); FilledTonalIconButton(onLock, colors = IconButtonDefaults.filledTonalIconButtonColors(containerColor = Color.White.copy(.15f), contentColor = Color.White)) { Text("🔒") } } }
 
-@Composable fun UsageComparison(todayMinutes: Int, habitualMinutes: Int) { val max = maxOf(todayMinutes, habitualMinutes, 1); ChildCard { Column(verticalArrangement = Arrangement.spacedBy(10.dp)) { ComparisonRow("Hoy", todayMinutes, max, AppColors.PurpleSoft); ComparisonRow("Habitual", habitualMinutes, max, Color(0xFFB8A6F7)) } } }
+@Composable private fun DaySceneCard(avatar: String, chosenActivities: Int) {
+    val idle = rememberInfiniteTransition(label = "day-scene-idle")
+    val avatarOffset by idle.animateFloat(-3f, 3f, infiniteRepeatable(tween(3600, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "avatar-float")
+    val cloudOffset by idle.animateFloat(-8f, 10f, infiniteRepeatable(tween(9000, easing = LinearEasing), RepeatMode.Reverse), label = "cloud-drift")
+    ChildCard(containerColor = Color(0xFFE9F8EE).copy(.96f), borderColor = Color.White.copy(.55f)) { Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text("🌱  Tu día", color = Color(0xFF24543A), fontWeight = FontWeight.Bold, fontSize = 18.sp)
+        Box(Modifier.fillMaxWidth().height(150.dp).clip(RoundedCornerShape(18.dp)).background(Brush.verticalGradient(listOf(Color(0xFFBDE9FF), Color(0xFFE9F8D8))))) {
+            Text("☁️", Modifier.align(Alignment.TopStart).padding(start = 22.dp, top = 12.dp).graphicsLayer { translationX = cloudOffset }, fontSize = 23.sp)
+            Text("☁️", Modifier.align(Alignment.TopCenter).padding(top = 30.dp).graphicsLayer { translationX = -cloudOffset * .65f; alpha = .78f }, fontSize = 17.sp)
+            Box(Modifier.size(94.dp).offset(x = (-18).dp, y = 96.dp).background(Color(0xFF8ED081), CircleShape))
+            Box(Modifier.size(150.dp).align(Alignment.BottomEnd).offset(x = 32.dp, y = 78.dp).background(Color(0xFF72C979), CircleShape))
+            Text("☀️", Modifier.align(Alignment.TopEnd).padding(14.dp), fontSize = 27.sp)
+            Text(avatar, Modifier.align(Alignment.BottomCenter).padding(bottom = 18.dp).graphicsLayer { translationY = avatarOffset }, fontSize = 43.sp)
+            val details = listOf("🌿", "🌼", "🦋", "⭐")
+            details.forEachIndexed { index, detail -> val visible = index < chosenActivities.coerceIn(0, details.size); val detailScale by animateFloatAsState(if (visible) 1f else .7f, tween(350, easing = FastOutSlowInEasing), label = "day-detail-scale-$index"); val detailAlpha by animateFloatAsState(if (visible) 1f else 0f, tween(280), label = "day-detail-alpha-$index"); Text(detail, Modifier.align(if (index % 2 == 0) Alignment.CenterStart else Alignment.CenterEnd).padding(horizontal = (18 + index * 7).dp, vertical = (8 + index * 4).dp).graphicsLayer { scaleX = detailScale; scaleY = detailScale; alpha = detailAlpha }, fontSize = 22.sp) }
+        }
+    } }
+}
+
+@Composable private fun DayUsageSummary(todayMinutes: Int, habitualMinutes: Int) { var expanded by rememberSaveable { mutableStateOf(false) }; val difference = todayMinutes - habitualMinutes; val message = when { difference > 15 -> "Hoy usaste el celu un poquito más que otros días"; difference < -15 -> "Hoy usaste el celu un poquito menos que otros días"; else -> "Hoy viene parecido a otros días" }; ChildCard { Column(verticalArrangement = Arrangement.spacedBy(10.dp)) { Text("Así viene tu día", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 19.sp); Text(message, color = Color.White.copy(.82f), lineHeight = 20.sp); TextButton(onClick = { expanded = !expanded }, contentPadding = PaddingValues(horizontal = 0.dp)) { Text(if (expanded) "Ocultar mi tiempo ↑" else "Ver mi tiempo →", color = Color(0xFFFFE08A), fontWeight = FontWeight.Bold) }; AnimatedVisibility(visible = expanded, enter = expandVertically(tween(220)) + fadeIn(), exit = shrinkVertically(tween(180)) + fadeOut()) { UsageComparison(todayMinutes, habitualMinutes) } } } }
+
+@Composable fun UsageComparison(todayMinutes: Int, habitualMinutes: Int) { val max = maxOf(todayMinutes, habitualMinutes, 1); Column(verticalArrangement = Arrangement.spacedBy(10.dp)) { HorizontalDivider(color = Color.White.copy(.18f)); ComparisonRow("Hoy", todayMinutes, max, Color(0xFFFFD166)); ComparisonRow("Habitual", habitualMinutes, max, Color(0xFFB8A6F7)) } }
 @Composable private fun ComparisonRow(label: String, minutes: Int, maxMinutes: Int, color: Color) { Row(verticalAlignment = Alignment.CenterVertically) { Text(label, Modifier.width(70.dp), color = Color.White.copy(.72f), fontSize = 13.sp); LinearProgressIndicator({ minutes.toFloat() / maxMinutes }, Modifier.weight(1f).height(9.dp).clip(CircleShape), color = color, trackColor = Color.White.copy(.13f)); Spacer(Modifier.width(12.dp)); Text(formatMinutes(minutes), Modifier.width(64.dp), color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold, maxLines = 1) } }
 
-@Composable fun DayPeriodUsageCard(periods: List<DayPeriodUsageUiModel>) { ChildCard { Column(verticalArrangement = Arrangement.spacedBy(15.dp)) { Text("☀️  Cómo usaste el celu hoy", color = Color.White, fontWeight = FontWeight.Bold); Row(Modifier.fillMaxWidth(), Arrangement.spacedBy(8.dp)) { periods.forEach { period -> DayPeriodItem(period, Modifier.weight(1f)) } } } } }
-@Composable fun DayPeriodItem(item: DayPeriodUsageUiModel, modifier: Modifier = Modifier) { val (icon, label) = when (item.period) { DayPeriod.MORNING -> "🌅" to "Mañana"; DayPeriod.AFTERNOON -> "☀️" to "Tarde"; DayPeriod.NIGHT -> "🌙" to "Noche" }; Column(modifier, horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) { Box(Modifier.fillMaxWidth().height(42.dp).background(if (item.period == DayPeriod.AFTERNOON) AppColors.PurpleSoft.copy(.88f) else Color.White.copy(.12f), RoundedCornerShape(10.dp))); Text(icon, fontSize = 18.sp); Text(label, color = Color.White.copy(.7f), fontSize = 11.sp); Text(formatMinutes(item.minutes), color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold) } }
+@Composable fun DayPeriodUsageCard(periods: List<DayPeriodUsageUiModel>) { var selected by rememberSaveable { mutableStateOf<DayPeriod?>(null) }; ChildCard { Column(verticalArrangement = Arrangement.spacedBy(14.dp)) { Text("Momentos de tu día", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp); Row(Modifier.fillMaxWidth(), Arrangement.spacedBy(9.dp)) { periods.forEachIndexed { index, period -> DayPeriodItem(period, selected == period.period, selected != null, index, Modifier.weight(1f)) { selected = if (selected == period.period) null else period.period } } }; AnimatedContent(targetState = selected, transitionSpec = { fadeIn(tween(220)) + expandVertically() togetherWith fadeOut(tween(140)) + shrinkVertically() }, label = "period-detail") { selectedPeriod -> periods.firstOrNull { it.period == selectedPeriod }?.let { item -> val label = periodPresentation(item.period).second; Text("$label\nUsaste el celu ${formatMinutesLong(item.minutes)}.", Modifier.fillMaxWidth().background(Color.White.copy(.10f), RoundedCornerShape(12.dp)).padding(12.dp), color = Color.White, fontWeight = FontWeight.Medium, lineHeight = 21.sp) } } } } }
+@Composable fun DayPeriodItem(item: DayPeriodUsageUiModel, selected: Boolean, hasSelection: Boolean, index: Int, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    val (icon, label) = periodPresentation(item.period)
+    val idle = rememberInfiniteTransition(label = "period-$index")
+    val floatingOffset by idle.animateFloat(-2.5f, 2.5f, infiniteRepeatable(tween(3200 + index * 550, easing = FastOutSlowInEasing, delayMillis = index * 180), RepeatMode.Reverse), label = "period-float-$index")
+    val scale by animateFloatAsState(if (selected) 1.06f else if (hasSelection) .95f else 1f, tween(220, easing = FastOutSlowInEasing), label = "period-scale")
+    val emphasis by animateFloatAsState(if (hasSelection && !selected) .68f else 1f, tween(220), label = "period-emphasis")
+    Surface(onClick = onClick, modifier = modifier.height(96.dp).graphicsLayer { translationY = floatingOffset; scaleX = scale; scaleY = scale; alpha = emphasis }, color = if (selected) Color(0xFFFFD166).copy(.28f) else Color.White.copy(.10f), shape = RoundedCornerShape(30.dp), border = BorderStroke(1.dp, if (selected) Color(0xFFFFE08A) else Color.White.copy(.16f))) { Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) { Text(icon, fontSize = 27.sp); Spacer(Modifier.height(6.dp)); Text(label, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold) } }
+}
+private fun periodPresentation(period: DayPeriod) = when (period) { DayPeriod.MORNING -> "🌅" to "Mañana"; DayPeriod.AFTERNOON -> "☀️" to "Tarde"; DayPeriod.NIGHT -> "🌙" to "Noche" }
 
-@Composable fun ActivitySuggestionCard(activityState: ActivityState, onAnotherIdea: () -> Unit, onStart: () -> Unit, onFinish: () -> Unit) { ChildCard { when (activityState) {
+@Composable fun ActivitySuggestionCard(avatar: String, activityState: ActivityState, onAnotherIdea: () -> Unit, onStart: () -> Unit, onFinish: () -> Unit) {
+    val scope = rememberCoroutineScope()
+    val avatarScale = remember { Animatable(1f) }
+    val refreshRotation = remember { Animatable(0f) }
+    var finishReaction by remember { mutableStateOf(false) }
+    fun react() { scope.launch { avatarScale.snapTo(1f); avatarScale.animateTo(1.07f, tween(110)); avatarScale.animateTo(1f, tween(180, easing = FastOutSlowInEasing)) } }
+    ChildCard(containerColor = Color(0xFF312E81).copy(.88f), borderColor = Color(0xFFFFE08A).copy(.55f)) { Box { AnimatedContent(targetState = activityState, transitionSpec = { (slideInHorizontally(tween(300, easing = FastOutSlowInEasing)) { it / 3 } + fadeIn(tween(260))) togetherWith (slideOutHorizontally(tween(260)) { -it / 3 } + fadeOut(tween(180))) }, label = "activity") { currentState -> when (currentState) {
     is ActivityState.Suggested -> Column(verticalArrangement = Arrangement.spacedBy(13.dp)) {
-        Text("🌿  ¿Querés hacer algo diferente?", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
-        Surface(color = Color.White.copy(.12f), shape = RoundedCornerShape(14.dp), border = BorderStroke(1.dp, Color.White.copy(.12f))) { Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) { Text("${activityState.activity.emoji}  ${activityState.activity.text}", color = Color.White, fontWeight = FontWeight.Bold); activityState.activity.suggestedDurationMinutes?.let { Text("Duración sugerida: $it min", color = Color.White.copy(.7f), fontSize = 12.sp) } } }
-        TextButton(onClick = onAnotherIdea, modifier = Modifier.align(Alignment.CenterHorizontally)) { Text("Otra idea →", color = Color(0xFFE9D5FF), fontWeight = FontWeight.Bold) }
-        Button(onClick = onStart, modifier = Modifier.fillMaxWidth().height(50.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFF7F5FF), contentColor = AppColors.PurpleUi), shape = RoundedCornerShape(14.dp)) { Text("Empezar actividad", fontWeight = FontWeight.Bold) }
+        Row(verticalAlignment = Alignment.CenterVertically) { Text(avatar, Modifier.graphicsLayer { scaleX = avatarScale.value; scaleY = avatarScale.value }, fontSize = 25.sp); Spacer(Modifier.width(8.dp)); Text("Tengo una idea para vos", color = Color(0xFFFFE08A), fontWeight = FontWeight.Bold, fontSize = 15.sp) }
+        Text("¿Querés hacer algo diferente?", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+        Surface(color = Color.White.copy(.12f), shape = RoundedCornerShape(18.dp), border = BorderStroke(1.dp, Color.White.copy(.16f))) { Column(Modifier.fillMaxWidth().padding(18.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(7.dp)) { Text(currentState.activity.emoji, fontSize = 39.sp); Text(currentState.activity.text, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 17.sp); currentState.activity.suggestedDurationMinutes?.let { Text("Duración sugerida: $it min", color = Color.White.copy(.75f), fontSize = 12.sp) } } }
+        Button(onClick = { react(); onStart() }, modifier = Modifier.fillMaxWidth().height(50.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFF7F5FF), contentColor = AppColors.PurpleUi), shape = RoundedCornerShape(14.dp)) { Text("Empezar actividad", fontWeight = FontWeight.Bold) }
+        TextButton(onClick = { react(); scope.launch { refreshRotation.snapTo(0f); refreshRotation.animateTo(360f, tween(320, easing = FastOutSlowInEasing)); refreshRotation.snapTo(0f) }; onAnotherIdea() }, modifier = Modifier.align(Alignment.CenterHorizontally)) { Text("🔄", Modifier.graphicsLayer { rotationZ = refreshRotation.value }, color = Color(0xFFFFE08A)); Spacer(Modifier.width(7.dp)); Text("Otra idea", color = Color(0xFFFFE08A), fontWeight = FontWeight.Bold) }
     }
     is ActivityState.Running -> Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        Text("🌿  Actividad en curso", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
-        Text("${activityState.activity.emoji}  ${activityState.activity.text}", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-        activityState.activity.suggestedDurationMinutes?.let { Text("Duración sugerida: $it min", color = Color.White.copy(.72f)) }
-        Button(onClick = onFinish, modifier = Modifier.fillMaxWidth().height(50.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFF7F5FF), contentColor = AppColors.PurpleUi), shape = RoundedCornerShape(14.dp)) { Text("Finalizar actividad", fontWeight = FontWeight.Bold) }
+        Row(verticalAlignment = Alignment.CenterVertically) { Text(avatar, Modifier.graphicsLayer { scaleX = avatarScale.value; scaleY = avatarScale.value }, fontSize = 28.sp); Spacer(Modifier.width(8.dp)); Text("Actividad en curso", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp) }
+        Text(currentState.activity.emoji, fontSize = 42.sp)
+        Text(currentState.activity.text, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+        currentState.activity.suggestedDurationMinutes?.let { Text("Duración sugerida: $it min", color = Color.White.copy(.72f)) }
+        Button(onClick = { react(); finishReaction = true; scope.launch { delay(850); finishReaction = false }; onFinish() }, modifier = Modifier.fillMaxWidth().height(50.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFF7F5FF), contentColor = AppColors.PurpleUi), shape = RoundedCornerShape(14.dp)) { Text("Finalizar actividad", fontWeight = FontWeight.Bold) }
     }
-} } }
+} }; AnimatedVisibility(finishReaction, Modifier.align(Alignment.TopEnd), enter = fadeIn() + scaleIn(initialScale = .6f), exit = fadeOut() + scaleOut(targetScale = .8f)) { Text("🌿", fontSize = 26.sp) } } } }
 
-@Composable fun ActivityHistory(chosenActivities: Int) { ChildCard { Text("🌱  Hoy elegiste $chosenActivities ${if (chosenActivities == 1) "actividad" else "actividades"}", color = Color.White, fontWeight = FontWeight.Bold) } }
+@Composable fun ActivityHistory(chosenActivities: Int) { Surface(color = Color(0xFFDAF5E3).copy(.96f), shape = RoundedCornerShape(22.dp), border = BorderStroke(1.dp, Color.White.copy(.5f))) { Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) { Text("🌱", fontSize = 25.sp); Spacer(Modifier.width(12.dp)); Text("Hoy elegiste $chosenActivities ${if (chosenActivities == 1) "actividad" else "actividades"}", color = Color(0xFF24543A), fontWeight = FontWeight.Bold) } } }
 
-@Composable private fun AppsTodayCard(state: ChildHomeUiState) { ChildCard { Column(verticalArrangement = Arrangement.spacedBy(16.dp)) { Text("MIS APPS DE HOY", color = Color.White.copy(.68f), fontSize = 12.sp, fontWeight = FontWeight.Bold); val max = state.apps.maxOfOrNull { it.minutes } ?: 1; state.apps.forEach { UsageAppRow(it, max) } } } }
-@Composable private fun ChildCard(content: @Composable () -> Unit) { Card(colors = CardDefaults.cardColors(containerColor = ChildCardColor), border = BorderStroke(1.dp, ChildBorderColor), shape = RoundedCornerShape(20.dp)) { Box(Modifier.fillMaxWidth().padding(16.dp)) { content() } } }
+@Composable private fun ChildCard(containerColor: Color = ChildCardColor, borderColor: Color = ChildBorderColor, content: @Composable () -> Unit) { Card(colors = CardDefaults.cardColors(containerColor = containerColor), border = BorderStroke(1.dp, borderColor), shape = RoundedCornerShape(24.dp)) { Box(Modifier.fillMaxWidth().padding(18.dp)) { content() } } }
 private fun formatMinutes(minutes: Int): String = if (minutes >= 60) "${minutes / 60}h ${minutes % 60}m" else "${minutes}m"
+private fun formatMinutesLong(minutes: Int): String = if (minutes >= 60) "${minutes / 60} h ${minutes % 60} min" else "$minutes min"
 
 @Composable fun AdultPinScreen(state: PinUiState, onDigit: (Int) -> Unit, onDelete: () -> Unit, onBack: () -> Unit) { Column(Modifier.fillMaxSize().background(AppColors.Surface).statusBarsPadding().padding(28.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) { Text("👤", color = AppColors.PurpleSoft, fontSize = 58.sp); Spacer(Modifier.height(22.dp)); Text("Panel del adulto", color = Color.White, fontSize = 27.sp, fontWeight = FontWeight.Bold); Text("Ingresá tu PIN de 4 dígitos", color = Color(0xFFCBD5E1)); Spacer(Modifier.height(30.dp)); PinDots(state.digits.length, state.error, emptyColor = Color(0xFF64748B), filledColor = AppColors.PurpleSoft); if (state.error) Text("PIN incorrecto. Intentá nuevamente.", color = MaterialTheme.colorScheme.error, fontSize = 13.sp, modifier = Modifier.padding(top = 10.dp)); Spacer(Modifier.height(30.dp)); NumericPinKeyboard(onDigit, onDelete, highContrastDark = true); Spacer(Modifier.height(28.dp)); TextButton(onBack) { Text("← Volver", color = Color(0xFFCBD5E1)) } } }
