@@ -10,6 +10,7 @@ import com.juan.habitos.domain.model.*
 import com.juan.habitos.domain.repository.*
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import java.time.LocalDate
 
 data class ProfileUiState(val name: String = "", val avatar: String? = null, val age: Int? = null, val schoolSchedules: Set<SchoolSchedule> = emptySet(), val bedtime: BedtimeRange? = null) { val valid get() = name.trim().isNotEmpty() && avatar != null && age in 6..12 && schoolSchedules.isNotEmpty() }
 class ProfileViewModel(private val repository: ProfileRepository, private val habitsApi: HabitsApi? = null) : ViewModel() {
@@ -49,12 +50,53 @@ class ProfileViewModel(private val repository: ProfileRepository, private val ha
     }
 }
 
+data class ProfileScheduleUiState(val profile: Profile? = null, val saved: Boolean = false) {
+    val valid: Boolean get() = profile?.let { listOf(it.schoolStart, it.schoolEnd, it.sleepStart, it.sleepEnd).all(::isValidScheduleTime) } == true
+}
+class ProfileScheduleViewModel(private val repository: ProfileRepository) : ViewModel() {
+    private val _state = MutableStateFlow(ProfileScheduleUiState()); val state = _state.asStateFlow()
+    init { viewModelScope.launch { repository.profile.first()?.let { profile -> _state.value = ProfileScheduleUiState(profile.copy(schoolStart = displayScheduleTime(profile.schoolStart), schoolEnd = displayScheduleTime(profile.schoolEnd), sleepStart = displayScheduleTime(profile.sleepStart), sleepEnd = displayScheduleTime(profile.sleepEnd))) } } }
+    fun schoolStart(value: String) = update { copy(schoolStart = value.take(5)) }
+    fun schoolEnd(value: String) = update { copy(schoolEnd = value.take(5)) }
+    fun sleepStart(value: String) = update { copy(sleepStart = value.take(5)) }
+    fun sleepEnd(value: String) = update { copy(sleepEnd = value.take(5)) }
+    fun save() { val profile = state.value.profile ?: return; if (!state.value.valid) return; viewModelScope.launch { repository.save(profile); _state.update { it.copy(saved = true) } } }
+    fun consumeSaved() { _state.update { it.copy(saved = false) } }
+    private fun update(transform: Profile.() -> Profile) { _state.update { current -> current.copy(profile = current.profile?.transform(), saved = false) } }
+}
+private fun displayScheduleTime(value: String?): String? = value?.trim()?.split(":")?.takeIf { it.size >= 2 }?.let { "${it[0]}:${it[1]}" }
+private fun isValidScheduleTime(value: String?): Boolean { val parts = value?.split(":") ?: return false; if (parts.size != 2 || parts.any { it.length != 2 }) return false; val hour = parts[0].toIntOrNull() ?: return false; val minute = parts[1].toIntOrNull() ?: return false; return hour in 0..23 && minute in 0..59 }
+
 data class PinUiState(val digits: String = "", val error: Boolean = false)
 class PinViewModel(private val pinStore: PinStore) : ViewModel() {
     private val _state = MutableStateFlow(PinUiState()); val state = _state.asStateFlow()
     fun digit(value: Int, create: Boolean, onComplete: () -> Unit) { if (_state.value.digits.length < 4) { val pin = _state.value.digits + value; _state.value = PinUiState(pin); if (pin.length == 4) viewModelScope.launch { if (create) { pinStore.save(pin); onComplete() } else if (pinStore.verify(pin)) onComplete() else _state.value = PinUiState(error = true) } } }
     fun delete() { _state.update { it.copy(digits = it.digits.dropLast(1), error = false) } }
     fun clear() { _state.value = PinUiState() }
+}
+
+data class ChildPreferencesUiState(
+    val childName: String = "",
+    val preferences: ChildPreferences = ChildPreferences(),
+    val loaded: Boolean = false,
+    val saved: Boolean = false,
+)
+class ChildPreferencesViewModel(private val repository: ChildPreferencesRepository, profileRepository: ProfileRepository) : ViewModel() {
+    private val _state = MutableStateFlow(ChildPreferencesUiState()); val state = _state.asStateFlow()
+    init {
+        viewModelScope.launch { profileRepository.profile.filterNotNull().collect { profile -> _state.update { it.copy(childName = profile.name) } } }
+        viewModelScope.launch { repository.preferences.first().let { preferences -> _state.update { it.copy(preferences = preferences, loaded = true) } } }
+    }
+    fun toggleInterest(value: ChildInterest) = update { copy(interests = interests.toggle(value)) }
+    fun adaptationType(value: AdaptationType) = update { copy(adaptationType = value, considerations = if (value == AdaptationType.NONE) emptySet() else considerations, activitiesToAvoid = if (value == AdaptationType.NONE) emptySet() else activitiesToAvoid, additionalNotes = if (value == AdaptationType.NONE) null else additionalNotes, validUntil = if (value == AdaptationType.TEMPORARY) validUntil else null) }
+    fun toggleConsideration(value: ChildConsideration) = update { copy(considerations = considerations.toggle(value)) }
+    fun toggleRestriction(value: ActivityRestriction) = update { copy(activitiesToAvoid = if (value == ActivityRestriction.NONE) setOf(value) else activitiesToAvoid.minus(ActivityRestriction.NONE).toggle(value)) }
+    fun notes(value: String) = update { copy(additionalNotes = value.take(240)) }
+    fun validUntil(date: LocalDate?) = update { copy(validUntil = date) }
+    fun save(onSaved: () -> Unit = {}) = viewModelScope.launch { repository.save(state.value.preferences); _state.update { it.copy(saved = true) }; onSaved() }
+    fun consumeSaved() { _state.update { it.copy(saved = false) } }
+    private fun update(transform: ChildPreferences.() -> ChildPreferences) { _state.update { it.copy(preferences = it.preferences.transform(), saved = false) } }
+    private fun <T> Set<T>.toggle(value: T): Set<T> = if (value in this) this - value else this + value
 }
 
 enum class DayPeriod { MORNING, AFTERNOON, NIGHT }

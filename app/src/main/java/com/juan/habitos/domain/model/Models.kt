@@ -1,5 +1,7 @@
 package com.juan.habitos.domain.model
 
+import java.time.LocalDate
+
 enum class SchoolSchedule { MORNING, AFTERNOON, EVENING }
 enum class BedtimeRange { FROM_20_TO_21, FROM_21_TO_22, FROM_22_TO_23, FROM_23_TO_00, AFTER_00 }
 data class Profile(
@@ -26,3 +28,16 @@ data class Alert(
     val recommendation: String,
 )
 enum class DashboardPeriod { TODAY, WEEK }
+
+enum class ChildInterest { DRAW_CREATE, STORIES, MUSIC, GAMES_CHALLENGES, OUTDOORS, MOVEMENT, BUILD, WRITE, IMAGINE_ACT }
+enum class AdaptationType { NONE, TEMPORARY, PERMANENT }
+enum class ChildConsideration { MOVEMENT, VISION, HEARING, ATTENTION, ARMS_HANDS, LEGS, COMMUNICATION, SENSORY, TEMPORARY_DISCOMFORT, OTHER }
+enum class ActivityRestriction { RUN_JUMP, STANDING, ARMS_HANDS, VISUAL_PRECISION, SOUNDS, MANY_STIMULI, HIGH_CONCENTRATION, NONE }
+data class ChildPreferences(
+    val interests: Set<ChildInterest> = emptySet(),
+    val adaptationType: AdaptationType = AdaptationType.NONE,
+    val considerations: Set<ChildConsideration> = emptySet(),
+    val activitiesToAvoid: Set<ActivityRestriction> = emptySet(),
+    val additionalNotes: String? = null,
+    val validUntil: LocalDate? = null,
+)

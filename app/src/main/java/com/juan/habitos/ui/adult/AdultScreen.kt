@@ -21,15 +21,16 @@ private const val SUMMARY_TAB = 0
 private const val ALERTS_TAB = 4
 private val tabs = listOf("📊\nRESUMEN", "📱\nAPPS", "🌙\nNOCTURNO", "🧠\nANÁLISIS", "🔔\nALERTAS")
 
-@Composable fun AdultDashboardScreen(state: AdultDashboardUiState, onPeriod: (DashboardPeriod) -> Unit, onExit: () -> Unit) {
+@Composable fun AdultDashboardScreen(state: AdultDashboardUiState, onPeriod: (DashboardPeriod) -> Unit, onProfile: () -> Unit, onExit: () -> Unit) {
     var tab by rememberSaveable { mutableIntStateOf(SUMMARY_TAB) }
     Column(Modifier.fillMaxSize().background(AppColors.Surface).statusBarsPadding()) {
         Row(Modifier.padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onExit) { Text("←", color = Color.White, fontSize = 24.sp) }
-            Column(Modifier.weight(1f)) {
+            Column(Modifier.weight(1f).clickable(onClick = onProfile)) {
                 Text("PANEL LOCAL", color = Color(0xFF94A3B8), fontSize = 11.sp, fontWeight = FontWeight.Bold)
                 Text("${state.profile.avatar} ${state.profile.name} · ${state.profile.age} años", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 19.sp)
             }
+            Text("›", Modifier.clickable(onClick = onProfile).padding(8.dp), color = AppColors.PurpleSoft, fontSize = 28.sp)
         }
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
             tabs.forEachIndexed { index, label ->

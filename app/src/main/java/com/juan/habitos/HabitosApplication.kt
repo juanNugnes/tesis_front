@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.first
 
 class HabitosApplication : Application() {
     val profileRepository by lazy { DataStoreProfileRepository(this) }
+    val childPreferencesRepository by lazy { DataStoreChildPreferencesRepository(this) }
     val pinStore by lazy { HashedPinStore(this) }
     val usageRepository by lazy { FakeUsageRepository() }
     val alertRepository by lazy { FakeAlertRepository() }

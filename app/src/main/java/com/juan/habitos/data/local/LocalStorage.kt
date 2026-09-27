@@ -7,11 +7,13 @@ import androidx.room.*
 import com.juan.habitos.domain.model.Profile
 import com.juan.habitos.domain.model.BedtimeRange
 import com.juan.habitos.domain.model.SchoolSchedule
+import com.juan.habitos.domain.model.*
 import com.juan.habitos.domain.repository.*
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.first
 import java.security.MessageDigest
 import java.security.SecureRandom
+import java.time.LocalDate
 import java.util.Base64
 
 private val Context.dataStore by preferencesDataStore("settings")
@@ -22,6 +24,35 @@ class DataStoreProfileRepository(private val context: Context) : ProfileReposito
     override val onboardingComplete = context.dataStore.data.map { it[Keys.done] ?: false }
     override suspend fun save(profile: Profile) { context.dataStore.edit { preferences -> preferences[Keys.name] = profile.name; preferences[Keys.avatar] = profile.avatar; preferences[Keys.age] = profile.age; preferences[Keys.schoolSchedules] = profile.schoolSchedules.map { schedule -> schedule.name }.toSet(); profile.bedtime?.let { preferences[Keys.bedtime] = it.name } ?: preferences.remove(Keys.bedtime); profile.schoolStart?.let { preferences[Keys.schoolStart] = it } ?: preferences.remove(Keys.schoolStart); profile.schoolEnd?.let { preferences[Keys.schoolEnd] = it } ?: preferences.remove(Keys.schoolEnd); profile.sleepStart?.let { preferences[Keys.sleepStart] = it } ?: preferences.remove(Keys.sleepStart); profile.sleepEnd?.let { preferences[Keys.sleepEnd] = it } ?: preferences.remove(Keys.sleepEnd) } }
     override suspend fun completeOnboarding() { context.dataStore.edit { it[Keys.done] = true } }
+}
+
+class DataStoreChildPreferencesRepository(private val context: Context) : ChildPreferencesRepository {
+    private object Keys {
+        val interests = stringSetPreferencesKey("child_preferences_interests")
+        val adaptationType = stringPreferencesKey("child_preferences_adaptation_type")
+        val considerations = stringSetPreferencesKey("child_preferences_considerations")
+        val restrictions = stringSetPreferencesKey("child_preferences_restrictions")
+        val notes = stringPreferencesKey("child_preferences_notes")
+        val validUntil = longPreferencesKey("child_preferences_valid_until")
+    }
+    override val preferences = context.dataStore.data.map { values ->
+        ChildPreferences(
+            interests = values[Keys.interests].orEmpty().mapNotNull { name -> ChildInterest.entries.find { it.name == name } }.toSet(),
+            adaptationType = values[Keys.adaptationType]?.let { name -> AdaptationType.entries.find { it.name == name } } ?: AdaptationType.NONE,
+            considerations = values[Keys.considerations].orEmpty().mapNotNull { name -> ChildConsideration.entries.find { it.name == name } }.toSet(),
+            activitiesToAvoid = values[Keys.restrictions].orEmpty().mapNotNull { name -> ActivityRestriction.entries.find { it.name == name } }.toSet(),
+            additionalNotes = values[Keys.notes],
+            validUntil = values[Keys.validUntil]?.let(LocalDate::ofEpochDay),
+        )
+    }
+    override suspend fun save(preferences: ChildPreferences) { context.dataStore.edit { values ->
+        values[Keys.interests] = preferences.interests.map { it.name }.toSet()
+        values[Keys.adaptationType] = preferences.adaptationType.name
+        values[Keys.considerations] = preferences.considerations.map { it.name }.toSet()
+        values[Keys.restrictions] = preferences.activitiesToAvoid.map { it.name }.toSet()
+        preferences.additionalNotes?.takeIf { it.isNotBlank() }?.let { values[Keys.notes] = it } ?: values.remove(Keys.notes)
+        preferences.validUntil?.toEpochDay()?.let { values[Keys.validUntil] = it } ?: values.remove(Keys.validUntil)
+    } }
 }
 
 class HashedPinStore(private val context: Context) : PinStore {
