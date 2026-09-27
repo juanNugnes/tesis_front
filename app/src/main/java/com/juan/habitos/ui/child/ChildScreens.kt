@@ -13,12 +13,12 @@ import androidx.compose.ui.*
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.*
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.*
 import com.juan.habitos.ui.components.*
 import com.juan.habitos.ui.state.*
 import com.juan.habitos.ui.theme.*
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 private val ChildCardColor = Color.White.copy(alpha = .11f)
@@ -82,6 +82,7 @@ private fun periodPresentation(period: DayPeriod) = when (period) { DayPeriod.MO
     val scope = rememberCoroutineScope()
     val avatarScale = remember { Animatable(1f) }
     val refreshRotation = remember { Animatable(0f) }
+    val celebrationProgress = remember { Animatable(0f) }
     var finishReaction by remember { mutableStateOf(false) }
     fun react() { scope.launch { avatarScale.snapTo(1f); avatarScale.animateTo(1.07f, tween(110)); avatarScale.animateTo(1f, tween(180, easing = FastOutSlowInEasing)) } }
     ChildCard(containerColor = Color(0xFF312E81).copy(.88f), borderColor = Color(0xFFFFE08A).copy(.55f)) { Box { AnimatedContent(targetState = activityState, transitionSpec = { (slideInHorizontally(tween(300, easing = FastOutSlowInEasing)) { it / 3 } + fadeIn(tween(260))) togetherWith (slideOutHorizontally(tween(260)) { -it / 3 } + fadeOut(tween(180))) }, label = "activity") { currentState -> when (currentState) {
@@ -97,9 +98,35 @@ private fun periodPresentation(period: DayPeriod) = when (period) { DayPeriod.MO
         Text(currentState.activity.emoji, fontSize = 42.sp)
         Text(currentState.activity.text, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
         currentState.activity.suggestedDurationMinutes?.let { Text("Duración sugerida: $it min", color = Color.White.copy(.72f)) }
-        Button(onClick = { react(); finishReaction = true; scope.launch { delay(850); finishReaction = false }; onFinish() }, modifier = Modifier.fillMaxWidth().height(50.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFF7F5FF), contentColor = AppColors.PurpleUi), shape = RoundedCornerShape(14.dp)) { Text("Finalizar actividad", fontWeight = FontWeight.Bold) }
+        Button(onClick = { react(); finishReaction = true; scope.launch { celebrationProgress.snapTo(0f); celebrationProgress.animateTo(1f, tween(1300, easing = FastOutSlowInEasing)); finishReaction = false }; onFinish() }, modifier = Modifier.fillMaxWidth().height(50.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFF7F5FF), contentColor = AppColors.PurpleUi), shape = RoundedCornerShape(14.dp)) { Text("Finalizar actividad", fontWeight = FontWeight.Bold) }
     }
-} }; AnimatedVisibility(finishReaction, Modifier.align(Alignment.TopEnd), enter = fadeIn() + scaleIn(initialScale = .6f), exit = fadeOut() + scaleOut(targetScale = .8f)) { Text("🌿", fontSize = 26.sp) } } } }
+} }; if (finishReaction) CelebrationOverlay(celebrationProgress.value) } } }
+
+private data class CelebrationParticle(val xFraction: Float, val size: Dp, val travel: Dp, val color: Color, val rotation: Float)
+private val celebrationParticles = listOf(
+    CelebrationParticle(.08f, 15.dp, 155.dp, Color(0xFFFFD166), -22f),
+    CelebrationParticle(.20f, 11.dp, 190.dp, Color(0xFF86EFAC), 28f),
+    CelebrationParticle(.33f, 18.dp, 170.dp, Color(0xFFF9A8D4), -35f),
+    CelebrationParticle(.46f, 13.dp, 215.dp, Color(0xFF93C5FD), 18f),
+    CelebrationParticle(.59f, 16.dp, 180.dp, Color(0xFFC4B5FD), 32f),
+    CelebrationParticle(.71f, 10.dp, 205.dp, Color(0xFFFFE08A), -26f),
+    CelebrationParticle(.83f, 17.dp, 165.dp, Color(0xFF6EE7B7), 38f),
+    CelebrationParticle(.93f, 12.dp, 195.dp, Color(0xFFFDA4AF), -18f),
+)
+
+@Composable private fun CelebrationOverlay(progress: Float) {
+    val density = LocalDensity.current
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        celebrationParticles.forEachIndexed { index, particle ->
+            val delayedProgress = ((progress - index * .025f) / (1f - index * .025f)).coerceIn(0f, 1f)
+            val eased = FastOutSlowInEasing.transform(delayedProgress)
+            Box(Modifier.align(Alignment.BottomStart).offset(x = maxWidth * particle.xFraction - particle.size / 2).size(particle.size).graphicsLayer { translationY = -with(density) { particle.travel.toPx() } * eased; translationX = kotlin.math.sin(eased * 3.14f + index) * with(density) { 10.dp.toPx() }; rotationZ = particle.rotation * eased; alpha = if (delayedProgress < .72f) 1f else ((1f - delayedProgress) / .28f).coerceIn(0f, 1f); scaleX = .8f + eased * .2f; scaleY = scaleX }.background(particle.color, if (index % 2 == 0) CircleShape else RoundedCornerShape(4.dp)))
+        }
+        Surface(Modifier.align(Alignment.Center).graphicsLayer { alpha = if (progress < .72f) 1f else ((1f - progress) / .28f).coerceIn(0f, 1f); scaleX = .92f + progress.coerceAtMost(.3f) * .26f; scaleY = scaleX }, color = Color(0xFFF7F5FF), shape = RoundedCornerShape(18.dp), shadowElevation = 6.dp) {
+            Column(Modifier.padding(horizontal = 22.dp, vertical = 14.dp), horizontalAlignment = Alignment.CenterHorizontally) { Text("¡Actividad terminada!", color = AppColors.PurpleUi, fontWeight = FontWeight.Bold, fontSize = 18.sp); Text("Elegiste hacer algo diferente.", color = Color(0xFF475569), fontSize = 13.sp) }
+        }
+    }
+}
 
 @Composable fun ActivityHistory(chosenActivities: Int) { Surface(color = Color(0xFFDAF5E3).copy(.96f), shape = RoundedCornerShape(22.dp), border = BorderStroke(1.dp, Color.White.copy(.5f))) { Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) { Text("🌱", fontSize = 25.sp); Spacer(Modifier.width(12.dp)); Text("Hoy elegiste $chosenActivities ${if (chosenActivities == 1) "actividad" else "actividades"}", color = Color(0xFF24543A), fontWeight = FontWeight.Bold) } } }
 
