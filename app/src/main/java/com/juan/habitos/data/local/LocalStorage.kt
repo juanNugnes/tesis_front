@@ -18,12 +18,56 @@ import java.util.Base64
 
 private val Context.dataStore by preferencesDataStore("settings")
 
-class DataStoreProfileRepository(private val context: Context) : ProfileRepository {
-    private object Keys { val name = stringPreferencesKey("name"); val avatar = stringPreferencesKey("avatar"); val age = intPreferencesKey("age"); val schoolSchedules = stringSetPreferencesKey("school_schedules"); val bedtime = stringPreferencesKey("bedtime"); val schoolStart = stringPreferencesKey("school_start"); val schoolEnd = stringPreferencesKey("school_end"); val sleepStart = stringPreferencesKey("sleep_start"); val sleepEnd = stringPreferencesKey("sleep_end"); val done = booleanPreferencesKey("onboarding_done") }
-    override val profile = context.dataStore.data.map { p -> p[Keys.name]?.let { Profile(it, p[Keys.avatar] ?: "🦊", p[Keys.age] ?: 9, p[Keys.schoolSchedules].orEmpty().mapNotNull { value -> SchoolSchedule.entries.find { it.name == value } }.toSet(), p[Keys.bedtime]?.let { value -> BedtimeRange.entries.find { it.name == value } }, p[Keys.schoolStart], p[Keys.schoolEnd], p[Keys.sleepStart], p[Keys.sleepEnd]) } }
-    override val onboardingComplete = context.dataStore.data.map { it[Keys.done] ?: false }
-    override suspend fun save(profile: Profile) { context.dataStore.edit { preferences -> preferences[Keys.name] = profile.name; preferences[Keys.avatar] = profile.avatar; preferences[Keys.age] = profile.age; preferences[Keys.schoolSchedules] = profile.schoolSchedules.map { schedule -> schedule.name }.toSet(); profile.bedtime?.let { preferences[Keys.bedtime] = it.name } ?: preferences.remove(Keys.bedtime); profile.schoolStart?.let { preferences[Keys.schoolStart] = it } ?: preferences.remove(Keys.schoolStart); profile.schoolEnd?.let { preferences[Keys.schoolEnd] = it } ?: preferences.remove(Keys.schoolEnd); profile.sleepStart?.let { preferences[Keys.sleepStart] = it } ?: preferences.remove(Keys.sleepStart); profile.sleepEnd?.let { preferences[Keys.sleepEnd] = it } ?: preferences.remove(Keys.sleepEnd) } }
-    override suspend fun completeOnboarding() { context.dataStore.edit { it[Keys.done] = true } }
+internal object ProfilePreferenceKeys {
+    val id = stringPreferencesKey("profile_id")
+    val name = stringPreferencesKey("name")
+    val avatar = stringPreferencesKey("avatar")
+    val age = intPreferencesKey("age")
+    val active = booleanPreferencesKey("profile_active")
+    val schoolSchedules = stringSetPreferencesKey("school_schedules")
+    val bedtime = stringPreferencesKey("bedtime")
+    val schoolStart = stringPreferencesKey("school_start")
+    val schoolEnd = stringPreferencesKey("school_end")
+    val sleepStart = stringPreferencesKey("sleep_start")
+    val sleepEnd = stringPreferencesKey("sleep_end")
+    val done = booleanPreferencesKey("onboarding_done")
+}
+
+internal fun Preferences.toStoredProfile(): Profile? = this[ProfilePreferenceKeys.name]?.let { name ->
+    Profile(
+        name = name,
+        avatar = this[ProfilePreferenceKeys.avatar] ?: "🦊",
+        age = this[ProfilePreferenceKeys.age] ?: 9,
+        schoolSchedules = this[ProfilePreferenceKeys.schoolSchedules].orEmpty().mapNotNull { value -> SchoolSchedule.entries.find { it.name == value } }.toSet(),
+        bedtime = this[ProfilePreferenceKeys.bedtime]?.let { value -> BedtimeRange.entries.find { it.name == value } },
+        schoolStart = this[ProfilePreferenceKeys.schoolStart],
+        schoolEnd = this[ProfilePreferenceKeys.schoolEnd],
+        sleepStart = this[ProfilePreferenceKeys.sleepStart],
+        sleepEnd = this[ProfilePreferenceKeys.sleepEnd],
+        id = this[ProfilePreferenceKeys.id],
+        active = this[ProfilePreferenceKeys.active] ?: true,
+    )
+}
+
+internal fun MutablePreferences.storeProfile(profile: Profile) {
+    this[ProfilePreferenceKeys.name] = profile.name
+    this[ProfilePreferenceKeys.avatar] = profile.avatar
+    this[ProfilePreferenceKeys.age] = profile.age
+    this[ProfilePreferenceKeys.active] = profile.active
+    this[ProfilePreferenceKeys.schoolSchedules] = profile.schoolSchedules.map { it.name }.toSet()
+    profile.id?.let { this[ProfilePreferenceKeys.id] = it } ?: remove(ProfilePreferenceKeys.id)
+    profile.bedtime?.let { this[ProfilePreferenceKeys.bedtime] = it.name } ?: remove(ProfilePreferenceKeys.bedtime)
+    profile.schoolStart?.let { this[ProfilePreferenceKeys.schoolStart] = it } ?: remove(ProfilePreferenceKeys.schoolStart)
+    profile.schoolEnd?.let { this[ProfilePreferenceKeys.schoolEnd] = it } ?: remove(ProfilePreferenceKeys.schoolEnd)
+    profile.sleepStart?.let { this[ProfilePreferenceKeys.sleepStart] = it } ?: remove(ProfilePreferenceKeys.sleepStart)
+    profile.sleepEnd?.let { this[ProfilePreferenceKeys.sleepEnd] = it } ?: remove(ProfilePreferenceKeys.sleepEnd)
+}
+
+class DataStoreProfileRepository(private val context: Context) : ProfileLocalStore {
+    override val profile = context.dataStore.data.map(Preferences::toStoredProfile)
+    override val onboardingComplete = context.dataStore.data.map { it[ProfilePreferenceKeys.done] ?: false }
+    override suspend fun save(profile: Profile) { context.dataStore.edit { it.storeProfile(profile) } }
+    override suspend fun completeOnboarding() { context.dataStore.edit { it[ProfilePreferenceKeys.done] = true } }
 }
 
 class DataStoreChildPreferencesRepository(private val context: Context) : ChildPreferencesRepository {
@@ -53,6 +97,14 @@ class DataStoreChildPreferencesRepository(private val context: Context) : ChildP
         preferences.additionalNotes?.takeIf { it.isNotBlank() }?.let { values[Keys.notes] = it } ?: values.remove(Keys.notes)
         preferences.validUntil?.toEpochDay()?.let { values[Keys.validUntil] = it } ?: values.remove(Keys.validUntil)
     } }
+}
+
+class DataStoreDeviceSessionRepository(private val context: Context) : DeviceSessionRepository {
+    private object Keys { val mode = stringPreferencesKey("device_mode"); val email = stringPreferencesKey("adult_email"); val authenticated = booleanPreferencesKey("adult_authenticated"); val linkedProfiles = stringSetPreferencesKey("adult_linked_profiles") }
+    override val session = context.dataStore.data.map { values -> DeviceSession(values[Keys.mode]?.let { name -> DeviceMode.entries.find { it.name == name } }, values[Keys.email], values[Keys.authenticated] ?: false, values[Keys.linkedProfiles].orEmpty()) }
+    override suspend fun setMode(mode: DeviceMode) { context.dataStore.edit { it[Keys.mode] = mode.name } }
+    override suspend fun authenticateAdult(email: String) { context.dataStore.edit { it[Keys.email] = email; it[Keys.authenticated] = true; it[Keys.mode] = DeviceMode.ADULT.name } }
+    override suspend fun addLinkedProfile(profileKey: String) { context.dataStore.edit { values -> values[Keys.linkedProfiles] = values[Keys.linkedProfiles].orEmpty() + profileKey } }
 }
 
 class HashedPinStore(private val context: Context) : PinStore {

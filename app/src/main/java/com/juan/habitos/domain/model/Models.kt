@@ -9,11 +9,13 @@ data class Profile(
     val avatar: String,
     val age: Int,
     val schoolSchedules: Set<SchoolSchedule> = emptySet(),
-    val bedtime: BedtimeRange? = null,
+    val bedtime: BedtimeRange? = null, // Legacy: retained for existing demo/mock profiles.
     val schoolStart: String? = null,
     val schoolEnd: String? = null,
     val sleepStart: String? = null,
     val sleepEnd: String? = null,
+    val id: String? = null,
+    val active: Boolean = true,
 )
 data class AppUsage(val name: String, val packageName: String, val minutes: Int, val category: String, val icon: String)
 data class DailyUsage(val currentMinutes: Int, val expectedMinutes: Int, val sessionCount: Int)
@@ -40,4 +42,12 @@ data class ChildPreferences(
     val activitiesToAvoid: Set<ActivityRestriction> = emptySet(),
     val additionalNotes: String? = null,
     val validUntil: LocalDate? = null,
+)
+
+enum class DeviceMode { CHILD, ADULT }
+data class DeviceSession(
+    val mode: DeviceMode? = null,
+    val adultEmail: String? = null,
+    val adultAuthenticated: Boolean = false,
+    val linkedProfileKeys: Set<String> = emptySet(),
 )

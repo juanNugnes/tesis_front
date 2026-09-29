@@ -45,3 +45,16 @@ class FakeAlertRepository : AlertRepository {
         ),
     )
 }
+
+class MockAuthRepository : AuthRepository {
+    private companion object { const val VERIFICATION_CODE = "123456" }
+    override suspend fun requestVerificationCode(email: String) = Unit
+    override suspend fun verifyCode(email: String, code: String) = code == VERIFICATION_CODE
+}
+
+class MockLinkRepository(private val profileRepository: ProfileRepository, private val sessionRepository: DeviceSessionRepository) : LinkRepository {
+    private companion object { const val LINK_CODE = "654321" }
+    private val mockProfile = Profile("Juana", "🦊", 9, schoolSchedules = setOf(SchoolSchedule.MORNING), bedtime = BedtimeRange.FROM_22_TO_23, schoolStart = "08:00", schoolEnd = "12:30", sleepStart = "22:00", sleepEnd = "07:00")
+    override suspend fun findProfile(code: String): Profile? = mockProfile.takeIf { code == LINK_CODE }
+    override suspend fun link(profile: Profile) { profileRepository.save(profile); sessionRepository.addLinkedProfile(profile.name) }
+}

@@ -14,8 +14,17 @@ import com.juan.habitos.ui.adult.profileScheduleSummary
 private class TestProfileRepo : ProfileRepository {
     override val profile = MutableStateFlow<Profile?>(null)
     override val onboardingComplete = MutableStateFlow(false)
+    var createdProfile: Profile? = null
+    var createFailure: Exception? = null
     override suspend fun save(profile: Profile) { this.profile.value = profile }
     override suspend fun completeOnboarding() { onboardingComplete.value = true }
+    override suspend fun create(profile: Profile): Profile {
+        createFailure?.let { throw it }
+        createdProfile = profile
+        return profile.copy(id = "remote-id").also { this.profile.value = it }
+    }
+    override suspend fun refresh(): Profile? = profile.value
+    override suspend fun update(profile: Profile): Profile = profile.also { this.profile.value = it }
 }
 private class TestPinStore : PinStore { var pin = ""; override suspend fun save(pin: String) { this.pin = pin }; override suspend fun verify(pin: String) = pin == this.pin }
 private class TestUsage : UsageRepository { override suspend fun daily(period: DashboardPeriod) = DailyUsage(if(period == DashboardPeriod.TODAY) 165 else 900, 180, 8); override suspend fun apps() = emptyList<AppUsage>(); override suspend fun recommendation() = Recommendation("","","") }
@@ -30,7 +39,12 @@ class ViewModelsTest {
 
     @Test fun `profile requires valid name avatar age and school schedule`() { val vm = ProfileViewModel(TestProfileRepo()); assertFalse(vm.state.value.valid); vm.setName("Sofía"); vm.selectAvatar("🦊"); vm.selectAge(5); assertFalse(vm.state.value.valid); vm.selectAge(9); assertFalse(vm.state.value.valid); vm.toggleSchoolSchedule(SchoolSchedule.MORNING); assertTrue(vm.state.value.valid) }
     @Test fun `school schedules support multiple selections`() { val vm = ProfileViewModel(TestProfileRepo()); vm.toggleSchoolSchedule(SchoolSchedule.MORNING); vm.toggleSchoolSchedule(SchoolSchedule.AFTERNOON); assertEquals(setOf(SchoolSchedule.MORNING, SchoolSchedule.AFTERNOON), vm.state.value.schoolSchedules); vm.toggleSchoolSchedule(SchoolSchedule.MORNING); assertEquals(setOf(SchoolSchedule.AFTERNOON), vm.state.value.schoolSchedules) }
-    @Test fun `profile including bedtime is persisted`() = runTest(dispatcher) { val repo = TestProfileRepo(); val vm = ProfileViewModel(repo); vm.setName(" Sofía "); vm.selectAvatar("🦊"); vm.selectAge(9); vm.toggleSchoolSchedule(SchoolSchedule.MORNING); vm.selectBedtime(BedtimeRange.FROM_21_TO_22); vm.save {}; advanceUntilIdle(); assertEquals(Profile("Sofía", "🦊", 9, setOf(SchoolSchedule.MORNING), BedtimeRange.FROM_21_TO_22), repo.profile.value) }
+    @Test fun `profile including complete sleep schedule is persisted`() = runTest(dispatcher) { val repo = TestProfileRepo(); val vm = ProfileViewModel(repo); vm.setName(" Sofía "); vm.selectAvatar("🦊"); vm.selectAge(9); vm.toggleSchoolSchedule(SchoolSchedule.MORNING); vm.sleepStart("21:30"); vm.sleepEnd("06:45"); vm.save {}; advanceUntilIdle(); assertEquals(Profile("Sofía", "🦊", 9, schoolSchedules = setOf(SchoolSchedule.MORNING), sleepStart = "21:30", sleepEnd = "06:45"), repo.profile.value) }
+    @Test fun `cross midnight sleep schedule is valid`() { val state = ProfileUiState(name = "Sofía", avatar = "🦊", age = 9, schoolSchedules = setOf(SchoolSchedule.MORNING), sleepStart = "22:00", sleepEnd = "07:00"); assertTrue(state.sleepScheduleValid); assertTrue(state.valid) }
+    @Test fun `equal sleep times are invalid`() { val state = ProfileUiState(name = "Sofía", avatar = "🦊", age = 9, schoolSchedules = setOf(SchoolSchedule.MORNING), sleepStart = "22:00", sleepEnd = "22:00"); assertFalse(state.sleepScheduleValid); assertFalse(state.valid) }
+    @Test fun `demo save remains local with both sleep times and never invokes remote create`() = runTest(dispatcher) { val repo = TestProfileRepo(); val vm = ProfileViewModel(repo); vm.setName("Demo"); vm.selectAvatar("🦊"); vm.selectAge(9); vm.toggleSchoolSchedule(SchoolSchedule.MORNING); vm.save {}; advanceUntilIdle(); assertEquals("22:00", repo.profile.value?.sleepStart); assertEquals("07:00", repo.profile.value?.sleepEnd); assertNull(repo.createdProfile) }
+    @Test fun `remote profile creation uses selected sleep start and end`() = runTest(dispatcher) { val repo = TestProfileRepo(); val vm = ProfileViewModel(repo); vm.setName(" Juana "); vm.selectAvatar("🐸"); vm.selectAge(10); vm.toggleSchoolSchedule(SchoolSchedule.AFTERNOON); vm.sleepStart("23:15"); vm.sleepEnd("08:10"); var completed = false; vm.create { completed = true }; advanceUntilIdle(); assertEquals(Profile("Juana", "🐸", 10, schoolSchedules = setOf(SchoolSchedule.AFTERNOON), sleepStart = "23:15", sleepEnd = "08:10"), repo.createdProfile); assertEquals("remote-id", repo.profile.value?.id); assertTrue(completed) }
+    @Test fun `remote profile error keeps cached profile and exposes a friendly message`() = runTest(dispatcher) { val repo = TestProfileRepo().apply { profile.value = Profile("Anterior", "🦊", 9, id = "existing"); createFailure = java.io.IOException("offline") }; val vm = ProfileViewModel(repo); vm.setName("Juana"); vm.selectAvatar("🐸"); vm.selectAge(10); vm.toggleSchoolSchedule(SchoolSchedule.MORNING); vm.create {}; advanceUntilIdle(); assertEquals("existing", repo.profile.value?.id); assertNotNull(vm.state.value.errorMessage); assertFalse(vm.state.value.submitting) }
     @Test fun `pin creation accepts four digits and supports delete`() = runTest(dispatcher) { val store = TestPinStore(); val vm = PinViewModel(store); vm.digit(1,true) {}; vm.digit(2,true) {}; vm.delete(); assertEquals("1", vm.state.value.digits); vm.digit(2,true) {}; vm.digit(3,true) {}; vm.digit(4,true) {}; advanceUntilIdle(); assertEquals("1234", store.pin) }
     @Test fun `incorrect pin clears and shows error`() = runTest(dispatcher) { val store = TestPinStore().apply { pin = "1234" }; val vm = PinViewModel(store); repeat(4) { vm.digit(9,false) {} }; advanceUntilIdle(); assertEquals("", vm.state.value.digits); assertTrue(vm.state.value.error) }
     @Test fun `correct pin invokes completion`() = runTest(dispatcher) { val store = TestPinStore().apply { pin = "1234" }; val vm = PinViewModel(store); var done = false; (1..4).forEach { vm.digit(it,false) { done = true } }; advanceUntilIdle(); assertTrue(done) }

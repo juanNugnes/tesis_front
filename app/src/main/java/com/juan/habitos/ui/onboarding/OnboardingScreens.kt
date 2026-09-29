@@ -5,7 +5,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.*
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -18,23 +18,55 @@ import com.juan.habitos.ui.theme.*
 
 @Composable private fun OnboardingFrame(step: String, title: String, subtitle: String, content: @Composable ColumnScope.() -> Unit) { Column(Modifier.fillMaxSize().background(AppColors.PurpleUi).statusBarsPadding()) { Column(Modifier.padding(24.dp)) { Text("PASO $step DE 3", color = Color.White.copy(.7f), fontSize = 12.sp, fontWeight = FontWeight.Bold); Text(title, fontSize = 30.sp, fontWeight = FontWeight.Bold); Text(subtitle, color = Color.White.copy(.75f)) }; Column(Modifier.fillMaxSize().background(Color(0xFFFAFAFF), RoundedCornerShape(topStart = 36.dp, topEnd = 36.dp)).padding(24.dp).verticalScroll(rememberScrollState()), content = content) } }
 
-@Composable fun ProfileScreen(state: ProfileUiState, onName: (String) -> Unit, onAvatar: (String) -> Unit, onAge: (Int) -> Unit, onSchoolSchedule: (SchoolSchedule) -> Unit, onBedtime: (BedtimeRange) -> Unit, onNext: () -> Unit) { OnboardingFrame("1", "Perfil del niño/a", "Configurá la cuenta para comenzar a monitorear") {
+@Composable fun ProfileScreen(state: ProfileUiState, onName: (String) -> Unit, onAvatar: (String) -> Unit, onAge: (Int) -> Unit, onSchoolSchedule: (SchoolSchedule) -> Unit, onSleepStart: (String) -> Unit, onSleepEnd: (String) -> Unit, onNext: () -> Unit) { OnboardingFrame("1", "Perfil del niño/a", "Configurá la cuenta para comenzar a monitorear") {
     SectionTitle("ELEGÍ UN AVATAR"); Spacer(Modifier.height(12.dp))
     listOf("🦊", "🐸", "🐶", "🐱", "🐧", "🦁", "🐨", "🦋").chunked(4).forEach { row -> Row(Modifier.fillMaxWidth(), Arrangement.spacedBy(10.dp)) { row.forEach { avatar -> Surface(onClick = { onAvatar(avatar) }, modifier = Modifier.weight(1f).aspectRatio(1.25f), shape = RoundedCornerShape(16.dp), color = Color(0xFFF1F5F9), border = if (state.avatar == avatar) BorderStroke(3.dp, AppColors.Purple) else null) { Box(contentAlignment = Alignment.Center) { Text(avatar, fontSize = 30.sp) } } } }; Spacer(Modifier.height(10.dp)) }
     Spacer(Modifier.height(10.dp)); SectionTitle("NOMBRE DEL NIÑO/A"); Spacer(Modifier.height(8.dp)); OutlinedTextField(state.name, onName, Modifier.fillMaxWidth(), placeholder = { Text("ej. Sofía") }, singleLine = true, keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words), colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.DarkGray, unfocusedTextColor = Color.DarkGray, focusedBorderColor = AppColors.Purple))
     Spacer(Modifier.height(24.dp)); SectionTitle("EDAD"); Spacer(Modifier.height(10.dp)); Row(Modifier.fillMaxWidth(), Arrangement.spacedBy(6.dp)) { (6..12).forEach { age -> Surface(onClick = { onAge(age) }, modifier = Modifier.weight(1f).height(52.dp), color = if (state.age == age) AppColors.Purple else Color(0xFFF1F5F9), shape = RoundedCornerShape(12.dp)) { Box(contentAlignment = Alignment.Center) { Text("$age", color = if (state.age == age) Color.White else Color.DarkGray, fontWeight = FontWeight.Bold) } } } }
     Spacer(Modifier.height(30.dp)); LabelRow("HORARIO DEL COLEGIO", "OBLIGATORIO"); Text("Podés elegir más de uno si el horario varía según el día.", color = Color(0xFF8190B5), fontSize = 12.sp, modifier = Modifier.padding(vertical = 12.dp))
     SchoolOption("🌅", "Mañana", "7:00 – 12:00", SchoolSchedule.MORNING in state.schoolSchedules) { onSchoolSchedule(SchoolSchedule.MORNING) }; SchoolOption("☀️", "Tarde", "12:00 – 18:00", SchoolSchedule.AFTERNOON in state.schoolSchedules) { onSchoolSchedule(SchoolSchedule.AFTERNOON) }; SchoolOption("🌙", "Noche", "18:00 – 22:00", SchoolSchedule.EVENING in state.schoolSchedules) { onSchoolSchedule(SchoolSchedule.EVENING) }
-    Spacer(Modifier.height(22.dp)); LabelRow("HORA APROXIMADA DE DORMIR", "OPCIONAL", true); Text("Nos ayuda a identificar el uso nocturno fuera del horario habitual.", color = Color(0xFF8190B5), fontSize = 12.sp, modifier = Modifier.padding(vertical = 12.dp))
-    listOf(BedtimeRange.FROM_20_TO_21 to "20:00 – 21:00", BedtimeRange.FROM_21_TO_22 to "21:00 – 22:00", BedtimeRange.FROM_22_TO_23 to "22:00 – 23:00", BedtimeRange.FROM_23_TO_00 to "23:00 – 00:00", BedtimeRange.AFTER_00 to "Después de las 00:00").forEach { (range, label) -> SelectionRow(label, state.bedtime == range) { onBedtime(range) } }
-    Spacer(Modifier.height(28.dp)); PrimaryButton("Siguiente →", state.valid, onNext); Spacer(Modifier.navigationBarsPadding())
+    Spacer(Modifier.height(22.dp)); LabelRow("HORARIO HABITUAL DE SUEÑO", "REFERENCIA", true); Text("Indicá aproximadamente a qué hora suele dormir y despertarse.", color = Color(0xFF8190B5), fontSize = 12.sp, modifier = Modifier.padding(vertical = 12.dp))
+    OnboardingTimeField("Hora de dormir", state.sleepStart, onSleepStart); Spacer(Modifier.height(10.dp)); OnboardingTimeField("Hora de despertarse", state.sleepEnd, onSleepEnd)
+    if (state.sleepStart == state.sleepEnd) { Spacer(Modifier.height(8.dp)); Text("La hora de dormir y de despertarse deben ser diferentes.", color = MaterialTheme.colorScheme.error, fontSize = 12.sp) }
+    Spacer(Modifier.height(28.dp)); state.errorMessage?.let { Text(it, color = MaterialTheme.colorScheme.error, fontSize = 13.sp); Spacer(Modifier.height(10.dp)) }; PrimaryButton(if (state.submitting) "Guardando…" else "Siguiente →", state.valid && !state.submitting, onNext); Spacer(Modifier.navigationBarsPadding())
 } }
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable private fun OnboardingTimeField(label: String, value: String, onValue: (String) -> Unit) {
+    var showPicker by remember { mutableStateOf(false) }
+    Box(Modifier.fillMaxWidth()) {
+        OutlinedTextField(
+            value = value,
+            onValueChange = {},
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text(label) },
+            trailingIcon = { Text("🕒") },
+            readOnly = true,
+            singleLine = true,
+            colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.DarkGray, unfocusedTextColor = Color.DarkGray, focusedBorderColor = AppColors.Purple),
+        )
+        Box(Modifier.matchParentSize().clickable { showPicker = true })
+    }
+    if (showPicker) {
+        val parts = value.split(":")
+        val pickerState = rememberTimePickerState(
+            initialHour = parts.getOrNull(0)?.toIntOrNull() ?: 0,
+            initialMinute = parts.getOrNull(1)?.toIntOrNull() ?: 0,
+            is24Hour = true,
+        )
+        AlertDialog(
+            onDismissRequest = { showPicker = false },
+            title = { Text(label) },
+            text = { TimePicker(pickerState) },
+            confirmButton = { TextButton({ onValue("%02d:%02d".format(pickerState.hour, pickerState.minute)); showPicker = false }) { Text("Aceptar") } },
+            dismissButton = { TextButton({ showPicker = false }) { Text("Cancelar") } },
+        )
+    }
+}
 
 @Composable private fun SectionTitle(text: String) = Text(text, color = Color.Gray, fontWeight = FontWeight.Bold, fontSize = 12.sp)
 @Composable private fun LabelRow(title: String, status: String, muted: Boolean = false) { Row(Modifier.fillMaxWidth()) { SectionTitle(title); Spacer(Modifier.weight(1f)); Text(status, color = if (muted) Color(0xFFCBD5E1) else AppColors.Purple, fontSize = 10.sp, fontWeight = FontWeight.Bold) } }
 @Composable private fun SchoolOption(icon: String, title: String, hours: String, selected: Boolean, onClick: () -> Unit) { Surface(onClick, Modifier.fillMaxWidth().padding(bottom = 8.dp), shape = RoundedCornerShape(14.dp), color = Color(0xFFF8FAFC), border = BorderStroke(if (selected) 2.dp else 1.dp, if (selected) AppColors.Purple else Color(0xFFD7E0EE))) { Row(Modifier.padding(13.dp), verticalAlignment = Alignment.CenterVertically) { Surface(shape = RoundedCornerShape(8.dp), color = Color.White, border = BorderStroke(1.dp, Color(0xFFE2E8F0))) { Text(icon, Modifier.padding(7.dp), fontSize = 18.sp) }; Spacer(Modifier.width(12.dp)); Column(Modifier.weight(1f)) { Text(title, color = Color(0xFF172554), fontWeight = FontWeight.Bold); Text(hours, color = Color(0xFF8190B5), fontSize = 12.sp) }; RadioButton(selected, onClick) } } }
-@Composable private fun SelectionRow(label: String, selected: Boolean, onClick: () -> Unit) { Surface(onClick, Modifier.fillMaxWidth().padding(bottom = 7.dp), shape = RoundedCornerShape(14.dp), color = Color(0xFFF8FAFC), border = BorderStroke(if (selected) 2.dp else 1.dp, if (selected) AppColors.Purple else Color(0xFFD7E0EE))) { Row(Modifier.padding(horizontal = 14.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Text(label, Modifier.weight(1f), color = Color(0xFF172554), fontWeight = FontWeight.Medium, fontSize = 13.sp); RadioButton(selected, onClick) } } }
-
 @Composable fun CreatePinScreen(state: PinUiState, onDigit: (Int) -> Unit, onDelete: () -> Unit) { OnboardingFrame("2", "PIN del adulto", "Solo vos podrás acceder al panel de control") { Spacer(Modifier.height(12.dp)); Text("🔐", Modifier.align(Alignment.CenterHorizontally), fontSize = 50.sp); Spacer(Modifier.height(18.dp)); Text("Creá tu PIN de 4 dígitos", Modifier.align(Alignment.CenterHorizontally), color = Color(0xFF0F172A), fontWeight = FontWeight.Bold, fontSize = 20.sp); Text("Este PIN protege el panel del adulto", Modifier.align(Alignment.CenterHorizontally), color = Color.Gray); Spacer(Modifier.height(36.dp)); Box(Modifier.align(Alignment.CenterHorizontally)) { PinDots(state.digits.length) }; Spacer(Modifier.height(36.dp)); NumericPinKeyboard(onDigit, onDelete) } }
 
 data class PermissionItem(val icon: String, val title: String, val description: String)

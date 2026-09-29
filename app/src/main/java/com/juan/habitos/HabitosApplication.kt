@@ -3,17 +3,22 @@ package com.juan.habitos
 import android.app.Application
 import com.juan.habitos.data.local.*
 import com.juan.habitos.data.mock.*
+import com.juan.habitos.data.remote.CachedProfileRepository
 import com.juan.habitos.data.remote.HabitsApiClient
 import com.juan.habitos.domain.model.*
 import kotlinx.coroutines.flow.first
 
 class HabitosApplication : Application() {
-    val profileRepository by lazy { DataStoreProfileRepository(this) }
+    private val localProfileStore by lazy { DataStoreProfileRepository(this) }
+    val habitsApi by lazy { HabitsApiClient.api }
+    val profileRepository by lazy { CachedProfileRepository(localProfileStore, habitsApi) }
     val childPreferencesRepository by lazy { DataStoreChildPreferencesRepository(this) }
+    val deviceSessionRepository by lazy { DataStoreDeviceSessionRepository(this) }
+    val authRepository by lazy { MockAuthRepository() }
+    val linkRepository by lazy { MockLinkRepository(profileRepository, deviceSessionRepository) }
     val pinStore by lazy { HashedPinStore(this) }
     val usageRepository by lazy { FakeUsageRepository() }
     val alertRepository by lazy { FakeAlertRepository() }
-    val habitsApi by lazy { HabitsApiClient.api }
 
     suspend fun initializeDemoIfNeeded() {
         if (!BuildConfig.DEMO_MODE) return

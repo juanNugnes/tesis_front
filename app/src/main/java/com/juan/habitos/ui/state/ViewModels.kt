@@ -1,50 +1,59 @@
 package com.juan.habitos.ui.state
 
-import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.juan.habitos.data.remote.CreateProfileRequest
-import com.juan.habitos.data.remote.HabitsApi
-import com.juan.habitos.data.remote.ProfileSettingsRequest
 import com.juan.habitos.domain.model.*
 import com.juan.habitos.domain.repository.*
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 
-data class ProfileUiState(val name: String = "", val avatar: String? = null, val age: Int? = null, val schoolSchedules: Set<SchoolSchedule> = emptySet(), val bedtime: BedtimeRange? = null) { val valid get() = name.trim().isNotEmpty() && avatar != null && age in 6..12 && schoolSchedules.isNotEmpty() }
-class ProfileViewModel(private val repository: ProfileRepository, private val habitsApi: HabitsApi? = null) : ViewModel() {
+data class ProfileUiState(
+    val name: String = "",
+    val avatar: String? = null,
+    val age: Int? = null,
+    val schoolSchedules: Set<SchoolSchedule> = emptySet(),
+    val sleepStart: String = "22:00",
+    val sleepEnd: String = "07:00",
+    val submitting: Boolean = false,
+    val errorMessage: String? = null,
+) {
+    val sleepScheduleValid get() = isValidScheduleTime(sleepStart) && isValidScheduleTime(sleepEnd) && sleepStart != sleepEnd
+    val valid get() = name.trim().isNotEmpty() && avatar != null && age in 6..12 && schoolSchedules.isNotEmpty() && sleepScheduleValid
+}
+class ProfileViewModel(private val repository: ProfileRepository) : ViewModel() {
     private val _state = MutableStateFlow(ProfileUiState()); val state = _state.asStateFlow()
-    fun setName(value: String) { _state.update { it.copy(name = value) } }
-    fun selectAvatar(value: String) { _state.update { it.copy(avatar = value) } }
-    fun selectAge(value: Int) { if (value in 6..12) _state.update { it.copy(age = value) } }
-    fun toggleSchoolSchedule(value: SchoolSchedule) { _state.update { it.copy(schoolSchedules = if (value in it.schoolSchedules) it.schoolSchedules - value else it.schoolSchedules + value) } }
-    fun selectBedtime(value: BedtimeRange) { _state.update { it.copy(bedtime = if (it.bedtime == value) null else value) } }
-    fun save(onSaved: () -> Unit) { val s = state.value; if (s.valid) viewModelScope.launch { repository.save(Profile(s.name.trim(), s.avatar!!, s.age!!, s.schoolSchedules, s.bedtime)); onSaved() } }
-    fun createTestProfile(onSuccess: () -> Unit) {
-        val api = habitsApi ?: run { Log.e("PROFILE_API", "HabitsApi no está configurada"); return }
+    fun setName(value: String) { _state.update { it.copy(name = value, errorMessage = null) } }
+    fun selectAvatar(value: String) { _state.update { it.copy(avatar = value, errorMessage = null) } }
+    fun selectAge(value: Int) { if (value in 6..12) _state.update { it.copy(age = value, errorMessage = null) } }
+    fun toggleSchoolSchedule(value: SchoolSchedule) { _state.update { it.copy(schoolSchedules = if (value in it.schoolSchedules) it.schoolSchedules - value else it.schoolSchedules + value, errorMessage = null) } }
+    fun sleepStart(value: String) { _state.update { it.copy(sleepStart = value, errorMessage = null) } }
+    fun sleepEnd(value: String) { _state.update { it.copy(sleepEnd = value, errorMessage = null) } }
+    fun save(onSaved: () -> Unit) = persist(remote = false, onSaved)
+    fun create(onCreated: () -> Unit) = persist(remote = true, onCreated)
+
+    private fun persist(remote: Boolean, onSuccess: () -> Unit) {
+        val current = state.value
+        if (!current.valid || current.submitting) return
+        val profile = Profile(
+            name = current.name.trim(),
+            avatar = current.avatar!!,
+            age = current.age!!,
+            schoolSchedules = current.schoolSchedules,
+            sleepStart = current.sleepStart,
+            sleepEnd = current.sleepEnd,
+        )
         viewModelScope.launch {
-            val request = CreateProfileRequest(
-                alias = "test android",
-                age = 6,
-                avatar = "fox",
-                settings = ProfileSettingsRequest(
-                    school_start = "08:00:00",
-                    school_end = "12:30:00",
-                    sleep_start = "22:00:00",
-                    sleep_end = "07:00:00",
-                ),
-            )
+            _state.update { it.copy(submitting = true, errorMessage = null) }
             try {
-                val response = api.createProfile(request)
-                if (response.code() == 200 || response.code() == 201) {
-                    Log.i("PROFILE_API", "Perfil creado correctamente. HTTP ${response.code()}")
-                    onSuccess()
-                } else {
-                    Log.e("PROFILE_API", "Error al crear perfil. HTTP ${response.code()}")
-                }
-            } catch (exception: Exception) {
-                Log.e("PROFILE_API", "No se pudo conectar con el backend", exception)
+                if (remote) repository.create(profile) else repository.save(profile)
+                _state.update { it.copy(submitting = false) }
+                onSuccess()
+            } catch (exception: CancellationException) {
+                throw exception
+            } catch (_: Exception) {
+                _state.update { it.copy(submitting = false, errorMessage = "No pudimos guardar el perfil. Revisá la conexión e intentá nuevamente.") }
             }
         }
     }
@@ -73,6 +82,28 @@ class PinViewModel(private val pinStore: PinStore) : ViewModel() {
     fun digit(value: Int, create: Boolean, onComplete: () -> Unit) { if (_state.value.digits.length < 4) { val pin = _state.value.digits + value; _state.value = PinUiState(pin); if (pin.length == 4) viewModelScope.launch { if (create) { pinStore.save(pin); onComplete() } else if (pinStore.verify(pin)) onComplete() else _state.value = PinUiState(error = true) } } }
     fun delete() { _state.update { it.copy(digits = it.digits.dropLast(1), error = false) } }
     fun clear() { _state.value = PinUiState() }
+}
+
+class DeviceModeViewModel(private val repository: DeviceSessionRepository) : ViewModel() {
+    fun select(mode: DeviceMode, onSelected: () -> Unit) = viewModelScope.launch { repository.setMode(mode); onSelected() }
+}
+
+data class AdultAuthUiState(val email: String = "", val code: String = "", val emailError: Boolean = false, val codeError: Boolean = false, val loading: Boolean = false)
+class AdultAuthViewModel(private val authRepository: AuthRepository, private val sessionRepository: DeviceSessionRepository) : ViewModel() {
+    private val _state = MutableStateFlow(AdultAuthUiState()); val state = _state.asStateFlow()
+    fun email(value: String) { _state.update { it.copy(email = value.trim(), emailError = false) } }
+    fun code(value: String) { _state.update { it.copy(code = value.filter(Char::isDigit).take(6), codeError = false) } }
+    fun requestCode(onSent: () -> Unit) { val email = state.value.email; if (!isValidEmail(email)) { _state.update { it.copy(emailError = true) }; return }; viewModelScope.launch { _state.update { it.copy(loading = true) }; authRepository.requestVerificationCode(email); _state.update { it.copy(loading = false) }; onSent() } }
+    fun verify(onVerified: () -> Unit) = viewModelScope.launch { val current = state.value; _state.update { it.copy(loading = true, codeError = false) }; if (authRepository.verifyCode(current.email, current.code)) { sessionRepository.authenticateAdult(current.email); _state.update { it.copy(loading = false) }; onVerified() } else _state.update { it.copy(loading = false, codeError = true) } }
+    companion object { fun isValidEmail(value: String) = value.matches(Regex("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$")) }
+}
+
+data class LinkDeviceUiState(val code: String = "", val foundProfile: Profile? = null, val error: Boolean = false, val loading: Boolean = false)
+class LinkDeviceViewModel(private val repository: LinkRepository) : ViewModel() {
+    private val _state = MutableStateFlow(LinkDeviceUiState()); val state = _state.asStateFlow()
+    fun code(value: String) { _state.update { it.copy(code = value.filter(Char::isDigit).take(6), error = false, foundProfile = null) } }
+    fun find() = viewModelScope.launch { _state.update { it.copy(loading = true, error = false) }; val profile = repository.findProfile(state.value.code); _state.update { it.copy(foundProfile = profile, error = profile == null, loading = false) } }
+    fun confirm(onLinked: () -> Unit) { val profile = state.value.foundProfile ?: return; viewModelScope.launch { repository.link(profile); onLinked() } }
 }
 
 data class ChildPreferencesUiState(
