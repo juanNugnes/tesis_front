@@ -44,6 +44,15 @@ data class ChildPreferences(
     val validUntil: LocalDate? = null,
 )
 
+enum class ProfileContextType { VACATION, ILLNESS, SCHOOL_ACTIVITY, ROUTINE_CHANGE, OTHER }
+data class ProfileContext(
+    val id: String? = null,
+    val type: ProfileContextType,
+    val startDate: LocalDate,
+    val endDate: LocalDate? = null,
+    val description: String? = null,
+)
+
 enum class DeviceMode { CHILD, ADULT }
 data class DeviceSession(
     val mode: DeviceMode? = null,

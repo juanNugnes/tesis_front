@@ -65,6 +65,11 @@ private class FakeHabitsApi : HabitsApi {
 
     override suspend fun getActivityPreferences(id: String) = ActivityPreferencesDto()
     override suspend fun updateActivityPreferences(id: String, request: ActivityPreferencesRequest) = ActivityPreferencesDto()
+    override suspend fun createProfileContext(profileId: String, request: ProfileContextRequest): ProfileContextDto = error("Not used")
+    override suspend fun getProfileContexts(profileId: String): List<ProfileContextDto> = error("Not used")
+    override suspend fun getActiveProfileContexts(profileId: String): List<ProfileContextDto> = error("Not used")
+    override suspend fun updateProfileContext(profileId: String, contextId: String, request: ProfileContextRequest): ProfileContextDto = error("Not used")
+    override suspend fun deleteProfileContext(profileId: String, contextId: String) = error("Not used")
 
     override suspend fun postUsage(id: String, usage: UsageDto) = usage
     override suspend fun getUsage(id: String) = UsageDto(id, 0, 0)

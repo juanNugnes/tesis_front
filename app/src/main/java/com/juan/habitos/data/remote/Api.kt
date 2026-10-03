@@ -59,6 +59,24 @@ data class ActivityPreferencesDto(
     @SerializedName("updated_at") val updatedAt: String? = null,
 )
 
+data class ProfileContextRequest(
+    val type: String,
+    @SerializedName("start_date") val startDate: String,
+    @SerializedName("end_date") val endDate: String?,
+    val description: String?,
+)
+
+data class ProfileContextDto(
+    val id: String,
+    @SerializedName("profile_id") val profileId: String,
+    val type: String,
+    @SerializedName("start_date") val startDate: String,
+    @SerializedName("end_date") val endDate: String? = null,
+    val description: String? = null,
+    @SerializedName("created_at") val createdAt: String? = null,
+    @SerializedName("updated_at") val updatedAt: String? = null,
+)
+
 data class ProfileDetailDto(
     val id: String,
     val alias: String,
@@ -81,6 +99,11 @@ interface HabitsApi {
     @PUT("api/v1/profiles/{profileId}/settings") suspend fun updateProfileSettings(@Path("profileId") id: String, @Body request: ProfileSettingsRequest): ProfileSettingsDto
     @GET("api/v1/profiles/{profileId}/activity-preferences") suspend fun getActivityPreferences(@Path("profileId") id: String): ActivityPreferencesDto
     @PUT("api/v1/profiles/{profileId}/activity-preferences") suspend fun updateActivityPreferences(@Path("profileId") id: String, @Body request: ActivityPreferencesRequest): ActivityPreferencesDto
+    @POST("api/v1/profiles/{profileId}/contexts") suspend fun createProfileContext(@Path("profileId") profileId: String, @Body request: ProfileContextRequest): ProfileContextDto
+    @GET("api/v1/profiles/{profileId}/contexts") suspend fun getProfileContexts(@Path("profileId") profileId: String): List<ProfileContextDto>
+    @GET("api/v1/profiles/{profileId}/contexts/active") suspend fun getActiveProfileContexts(@Path("profileId") profileId: String): List<ProfileContextDto>
+    @PUT("api/v1/profiles/{profileId}/contexts/{contextId}") suspend fun updateProfileContext(@Path("profileId") profileId: String, @Path("contextId") contextId: String, @Body request: ProfileContextRequest): ProfileContextDto
+    @DELETE("api/v1/profiles/{profileId}/contexts/{contextId}") suspend fun deleteProfileContext(@Path("profileId") profileId: String, @Path("contextId") contextId: String)
     @POST("api/v1/profiles/{profileId}/usage") suspend fun postUsage(@Path("profileId") id: String, @Body usage: UsageDto): UsageDto
     @GET("api/v1/profiles/{profileId}/usage") suspend fun getUsage(@Path("profileId") id: String): UsageDto
     @POST("api/v1/profiles/{profileId}/analysis") suspend fun postAnalysis(@Path("profileId") id: String): AnalysisDto

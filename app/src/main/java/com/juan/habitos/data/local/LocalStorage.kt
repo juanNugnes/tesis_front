@@ -4,6 +4,8 @@ import android.content.Context
 import androidx.datastore.preferences.core.*
 import androidx.datastore.preferences.preferencesDataStore
 import androidx.room.*
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
 import com.juan.habitos.domain.model.Profile
 import com.juan.habitos.domain.model.BedtimeRange
 import com.juan.habitos.domain.model.SchoolSchedule
@@ -99,6 +101,63 @@ class DataStoreChildPreferencesRepository(private val context: Context) : ChildP
         preferences.validUntil?.toEpochDay()?.let { values[Keys.validUntil] = it } ?: values.remove(Keys.validUntil)
     } }
 }
+
+class DataStoreProfileContextStore(private val context: Context) : ProfileContextLocalStore {
+    private val contextsKey = stringPreferencesKey("profile_contexts_json")
+    private val gson = Gson()
+    private val storedListType = object : TypeToken<List<StoredProfileContext>>() {}.type
+
+    override val contexts = context.dataStore.data.map { values ->
+        values[contextsKey]?.let(::decodeContexts).orEmpty()
+    }
+
+    override suspend fun save(contexts: List<ProfileContext>) {
+        val serialized = contexts.map(ProfileContext::toStoredContext)
+        context.dataStore.edit { values -> values[contextsKey] = gson.toJson(serialized) }
+    }
+
+    private fun decodeContexts(value: String): List<ProfileContext> = runCatching {
+        val stored: List<StoredProfileContext> = gson.fromJson(value, storedListType) ?: emptyList()
+        stored.map(StoredProfileContext::toDomainContext)
+    }.getOrElse { emptyList() }
+}
+
+private data class StoredProfileContext(
+    val id: String?,
+    val type: String,
+    val startDate: String,
+    val endDate: String?,
+    val description: String?,
+)
+
+private fun ProfileContext.toStoredContext() = StoredProfileContext(
+    id = id,
+    type = when (type) {
+        ProfileContextType.VACATION -> "VACATION"
+        ProfileContextType.ILLNESS -> "ILLNESS"
+        ProfileContextType.SCHOOL_ACTIVITY -> "SCHOOL_ACTIVITY"
+        ProfileContextType.ROUTINE_CHANGE -> "ROUTINE_CHANGE"
+        ProfileContextType.OTHER -> "OTHER"
+    },
+    startDate = startDate.toString(),
+    endDate = endDate?.toString(),
+    description = description,
+)
+
+private fun StoredProfileContext.toDomainContext() = ProfileContext(
+    id = id,
+    type = when (type) {
+        "VACATION" -> ProfileContextType.VACATION
+        "ILLNESS" -> ProfileContextType.ILLNESS
+        "SCHOOL_ACTIVITY" -> ProfileContextType.SCHOOL_ACTIVITY
+        "ROUTINE_CHANGE" -> ProfileContextType.ROUTINE_CHANGE
+        "OTHER" -> ProfileContextType.OTHER
+        else -> error("Unknown cached profile context type: $type")
+    },
+    startDate = LocalDate.parse(startDate),
+    endDate = endDate?.let(LocalDate::parse),
+    description = description,
+)
 
 class DataStoreDeviceSessionRepository(private val context: Context) : DeviceSessionRepository {
     private object Keys { val mode = stringPreferencesKey("device_mode"); val email = stringPreferencesKey("adult_email"); val authenticated = booleanPreferencesKey("adult_authenticated"); val linkedProfiles = stringSetPreferencesKey("adult_linked_profiles") }
