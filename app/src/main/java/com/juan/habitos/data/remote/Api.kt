@@ -55,6 +55,8 @@ interface HabitsApi {
     @POST("api/v1/profiles") suspend fun createProfile(@Body request: CreateProfileRequest): ProfileDetailDto
     @GET("api/v1/profiles/{profileId}") suspend fun getProfile(@Path("profileId") id: String): ProfileDetailDto
     @PUT("api/v1/profiles/{profileId}") suspend fun updateProfile(@Path("profileId") id: String, @Body request: ProfileUpdateRequest): ProfileDetailDto
+    @GET("api/v1/profiles/{profileId}/settings") suspend fun getProfileSettings(@Path("profileId") id: String): ProfileSettingsDto
+    @PUT("api/v1/profiles/{profileId}/settings") suspend fun updateProfileSettings(@Path("profileId") id: String, @Body request: ProfileSettingsRequest): ProfileSettingsDto
     @POST("api/v1/profiles/{profileId}/usage") suspend fun postUsage(@Path("profileId") id: String, @Body usage: UsageDto): UsageDto
     @GET("api/v1/profiles/{profileId}/usage") suspend fun getUsage(@Path("profileId") id: String): UsageDto
     @POST("api/v1/profiles/{profileId}/analysis") suspend fun postAnalysis(@Path("profileId") id: String): AnalysisDto

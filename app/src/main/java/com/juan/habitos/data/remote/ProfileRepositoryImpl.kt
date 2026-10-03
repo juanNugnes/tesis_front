@@ -40,6 +40,33 @@ class CachedProfileRepository(
         local.save(remote)
         return remote
     }
+
+    override suspend fun refreshSettings(): Profile? {
+        val cached = local.profile.first() ?: return null
+        val profileId = cached.id ?: return cached
+        val refreshed = cached.withSettings(api.getProfileSettings(profileId))
+        local.save(refreshed)
+        return refreshed
+    }
+
+    override suspend fun updateSettings(profile: Profile): Profile {
+        val cached = local.profile.first()
+        val profileId = cached?.id
+        val candidate = (cached ?: profile).copy(
+            schoolStart = profile.schoolStart,
+            schoolEnd = profile.schoolEnd,
+            sleepStart = profile.sleepStart,
+            sleepEnd = profile.sleepEnd,
+            id = profileId,
+        )
+        if (profileId == null) {
+            local.save(candidate)
+            return candidate
+        }
+        val remote = candidate.withSettings(api.updateProfileSettings(profileId, candidate.toSettingsRequest()))
+        local.save(remote)
+        return remote
+    }
 }
 
 internal fun Profile.toCreateProfileRequest(): CreateProfileRequest {
@@ -78,6 +105,23 @@ internal fun ProfileDetailDto.toDomain(localFallback: Profile? = null) = Profile
     sleepEnd = normalizeProfileTime(settings?.sleepEnd) ?: localFallback?.sleepEnd,
     id = id,
     active = active,
+)
+
+internal fun Profile.toSettingsRequest(): ProfileSettingsRequest {
+    val schoolStart = requireNotNull(normalizeProfileTime(schoolStart)) { "schoolStart must use HH:mm" }
+    val schoolEnd = requireNotNull(normalizeProfileTime(schoolEnd)) { "schoolEnd must use HH:mm" }
+    val sleepStart = requireNotNull(normalizeProfileTime(sleepStart)) { "sleepStart must use HH:mm" }
+    val sleepEnd = requireNotNull(normalizeProfileTime(sleepEnd)) { "sleepEnd must use HH:mm" }
+    require(schoolStart != schoolEnd) { "School start and end must be different" }
+    require(sleepStart != sleepEnd) { "Sleep start and end must be different" }
+    return ProfileSettingsRequest(schoolStart, schoolEnd, sleepStart, sleepEnd)
+}
+
+internal fun Profile.withSettings(settings: ProfileSettingsDto): Profile = copy(
+    schoolStart = normalizeProfileTime(settings.schoolStart) ?: schoolStart,
+    schoolEnd = normalizeProfileTime(settings.schoolEnd) ?: schoolEnd,
+    sleepStart = normalizeProfileTime(settings.sleepStart) ?: sleepStart,
+    sleepEnd = normalizeProfileTime(settings.sleepEnd) ?: sleepEnd,
 )
 
 internal fun normalizeProfileTime(value: String?): String? {

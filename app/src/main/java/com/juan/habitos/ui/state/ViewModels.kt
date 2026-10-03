@@ -59,19 +59,75 @@ class ProfileViewModel(private val repository: ProfileRepository) : ViewModel() 
     }
 }
 
-data class ProfileScheduleUiState(val profile: Profile? = null, val saved: Boolean = false) {
-    val valid: Boolean get() = profile?.let { listOf(it.schoolStart, it.schoolEnd, it.sleepStart, it.sleepEnd).all(::isValidScheduleTime) } == true
+data class ProfileScheduleUiState(
+    val profile: Profile? = null,
+    val saved: Boolean = false,
+    val submitting: Boolean = false,
+    val errorMessage: String? = null,
+) {
+    val valid: Boolean get() = profile?.let {
+        listOf(it.schoolStart, it.schoolEnd, it.sleepStart, it.sleepEnd).all(::isValidScheduleTime) &&
+            it.schoolStart != it.schoolEnd && it.sleepStart != it.sleepEnd
+    } == true
 }
-class ProfileScheduleViewModel(private val repository: ProfileRepository) : ViewModel() {
+class ProfileScheduleViewModel(
+    private val repository: ProfileRepository,
+    private val demoMode: Boolean,
+) : ViewModel() {
     private val _state = MutableStateFlow(ProfileScheduleUiState()); val state = _state.asStateFlow()
-    init { viewModelScope.launch { repository.profile.first()?.let { profile -> _state.value = ProfileScheduleUiState(profile.copy(schoolStart = displayScheduleTime(profile.schoolStart), schoolEnd = displayScheduleTime(profile.schoolEnd), sleepStart = displayScheduleTime(profile.sleepStart), sleepEnd = displayScheduleTime(profile.sleepEnd))) } } }
+    init {
+        viewModelScope.launch {
+            val cached = repository.profile.first()
+            cached?.let(::showProfile)
+            if (!demoMode && cached?.id != null) {
+                try {
+                    repository.refreshSettings()?.let(::showProfile)
+                } catch (exception: CancellationException) {
+                    throw exception
+                } catch (_: Exception) {
+                    _state.update { it.copy(errorMessage = "No pudimos actualizar los horarios. Podés seguir usando los datos guardados.") }
+                }
+            }
+        }
+    }
     fun schoolStart(value: String) = update { copy(schoolStart = value.take(5)) }
     fun schoolEnd(value: String) = update { copy(schoolEnd = value.take(5)) }
     fun sleepStart(value: String) = update { copy(sleepStart = value.take(5)) }
     fun sleepEnd(value: String) = update { copy(sleepEnd = value.take(5)) }
-    fun save() { val profile = state.value.profile ?: return; if (!state.value.valid) return; viewModelScope.launch { repository.save(profile); _state.update { it.copy(saved = true) } } }
+    fun save() {
+        val current = state.value
+        val profile = current.profile ?: return
+        if (!current.valid || current.submitting) return
+        viewModelScope.launch {
+            _state.update { it.copy(submitting = true, saved = false, errorMessage = null) }
+            try {
+                val saved = if (demoMode) {
+                    repository.save(profile)
+                    profile
+                } else {
+                    repository.updateSettings(profile)
+                }
+                showProfile(saved, saved = true)
+            } catch (exception: CancellationException) {
+                throw exception
+            } catch (_: Exception) {
+                _state.update { it.copy(submitting = false, saved = false, errorMessage = "No pudimos guardar los horarios. Intentá nuevamente.") }
+            }
+        }
+    }
     fun consumeSaved() { _state.update { it.copy(saved = false) } }
-    private fun update(transform: Profile.() -> Profile) { _state.update { current -> current.copy(profile = current.profile?.transform(), saved = false) } }
+    private fun showProfile(profile: Profile, saved: Boolean = false) {
+        _state.value = ProfileScheduleUiState(
+            profile = profile.copy(
+                schoolStart = displayScheduleTime(profile.schoolStart),
+                schoolEnd = displayScheduleTime(profile.schoolEnd),
+                sleepStart = displayScheduleTime(profile.sleepStart),
+                sleepEnd = displayScheduleTime(profile.sleepEnd),
+            ),
+            saved = saved,
+        )
+    }
+    private fun update(transform: Profile.() -> Profile) { _state.update { current -> current.copy(profile = current.profile?.transform(), saved = false, errorMessage = null) } }
 }
 private fun displayScheduleTime(value: String?): String? = value?.trim()?.split(":")?.takeIf { it.size >= 2 }?.let { "${it[0]}:${it[1]}" }
 private fun isValidScheduleTime(value: String?): Boolean { val parts = value?.split(":") ?: return false; if (parts.size != 2 || parts.any { it.length != 2 }) return false; val hour = parts[0].toIntOrNull() ?: return false; val minute = parts[1].toIntOrNull() ?: return false; return hour in 0..23 && minute in 0..59 }

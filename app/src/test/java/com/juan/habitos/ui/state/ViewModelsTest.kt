@@ -16,6 +16,11 @@ private class TestProfileRepo : ProfileRepository {
     override val onboardingComplete = MutableStateFlow(false)
     var createdProfile: Profile? = null
     var createFailure: Exception? = null
+    var settingsFailure: Exception? = null
+    var refreshedSettings: Profile? = null
+    var updatedSettings: Profile? = null
+    var refreshSettingsCalls = 0
+    var updateSettingsCalls = 0
     override suspend fun save(profile: Profile) { this.profile.value = profile }
     override suspend fun completeOnboarding() { onboardingComplete.value = true }
     override suspend fun create(profile: Profile): Profile {
@@ -25,6 +30,16 @@ private class TestProfileRepo : ProfileRepository {
     }
     override suspend fun refresh(): Profile? = profile.value
     override suspend fun update(profile: Profile): Profile = profile.also { this.profile.value = it }
+    override suspend fun refreshSettings(): Profile? {
+        refreshSettingsCalls++
+        settingsFailure?.let { throw it }
+        return (refreshedSettings ?: profile.value)?.also { profile.value = it }
+    }
+    override suspend fun updateSettings(profile: Profile): Profile {
+        updateSettingsCalls++
+        settingsFailure?.let { throw it }
+        return (updatedSettings ?: profile).also { this.profile.value = it }
+    }
 }
 private class TestPinStore : PinStore { var pin = ""; override suspend fun save(pin: String) { this.pin = pin }; override suspend fun verify(pin: String) = pin == this.pin }
 private class TestUsage : UsageRepository { override suspend fun daily(period: DashboardPeriod) = DailyUsage(if(period == DashboardPeriod.TODAY) 165 else 900, 180, 8); override suspend fun apps() = emptyList<AppUsage>(); override suspend fun recommendation() = Recommendation("","","") }
@@ -58,6 +73,11 @@ class ViewModelsTest {
     @Test fun `permanent preference removes temporary end date`() = runTest(dispatcher) { val vm = ChildPreferencesViewModel(TestPreferencesRepo(), TestProfileRepo()); advanceUntilIdle(); vm.adaptationType(AdaptationType.TEMPORARY); vm.validUntil(LocalDate.now().plusWeeks(1)); vm.adaptationType(AdaptationType.PERMANENT); assertNull(vm.state.value.preferences.validUntil) }
     @Test fun `profile schedule summary formats values without seconds`() { val profile = Profile("Sofía", "🦋", 8, schoolStart = "08:00:00", schoolEnd = "12:30:00", sleepStart = "22:00:00", sleepEnd = "07:00:00"); assertEquals("Escuela 08:00–12:30 · Sueño 22:00–07:00", profileScheduleSummary(profile)) }
     @Test fun `profile schedule summary handles missing and placeholder values`() { assertEquals("Sin configurar", profileScheduleSummary(Profile("Sofía", "🦋", 8))); assertEquals("Sin configurar", profileScheduleSummary(Profile("Sofía", "🦋", 8, schoolStart = "00:00", schoolEnd = "00:00", sleepStart = "00:00", sleepEnd = "00:00"))) }
-    @Test fun `schedule editor loads profile and saves through repository`() = runTest(dispatcher) { val repo = TestProfileRepo().apply { profile.value = Profile("Sofía", "🦋", 8, schoolStart = "08:00:00", schoolEnd = "12:30:00", sleepStart = "22:00:00", sleepEnd = "07:00:00") }; val vm = ProfileScheduleViewModel(repo); advanceUntilIdle(); assertEquals("08:00", vm.state.value.profile?.schoolStart); vm.schoolStart("09:15"); vm.save(); advanceUntilIdle(); assertEquals("09:15", repo.profile.value?.schoolStart); assertTrue(vm.state.value.saved) }
-    @Test fun `schedule editor rejects invalid times`() = runTest(dispatcher) { val repo = TestProfileRepo().apply { profile.value = Profile("Sofía", "🦋", 8, schoolStart = "08:00", schoolEnd = "12:30", sleepStart = "22:00", sleepEnd = "07:00") }; val vm = ProfileScheduleViewModel(repo); advanceUntilIdle(); vm.sleepStart("29:99"); assertFalse(vm.state.value.valid); vm.save(); advanceUntilIdle(); assertEquals("22:00", repo.profile.value?.sleepStart) }
+    @Test fun `schedule editor loads profile and demo saves locally`() = runTest(dispatcher) { val repo = TestProfileRepo().apply { profile.value = Profile("Sofía", "🦋", 8, schoolStart = "08:00:00", schoolEnd = "12:30:00", sleepStart = "22:00:00", sleepEnd = "07:00:00") }; val vm = ProfileScheduleViewModel(repo, demoMode = true); advanceUntilIdle(); assertEquals("08:00", vm.state.value.profile?.schoolStart); vm.schoolStart("09:15"); vm.save(); advanceUntilIdle(); assertEquals("09:15", repo.profile.value?.schoolStart); assertEquals(0, repo.updateSettingsCalls); assertTrue(vm.state.value.saved) }
+    @Test fun `schedule editor rejects invalid times`() = runTest(dispatcher) { val repo = TestProfileRepo().apply { profile.value = Profile("Sofía", "🦋", 8, schoolStart = "08:00", schoolEnd = "12:30", sleepStart = "22:00", sleepEnd = "07:00") }; val vm = ProfileScheduleViewModel(repo, demoMode = true); advanceUntilIdle(); vm.sleepStart("29:99"); assertFalse(vm.state.value.valid); vm.save(); advanceUntilIdle(); assertEquals("22:00", repo.profile.value?.sleepStart) }
+    @Test fun `remote schedule editor refreshes settings once and normalizes display`() = runTest(dispatcher) { val repo = TestProfileRepo().apply { profile.value = Profile("Sofía", "🦋", 8, schoolStart = "08:00", schoolEnd = "12:30", sleepStart = "22:00", sleepEnd = "07:00", id = "profile-123"); refreshedSettings = profile.value!!.copy(schoolStart = "09:00:00", schoolEnd = "13:00:00", sleepStart = "23:00:00", sleepEnd = "08:00:00") }; val vm = ProfileScheduleViewModel(repo, demoMode = false); advanceUntilIdle(); assertEquals(1, repo.refreshSettingsCalls); assertEquals("09:00", vm.state.value.profile?.schoolStart); assertEquals("08:00", vm.state.value.profile?.sleepEnd) }
+    @Test fun `remote schedule save uses settings operation and exposes success`() = runTest(dispatcher) { val initial = Profile("Sofía", "🦋", 8, schoolStart = "08:00", schoolEnd = "12:30", sleepStart = "22:00", sleepEnd = "07:00", id = "profile-123"); val repo = TestProfileRepo().apply { profile.value = initial }; val vm = ProfileScheduleViewModel(repo, demoMode = false); advanceUntilIdle(); vm.schoolStart("09:15"); vm.schoolEnd("13:45"); vm.save(); advanceUntilIdle(); assertEquals(1, repo.updateSettingsCalls); assertEquals("09:15", repo.profile.value?.schoolStart); assertEquals("profile-123", repo.profile.value?.id); assertTrue(vm.state.value.saved); assertFalse(vm.state.value.submitting) }
+    @Test fun `remote schedule failure keeps cache and shows friendly error`() = runTest(dispatcher) { val initial = Profile("Sofía", "🦋", 8, schoolStart = "08:00", schoolEnd = "12:30", sleepStart = "22:00", sleepEnd = "07:00", id = "profile-123"); val repo = TestProfileRepo().apply { profile.value = initial; settingsFailure = java.io.IOException("offline") }; val vm = ProfileScheduleViewModel(repo, demoMode = false); advanceUntilIdle(); assertEquals(initial, repo.profile.value); vm.schoolStart("09:15"); vm.save(); advanceUntilIdle(); assertEquals(initial, repo.profile.value); assertFalse(vm.state.value.saved); assertFalse(vm.state.value.submitting); assertEquals("No pudimos guardar los horarios. Intentá nuevamente.", vm.state.value.errorMessage) }
+    @Test fun `remote settings refresh failure keeps cached schedule`() = runTest(dispatcher) { val initial = Profile("Sofía", "🦋", 8, schoolStart = "08:00", schoolEnd = "12:30", sleepStart = "22:00", sleepEnd = "07:00", id = "profile-123"); val repo = TestProfileRepo().apply { profile.value = initial; settingsFailure = java.io.IOException("offline") }; val vm = ProfileScheduleViewModel(repo, demoMode = false); advanceUntilIdle(); assertEquals(initial, repo.profile.value); assertEquals("08:00", vm.state.value.profile?.schoolStart); assertNotNull(vm.state.value.errorMessage) }
+    @Test fun `schedule validation permits cross midnight and rejects equal bounds`() { val initial = Profile("Sofía", "🦋", 8, schoolStart = "08:00", schoolEnd = "12:30", sleepStart = "22:00", sleepEnd = "07:00"); assertTrue(ProfileScheduleUiState(initial).valid); assertFalse(ProfileScheduleUiState(initial.copy(schoolEnd = "08:00")).valid); assertFalse(ProfileScheduleUiState(initial.copy(sleepEnd = "22:00")).valid) }
 }

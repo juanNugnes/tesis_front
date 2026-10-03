@@ -20,9 +20,14 @@ private class FakeProfileLocalStore(initial: Profile? = null) : ProfileLocalStor
 private class FakeHabitsApi : HabitsApi {
     var createRequest: CreateProfileRequest? = null
     var updateRequest: ProfileUpdateRequest? = null
+    var settingsRequest: ProfileSettingsRequest? = null
     var requestedId: String? = null
+    var settingsRequestedId: String? = null
+    var settingsGetCalls = 0
+    var settingsPutCalls = 0
     var failure: Exception? = null
     lateinit var response: ProfileDetailDto
+    lateinit var settingsResponse: ProfileSettingsDto
 
     override suspend fun createProfile(request: CreateProfileRequest): ProfileDetailDto {
         failure?.let { throw it }
@@ -43,6 +48,21 @@ private class FakeHabitsApi : HabitsApi {
         return response
     }
 
+    override suspend fun getProfileSettings(id: String): ProfileSettingsDto {
+        failure?.let { throw it }
+        settingsGetCalls++
+        settingsRequestedId = id
+        return settingsResponse
+    }
+
+    override suspend fun updateProfileSettings(id: String, request: ProfileSettingsRequest): ProfileSettingsDto {
+        failure?.let { throw it }
+        settingsPutCalls++
+        settingsRequestedId = id
+        settingsRequest = request
+        return settingsResponse
+    }
+
     override suspend fun postUsage(id: String, usage: UsageDto) = usage
     override suspend fun getUsage(id: String) = UsageDto(id, 0, 0)
     override suspend fun postAnalysis(id: String) = AnalysisDto(id, "")
@@ -50,6 +70,20 @@ private class FakeHabitsApi : HabitsApi {
 }
 
 class ProfileRepositoryTest {
+    private fun settings(
+        profileId: String = "profile-123",
+        schoolStart: String = "08:00:00",
+        schoolEnd: String = "12:30:00",
+        sleepStart: String = "22:00:00",
+        sleepEnd: String = "07:00:00",
+    ) = ProfileSettingsDto(
+        profileId = profileId,
+        schoolStart = schoolStart,
+        schoolEnd = schoolEnd,
+        sleepStart = sleepStart,
+        sleepEnd = sleepEnd,
+    )
+
     private fun detail(
         id: String = "profile-123",
         alias: String = "Juana",
@@ -62,13 +96,7 @@ class ProfileRepositoryTest {
         age = age,
         avatar = avatar,
         active = active,
-        settings = ProfileSettingsDto(
-            profileId = id,
-            schoolStart = "08:00:00",
-            schoolEnd = "12:30:00",
-            sleepStart = "22:00:00",
-            sleepEnd = "07:00:00",
-        ),
+        settings = settings(profileId = id),
     )
 
     @Test fun `domain maps name avatar and selected schedules to create contract`() {
@@ -176,5 +204,87 @@ class ProfileRepositoryTest {
         } catch (_: IOException) {
             assertEquals(cached, local.profile.value)
         }
+    }
+
+    @Test fun `refresh settings uses stored profile id normalizes seconds and updates cache`() = runTest {
+        val cached = Profile("Local", "🦊", 9, schoolStart = "07:30", schoolEnd = "11:30", sleepStart = "21:30", sleepEnd = "06:30", id = "profile-123")
+        val local = FakeProfileLocalStore(cached)
+        val api = FakeHabitsApi().apply { settingsResponse = settings() }
+        val repository = CachedProfileRepository(local, api)
+
+        val refreshed = repository.refreshSettings()
+
+        assertEquals("profile-123", api.settingsRequestedId)
+        assertEquals(1, api.settingsGetCalls)
+        assertEquals("08:00", refreshed?.schoolStart)
+        assertEquals("12:30", local.profile.value?.schoolEnd)
+        assertEquals("22:00", local.profile.value?.sleepStart)
+        assertEquals("07:00", local.profile.value?.sleepEnd)
+        assertEquals("profile-123", local.profile.value?.id)
+        assertEquals("Local", local.profile.value?.name)
+    }
+
+    @Test fun `update settings sends all exact fields and saves normalized response`() = runTest {
+        val cached = Profile("Local", "🦊", 9, schoolStart = "08:00", schoolEnd = "12:30", sleepStart = "22:00", sleepEnd = "07:00", id = "profile-123", active = false)
+        val local = FakeProfileLocalStore(cached)
+        val api = FakeHabitsApi().apply { settingsResponse = settings(schoolStart = "09:15:00", schoolEnd = "13:45:00", sleepStart = "23:10:00", sleepEnd = "07:20:00") }
+        val repository = CachedProfileRepository(local, api)
+        val edited = cached.copy(schoolStart = "09:15", schoolEnd = "13:45", sleepStart = "23:10", sleepEnd = "07:20")
+
+        val updated = repository.updateSettings(edited)
+
+        assertEquals("profile-123", api.settingsRequestedId)
+        assertEquals(1, api.settingsPutCalls)
+        assertEquals("09:15", api.settingsRequest?.schoolStart)
+        assertEquals("13:45", api.settingsRequest?.schoolEnd)
+        assertEquals("23:10", api.settingsRequest?.sleepStart)
+        assertEquals("07:20", api.settingsRequest?.sleepEnd)
+        val json = Gson().toJson(api.settingsRequest)
+        assertTrue(json.contains("\"school_start\":\"09:15\""))
+        assertTrue(json.contains("\"school_end\":\"13:45\""))
+        assertTrue(json.contains("\"sleep_start\":\"23:10\""))
+        assertTrue(json.contains("\"sleep_end\":\"07:20\""))
+        assertEquals("09:15", updated.schoolStart)
+        assertEquals("07:20", local.profile.value?.sleepEnd)
+        assertEquals("profile-123", local.profile.value?.id)
+        assertEquals("Local", local.profile.value?.name)
+        assertFalse(local.profile.value!!.active)
+    }
+
+    @Test fun `failed settings requests preserve previous cache`() = runTest {
+        val cached = Profile("Local", "🦊", 9, schoolStart = "08:00", schoolEnd = "12:30", sleepStart = "22:00", sleepEnd = "07:00", id = "profile-123")
+        val local = FakeProfileLocalStore(cached)
+        val api = FakeHabitsApi().apply { failure = IOException("offline") }
+        val repository = CachedProfileRepository(local, api)
+
+        try {
+            repository.refreshSettings()
+            fail("Expected GET settings to fail")
+        } catch (_: IOException) {
+            // Expected.
+        }
+        assertEquals(cached, local.profile.value)
+        try {
+            repository.updateSettings(cached.copy(schoolStart = "09:00"))
+            fail("Expected PUT settings to fail")
+        } catch (_: IOException) {
+            // Expected.
+        }
+        assertEquals(cached, local.profile.value)
+    }
+
+    @Test fun `settings without remote id stay local and never call api`() = runTest {
+        val cached = Profile("Local", "🦊", 9, schoolStart = "08:00", schoolEnd = "12:30", sleepStart = "22:00", sleepEnd = "07:00")
+        val local = FakeProfileLocalStore(cached)
+        val api = FakeHabitsApi()
+        val repository = CachedProfileRepository(local, api)
+
+        assertEquals(cached, repository.refreshSettings())
+        val updated = repository.updateSettings(cached.copy(schoolStart = "09:00"))
+
+        assertEquals("09:00", updated.schoolStart)
+        assertEquals("09:00", local.profile.value?.schoolStart)
+        assertEquals(0, api.settingsGetCalls)
+        assertEquals(0, api.settingsPutCalls)
     }
 }

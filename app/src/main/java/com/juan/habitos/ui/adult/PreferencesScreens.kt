@@ -59,13 +59,14 @@ private val restrictionLabels = linkedMapOf(
 ) {
     val snackbar = remember { SnackbarHostState() }
     LaunchedEffect(state.saved) { if (state.saved) snackbar.showSnackbar("Horarios actualizados") }
+    LaunchedEffect(state.errorMessage) { state.errorMessage?.let { snackbar.showSnackbar(it) } }
     Scaffold(snackbarHost = { SnackbarHost(snackbar) }, containerColor = AppColors.Surface) { padding ->
         LazyColumn(Modifier.fillMaxSize().padding(padding).statusBarsPadding(), contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             item { Row(verticalAlignment = Alignment.CenterVertically) { IconButton(onBack) { Text("←", color = Color.White, fontSize = 24.sp) }; Column { Text("Horarios de escuela y sueño", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold); Text("Actualizá las rutinas configuradas para ${state.profile?.name.orEmpty()}.", color = Color(0xFFCBD5E1), fontSize = 13.sp) } } }
             item { ScheduleSection("🏫", "Horario de escuela", state.profile?.schoolStart.orEmpty(), state.profile?.schoolEnd.orEmpty(), onSchoolStart, onSchoolEnd) }
             item { ScheduleSection("🌙", "Horario de sueño", state.profile?.sleepStart.orEmpty(), state.profile?.sleepEnd.orEmpty(), onSleepStart, onSleepEnd) }
             item { Text("Usá formato de 24 horas: HH:mm.", color = Color(0xFF94A3B8), fontSize = 13.sp) }
-            item { Button(onSave, Modifier.fillMaxWidth().height(54.dp), enabled = state.valid, colors = ButtonDefaults.buttonColors(containerColor = AppColors.Purple), shape = RoundedCornerShape(14.dp)) { Text("Guardar cambios", fontWeight = FontWeight.Bold) } }
+            item { Button(onSave, Modifier.fillMaxWidth().height(54.dp), enabled = state.valid && !state.submitting, colors = ButtonDefaults.buttonColors(containerColor = AppColors.Purple), shape = RoundedCornerShape(14.dp)) { Text(if (state.submitting) "Guardando…" else "Guardar cambios", fontWeight = FontWeight.Bold) } }
             item { Spacer(Modifier.navigationBarsPadding()) }
         }
     }
