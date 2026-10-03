@@ -70,7 +70,7 @@ class DataStoreProfileRepository(private val context: Context) : ProfileLocalSto
     override suspend fun completeOnboarding() { context.dataStore.edit { it[ProfilePreferenceKeys.done] = true } }
 }
 
-class DataStoreChildPreferencesRepository(private val context: Context) : ChildPreferencesRepository {
+class DataStoreChildPreferencesRepository(private val context: Context) : ChildPreferencesLocalStore {
     private object Keys {
         val interests = stringSetPreferencesKey("child_preferences_interests")
         val adaptationType = stringPreferencesKey("child_preferences_adaptation_type")
@@ -80,11 +80,12 @@ class DataStoreChildPreferencesRepository(private val context: Context) : ChildP
         val validUntil = longPreferencesKey("child_preferences_valid_until")
     }
     override val preferences = context.dataStore.data.map { values ->
+        val restrictions = values[Keys.restrictions].orEmpty().mapNotNull { name -> ActivityRestriction.entries.find { it.name == name } }.toSet()
         ChildPreferences(
             interests = values[Keys.interests].orEmpty().mapNotNull { name -> ChildInterest.entries.find { it.name == name } }.toSet(),
             adaptationType = values[Keys.adaptationType]?.let { name -> AdaptationType.entries.find { it.name == name } } ?: AdaptationType.NONE,
             considerations = values[Keys.considerations].orEmpty().mapNotNull { name -> ChildConsideration.entries.find { it.name == name } }.toSet(),
-            activitiesToAvoid = values[Keys.restrictions].orEmpty().mapNotNull { name -> ActivityRestriction.entries.find { it.name == name } }.toSet(),
+            activitiesToAvoid = restrictions.ifEmpty { setOf(ActivityRestriction.NONE) },
             additionalNotes = values[Keys.notes],
             validUntil = values[Keys.validUntil]?.let(LocalDate::ofEpochDay),
         )

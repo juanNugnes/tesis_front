@@ -4,15 +4,17 @@ import android.app.Application
 import com.juan.habitos.data.local.*
 import com.juan.habitos.data.mock.*
 import com.juan.habitos.data.remote.CachedProfileRepository
+import com.juan.habitos.data.remote.CachedChildPreferencesRepository
 import com.juan.habitos.data.remote.HabitsApiClient
 import com.juan.habitos.domain.model.*
 import kotlinx.coroutines.flow.first
 
 class HabitosApplication : Application() {
     private val localProfileStore by lazy { DataStoreProfileRepository(this) }
+    private val localChildPreferencesStore by lazy { DataStoreChildPreferencesRepository(this) }
     val habitsApi by lazy { HabitsApiClient.api }
     val profileRepository by lazy { CachedProfileRepository(localProfileStore, habitsApi) }
-    val childPreferencesRepository by lazy { DataStoreChildPreferencesRepository(this) }
+    val childPreferencesRepository by lazy { CachedChildPreferencesRepository(localChildPreferencesStore, localProfileStore, habitsApi) }
     val deviceSessionRepository by lazy { DataStoreDeviceSessionRepository(this) }
     val authRepository by lazy { MockAuthRepository() }
     val linkRepository by lazy { MockLinkRepository(profileRepository, deviceSessionRepository) }

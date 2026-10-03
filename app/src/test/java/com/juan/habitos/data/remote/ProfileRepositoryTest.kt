@@ -63,6 +63,9 @@ private class FakeHabitsApi : HabitsApi {
         return settingsResponse
     }
 
+    override suspend fun getActivityPreferences(id: String) = ActivityPreferencesDto()
+    override suspend fun updateActivityPreferences(id: String, request: ActivityPreferencesRequest) = ActivityPreferencesDto()
+
     override suspend fun postUsage(id: String, usage: UsageDto) = usage
     override suspend fun getUsage(id: String) = UsageDto(id, 0, 0)
     override suspend fun postAnalysis(id: String) = AnalysisDto(id, "")

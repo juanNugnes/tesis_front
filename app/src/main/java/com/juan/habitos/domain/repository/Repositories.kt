@@ -16,7 +16,11 @@ interface ProfileRepository : ProfileLocalStore {
     suspend fun refreshSettings(): Profile?
     suspend fun updateSettings(profile: Profile): Profile
 }
-interface ChildPreferencesRepository { val preferences: Flow<ChildPreferences>; suspend fun save(preferences: ChildPreferences) }
+interface ChildPreferencesLocalStore { val preferences: Flow<ChildPreferences>; suspend fun save(preferences: ChildPreferences) }
+interface ChildPreferencesRepository : ChildPreferencesLocalStore {
+    suspend fun refresh(): ChildPreferences
+    suspend fun update(preferences: ChildPreferences): ChildPreferences
+}
 interface UsageRepository { suspend fun daily(period: DashboardPeriod = DashboardPeriod.TODAY): DailyUsage; suspend fun apps(): List<AppUsage>; suspend fun recommendation(): Recommendation }
 interface AlertRepository { suspend fun alerts(): List<Alert> }
 interface PinStore { suspend fun save(pin: String); suspend fun verify(pin: String): Boolean }

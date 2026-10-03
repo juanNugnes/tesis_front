@@ -37,6 +37,28 @@ data class ProfileSettingsDto(
     @SerializedName("updated_at") val updatedAt: String? = null,
 )
 
+data class ActivityPreferencesRequest(
+    val interests: List<String>,
+    @SerializedName("adaptation_type") val adaptationType: String,
+    val considerations: List<String>,
+    @SerializedName("activities_to_avoid") val activitiesToAvoid: List<String>,
+    @SerializedName("additional_notes") val additionalNotes: String?,
+    @SerializedName("valid_until") val validUntil: String?,
+)
+
+data class ActivityPreferencesDto(
+    val interests: List<String> = emptyList(),
+    @SerializedName("adaptation_type") val adaptationType: String = "NONE",
+    val considerations: List<String> = emptyList(),
+    @SerializedName("activities_to_avoid") val activitiesToAvoid: List<String> = emptyList(),
+    @SerializedName("additional_notes") val additionalNotes: String? = null,
+    @SerializedName("valid_until") val validUntil: String? = null,
+    val id: String? = null,
+    @SerializedName("profile_id") val profileId: String? = null,
+    @SerializedName("created_at") val createdAt: String? = null,
+    @SerializedName("updated_at") val updatedAt: String? = null,
+)
+
 data class ProfileDetailDto(
     val id: String,
     val alias: String,
@@ -57,6 +79,8 @@ interface HabitsApi {
     @PUT("api/v1/profiles/{profileId}") suspend fun updateProfile(@Path("profileId") id: String, @Body request: ProfileUpdateRequest): ProfileDetailDto
     @GET("api/v1/profiles/{profileId}/settings") suspend fun getProfileSettings(@Path("profileId") id: String): ProfileSettingsDto
     @PUT("api/v1/profiles/{profileId}/settings") suspend fun updateProfileSettings(@Path("profileId") id: String, @Body request: ProfileSettingsRequest): ProfileSettingsDto
+    @GET("api/v1/profiles/{profileId}/activity-preferences") suspend fun getActivityPreferences(@Path("profileId") id: String): ActivityPreferencesDto
+    @PUT("api/v1/profiles/{profileId}/activity-preferences") suspend fun updateActivityPreferences(@Path("profileId") id: String, @Body request: ActivityPreferencesRequest): ActivityPreferencesDto
     @POST("api/v1/profiles/{profileId}/usage") suspend fun postUsage(@Path("profileId") id: String, @Body usage: UsageDto): UsageDto
     @GET("api/v1/profiles/{profileId}/usage") suspend fun getUsage(@Path("profileId") id: String): UsageDto
     @POST("api/v1/profiles/{profileId}/analysis") suspend fun postAnalysis(@Path("profileId") id: String): AnalysisDto

@@ -167,22 +167,74 @@ data class ChildPreferencesUiState(
     val preferences: ChildPreferences = ChildPreferences(),
     val loaded: Boolean = false,
     val saved: Boolean = false,
+    val refreshing: Boolean = false,
+    val submitting: Boolean = false,
+    val errorMessage: String? = null,
+    val dirty: Boolean = false,
 )
-class ChildPreferencesViewModel(private val repository: ChildPreferencesRepository, profileRepository: ProfileRepository) : ViewModel() {
+class ChildPreferencesViewModel(
+    private val repository: ChildPreferencesRepository,
+    profileRepository: ProfileRepository,
+    private val demoMode: Boolean,
+) : ViewModel() {
     private val _state = MutableStateFlow(ChildPreferencesUiState()); val state = _state.asStateFlow()
     init {
         viewModelScope.launch { profileRepository.profile.filterNotNull().collect { profile -> _state.update { it.copy(childName = profile.name) } } }
-        viewModelScope.launch { repository.preferences.first().let { preferences -> _state.update { it.copy(preferences = preferences, loaded = true) } } }
+        viewModelScope.launch {
+            val cached = repository.preferences.first()
+            _state.update { it.copy(preferences = cached, loaded = true, dirty = false) }
+            if (!demoMode) {
+                _state.update { it.copy(refreshing = true, errorMessage = null) }
+                try {
+                    val remote = repository.refresh()
+                    _state.update { current -> current.copy(preferences = if (current.dirty) current.preferences else remote, refreshing = false) }
+                } catch (exception: CancellationException) {
+                    throw exception
+                } catch (_: Exception) {
+                    _state.update { it.copy(refreshing = false, errorMessage = "No pudimos actualizar las preferencias. Podés seguir usando los datos guardados.") }
+                }
+            }
+        }
     }
     fun toggleInterest(value: ChildInterest) = update { copy(interests = interests.toggle(value)) }
-    fun adaptationType(value: AdaptationType) = update { copy(adaptationType = value, considerations = if (value == AdaptationType.NONE) emptySet() else considerations, activitiesToAvoid = if (value == AdaptationType.NONE) emptySet() else activitiesToAvoid, additionalNotes = if (value == AdaptationType.NONE) null else additionalNotes, validUntil = if (value == AdaptationType.TEMPORARY) validUntil else null) }
+    fun adaptationType(value: AdaptationType) = update { copy(adaptationType = value, validUntil = if (value == AdaptationType.TEMPORARY) validUntil else null) }
     fun toggleConsideration(value: ChildConsideration) = update { copy(considerations = considerations.toggle(value)) }
-    fun toggleRestriction(value: ActivityRestriction) = update { copy(activitiesToAvoid = if (value == ActivityRestriction.NONE) setOf(value) else activitiesToAvoid.minus(ActivityRestriction.NONE).toggle(value)) }
-    fun notes(value: String) = update { copy(additionalNotes = value.take(240)) }
+    fun toggleRestriction(value: ActivityRestriction) = update {
+        val selected = if (value == ActivityRestriction.NONE) {
+            setOf(value)
+        } else {
+            activitiesToAvoid.minus(ActivityRestriction.NONE).toggle(value).ifEmpty { setOf(ActivityRestriction.NONE) }
+        }
+        copy(activitiesToAvoid = selected)
+    }
+    fun notes(value: String) = update {
+        val limit = if (additionalNotes.orEmpty().length > 240) 500 else 240
+        copy(additionalNotes = value.take(limit))
+    }
     fun validUntil(date: LocalDate?) = update { copy(validUntil = date) }
-    fun save(onSaved: () -> Unit = {}) = viewModelScope.launch { repository.save(state.value.preferences); _state.update { it.copy(saved = true) }; onSaved() }
+    fun save(onSaved: () -> Unit = {}) {
+        val current = state.value
+        if (!current.loaded || current.submitting || current.refreshing) return
+        _state.update { it.copy(submitting = true, saved = false, errorMessage = null) }
+        viewModelScope.launch {
+            try {
+                val saved = if (demoMode) {
+                    repository.save(current.preferences)
+                    current.preferences
+                } else {
+                    repository.update(current.preferences)
+                }
+                _state.update { it.copy(preferences = saved, submitting = false, saved = true, dirty = false) }
+                onSaved()
+            } catch (exception: CancellationException) {
+                throw exception
+            } catch (_: Exception) {
+                _state.update { it.copy(submitting = false, saved = false, errorMessage = "No pudimos guardar las preferencias. Intentá nuevamente.") }
+            }
+        }
+    }
     fun consumeSaved() { _state.update { it.copy(saved = false) } }
-    private fun update(transform: ChildPreferences.() -> ChildPreferences) { _state.update { it.copy(preferences = it.preferences.transform(), saved = false) } }
+    private fun update(transform: ChildPreferences.() -> ChildPreferences) { _state.update { it.copy(preferences = it.preferences.transform(), saved = false, errorMessage = null, dirty = true) } }
     private fun <T> Set<T>.toggle(value: T): Set<T> = if (value in this) this - value else this + value
 }
 
