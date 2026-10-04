@@ -5,6 +5,10 @@ plugins {
     id("com.google.devtools.ksp")
 }
 
+val apiBaseUrl = providers.gradleProperty("apiBaseUrl").orNull ?: "http://10.0.2.2:8000/"
+require(apiBaseUrl.endsWith("/")) { "apiBaseUrl must end with /" }
+val apiBaseUrlBuildConfigValue = "\"${apiBaseUrl.replace("\\", "\\\\").replace("\"", "\\\"")}\""
+
 android {
     namespace = "com.juan.habitos"
     compileSdk = 35
@@ -15,6 +19,7 @@ android {
         versionCode = 1
         versionName = "1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        buildConfigField("String", "API_BASE_URL", apiBaseUrlBuildConfigValue)
     }
     buildTypes {
         debug { buildConfigField("boolean", "DEMO_MODE", providers.gradleProperty("demoMode").orNull?.toBooleanStrictOrNull()?.toString() ?: "true") }

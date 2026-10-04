@@ -34,7 +34,10 @@ class CachedProfileRepository(
     override suspend fun update(profile: Profile): Profile {
         val cached = local.profile.first()
         val profileId = profile.id ?: cached?.id
-            ?: throw IllegalStateException("Cannot update a profile without a remote id")
+        if (profileId == null) {
+            local.save(profile)
+            return profile
+        }
         val candidate = profile.copy(id = profileId)
         val remote = api.updateProfile(profileId, candidate.toUpdateProfileRequest()).toDomain(candidate)
         local.save(remote)

@@ -98,13 +98,14 @@ class ProfileRepositoryTest {
         age: Int = 9,
         avatar: String = "frog",
         active: Boolean = true,
+        profileSettings: ProfileSettingsDto? = settings(profileId = id),
     ) = ProfileDetailDto(
         id = id,
         alias = alias,
         age = age,
         avatar = avatar,
         active = active,
-        settings = settings(profileId = id),
+        settings = profileSettings,
     )
 
     @Test fun `domain maps name avatar and selected schedules to create contract`() {
@@ -198,6 +199,69 @@ class ProfileRepositoryTest {
         assertEquals(false, api.updateRequest?.active)
         assertEquals("Juanita", updated.name)
         assertFalse(local.profile.value!!.active)
+    }
+
+    @Test fun `basic profile update preserves id active schedules and legacy fields`() = runTest {
+        val cached = Profile(
+            name = "Anterior",
+            avatar = "🦊",
+            age = 8,
+            schoolSchedules = setOf(SchoolSchedule.MORNING, SchoolSchedule.AFTERNOON),
+            bedtime = com.juan.habitos.domain.model.BedtimeRange.FROM_22_TO_23,
+            schoolStart = "08:00",
+            schoolEnd = "12:30",
+            sleepStart = "22:00",
+            sleepEnd = "07:00",
+            id = "profile-123",
+            active = false,
+        )
+        val local = FakeProfileLocalStore(cached)
+        val api = FakeHabitsApi().apply {
+            response = detail(alias = "Sofía", age = 10, avatar = "frog", active = false, profileSettings = null)
+        }
+        val repository = CachedProfileRepository(local, api)
+
+        val updated = repository.update(cached.copy(name = "Sofía", age = 10, avatar = "🐸"))
+
+        assertEquals("profile-123", api.requestedId)
+        assertEquals("Sofía", api.updateRequest?.alias)
+        assertEquals(10, api.updateRequest?.age)
+        assertEquals("frog", api.updateRequest?.avatar)
+        assertEquals(false, api.updateRequest?.active)
+        assertEquals("profile-123", updated.id)
+        assertFalse(updated.active)
+        assertEquals(cached.schoolSchedules, updated.schoolSchedules)
+        assertEquals(cached.bedtime, updated.bedtime)
+        assertEquals("08:00", updated.schoolStart)
+        assertEquals("12:30", updated.schoolEnd)
+        assertEquals("22:00", updated.sleepStart)
+        assertEquals("07:00", updated.sleepEnd)
+        assertEquals(updated, local.profile.value)
+    }
+
+    @Test fun `failed basic profile update preserves previous cache`() = runTest {
+        val cached = Profile("Anterior", "🦊", 8, schoolStart = "08:00", schoolEnd = "12:30", sleepStart = "22:00", sleepEnd = "07:00", id = "profile-123", active = false)
+        val local = FakeProfileLocalStore(cached)
+        val api = FakeHabitsApi().apply { response = detail(); failure = IOException("offline") }
+        val repository = CachedProfileRepository(local, api)
+
+        try { repository.update(cached.copy(name = "Editado")); fail("Expected PUT failure") } catch (_: IOException) {}
+
+        assertEquals(cached, local.profile.value)
+    }
+
+    @Test fun `basic profile update without remote id falls back to local cache`() = runTest {
+        val cached = Profile("Anterior", "🦊", 8, active = false)
+        val local = FakeProfileLocalStore(cached)
+        val api = FakeHabitsApi()
+        val repository = CachedProfileRepository(local, api)
+        val edited = cached.copy(name = "Local", age = 9, avatar = "🐸")
+
+        val updated = repository.update(edited)
+
+        assertEquals(edited, updated)
+        assertEquals(edited, local.profile.value)
+        assertNull(api.updateRequest)
     }
 
     @Test fun `remote failure never deletes the cached profile`() = runTest {

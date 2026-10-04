@@ -1,6 +1,7 @@
 package com.juan.habitos.data.remote
 
 import com.google.gson.annotations.SerializedName
+import com.juan.habitos.BuildConfig
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import retrofit2.http.*
@@ -111,10 +112,9 @@ interface HabitsApi {
 }
 
 object HabitsApiClient {
-    private const val EMULATOR_BASE_URL = "http://10.0.2.2:8000/"
     val api: HabitsApi by lazy {
         Retrofit.Builder()
-            .baseUrl(EMULATOR_BASE_URL)
+            .baseUrl(BuildConfig.API_BASE_URL)
             .addConverterFactory(GsonConverterFactory.create())
             .build()
             .create(HabitsApi::class.java)
