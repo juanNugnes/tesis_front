@@ -70,6 +70,9 @@ private class FakeHabitsApi : HabitsApi {
     override suspend fun getActiveProfileContexts(profileId: String): List<ProfileContextDto> = error("Not used")
     override suspend fun updateProfileContext(profileId: String, contextId: String, request: ProfileContextRequest): ProfileContextDto = error("Not used")
     override suspend fun deleteProfileContext(profileId: String, contextId: String) = error("Not used")
+    override suspend fun registerDevice(profileId: String, request: DeviceCreateRequest): retrofit2.Response<DeviceDto> = error("Not used")
+    override suspend fun createDeviceLinkCode(profileId: String): retrofit2.Response<DeviceLinkCodeDto> = error("Not used")
+    override suspend fun claimDeviceLink(request: DeviceLinkClaimRequest): retrofit2.Response<DeviceLinkClaimResponse> = error("Not used")
 
     override suspend fun postUsage(id: String, usage: UsageDto) = usage
     override suspend fun getUsage(id: String) = UsageDto(id, 0, 0)

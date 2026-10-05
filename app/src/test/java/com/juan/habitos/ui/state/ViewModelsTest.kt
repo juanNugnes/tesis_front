@@ -15,6 +15,7 @@ private class TestProfileRepo : ProfileRepository {
     override val profile = MutableStateFlow<Profile?>(null)
     override val onboardingComplete = MutableStateFlow(false)
     var createdProfile: Profile? = null
+    var createCalls = 0
     var createFailure: Exception? = null
     var settingsFailure: Exception? = null
     var refreshedSettings: Profile? = null
@@ -24,6 +25,7 @@ private class TestProfileRepo : ProfileRepository {
     override suspend fun save(profile: Profile) { this.profile.value = profile }
     override suspend fun completeOnboarding() { onboardingComplete.value = true }
     override suspend fun create(profile: Profile): Profile {
+        createCalls++
         createFailure?.let { throw it }
         createdProfile = profile
         return profile.copy(id = "remote-id").also { this.profile.value = it }
@@ -40,6 +42,21 @@ private class TestProfileRepo : ProfileRepository {
         settingsFailure?.let { throw it }
         return (updatedSettings ?: profile).also { this.profile.value = it }
     }
+}
+private class TestDeviceRepo : DeviceRepository {
+    override val identity = MutableStateFlow(DeviceIdentity())
+    var registerCalls = 0
+    var registrationFailure: Exception? = null
+    override suspend fun getOrCreateInstallationId() = "installation-1"
+    override suspend fun getStoredDeviceId(): String? = identity.value.deviceId
+    override suspend fun registerDevice(profileId: String): RegisteredDevice {
+        registerCalls++
+        registrationFailure?.let { throw it }
+        return RegisteredDevice("device-1", profileId, "installation-1", "ANDROID", true).also {
+            identity.value = DeviceIdentity(it.installationId, it.id, it.profileId)
+        }
+    }
+    override suspend fun claimProfile(code: String): DeviceProfileClaim = error("Not used")
 }
 private class TestPinStore : PinStore { var pin = ""; override suspend fun save(pin: String) { this.pin = pin }; override suspend fun verify(pin: String) = pin == this.pin }
 private class TestUsage : UsageRepository { override suspend fun daily(period: DashboardPeriod) = DailyUsage(if(period == DashboardPeriod.TODAY) 165 else 900, 180, 8); override suspend fun apps() = emptyList<AppUsage>(); override suspend fun recommendation() = Recommendation("","","") }
@@ -78,6 +95,34 @@ class ViewModelsTest {
     @Test fun `demo save remains local with both sleep times and never invokes remote create`() = runTest(dispatcher) { val repo = TestProfileRepo(); val vm = ProfileViewModel(repo); vm.setName("Demo"); vm.selectAvatar("🦊"); vm.selectAge(9); vm.toggleSchoolSchedule(SchoolSchedule.MORNING); vm.save {}; advanceUntilIdle(); assertEquals("22:00", repo.profile.value?.sleepStart); assertEquals("07:00", repo.profile.value?.sleepEnd); assertNull(repo.createdProfile) }
     @Test fun `remote profile creation uses selected sleep start and end`() = runTest(dispatcher) { val repo = TestProfileRepo(); val vm = ProfileViewModel(repo); vm.setName(" Juana "); vm.selectAvatar("🐸"); vm.selectAge(10); vm.toggleSchoolSchedule(SchoolSchedule.AFTERNOON); vm.sleepStart("23:15"); vm.sleepEnd("08:10"); var completed = false; vm.create { completed = true }; advanceUntilIdle(); assertEquals(Profile("Juana", "🐸", 10, schoolSchedules = setOf(SchoolSchedule.AFTERNOON), sleepStart = "23:15", sleepEnd = "08:10"), repo.createdProfile); assertEquals("remote-id", repo.profile.value?.id); assertTrue(completed) }
     @Test fun `remote profile error keeps cached profile and exposes a friendly message`() = runTest(dispatcher) { val repo = TestProfileRepo().apply { profile.value = Profile("Anterior", "🦊", 9, id = "existing"); createFailure = java.io.IOException("offline") }; val vm = ProfileViewModel(repo); vm.setName("Juana"); vm.selectAvatar("🐸"); vm.selectAge(10); vm.toggleSchoolSchedule(SchoolSchedule.MORNING); vm.create {}; advanceUntilIdle(); assertEquals("existing", repo.profile.value?.id); assertNotNull(vm.state.value.errorMessage); assertFalse(vm.state.value.submitting) }
+    @Test fun `device registration retry never creates a second profile`() = runTest(dispatcher) {
+        val profileRepo = TestProfileRepo()
+        val deviceRepo = TestDeviceRepo().apply { registrationFailure = java.io.IOException("offline") }
+        val vm = ProfileViewModel(profileRepo, deviceRepo)
+        advanceUntilIdle()
+        vm.setName("Juana")
+        vm.selectAvatar("fox")
+        vm.selectAge(10)
+        vm.toggleSchoolSchedule(SchoolSchedule.MORNING)
+
+        vm.create {}
+        advanceUntilIdle()
+
+        assertEquals(1, profileRepo.createCalls)
+        assertEquals(1, deviceRepo.registerCalls)
+        assertTrue(vm.state.value.profileCreatedDevicePending)
+        assertTrue(vm.state.value.errorMessage!!.startsWith("El perfil se creó"))
+
+        var completed = 0
+        deviceRepo.registrationFailure = null
+        vm.create { completed++ }
+        advanceUntilIdle()
+
+        assertEquals(1, profileRepo.createCalls)
+        assertEquals(2, deviceRepo.registerCalls)
+        assertEquals(1, completed)
+        assertFalse(vm.state.value.profileCreatedDevicePending)
+    }
     @Test fun `pin creation accepts four digits and supports delete`() = runTest(dispatcher) { val store = TestPinStore(); val vm = PinViewModel(store); vm.digit(1,true) {}; vm.digit(2,true) {}; vm.delete(); assertEquals("1", vm.state.value.digits); vm.digit(2,true) {}; vm.digit(3,true) {}; vm.digit(4,true) {}; advanceUntilIdle(); assertEquals("1234", store.pin) }
     @Test fun `incorrect pin clears and shows error`() = runTest(dispatcher) { val store = TestPinStore().apply { pin = "1234" }; val vm = PinViewModel(store); repeat(4) { vm.digit(9,false) {} }; advanceUntilIdle(); assertEquals("", vm.state.value.digits); assertTrue(vm.state.value.error) }
     @Test fun `correct pin invokes completion`() = runTest(dispatcher) { val store = TestPinStore().apply { pin = "1234" }; val vm = PinViewModel(store); var done = false; (1..4).forEach { vm.digit(it,false) { done = true } }; advanceUntilIdle(); assertTrue(done) }

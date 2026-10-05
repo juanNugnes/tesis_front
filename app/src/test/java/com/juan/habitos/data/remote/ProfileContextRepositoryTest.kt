@@ -77,6 +77,9 @@ private class FakeProfileContextApi : HabitsApi {
         this.contextId = contextId
         failIf("delete")
     }
+    override suspend fun registerDevice(profileId: String, request: DeviceCreateRequest): retrofit2.Response<DeviceDto> = error("Not used")
+    override suspend fun createDeviceLinkCode(profileId: String): retrofit2.Response<DeviceLinkCodeDto> = error("Not used")
+    override suspend fun claimDeviceLink(request: DeviceLinkClaimRequest): retrofit2.Response<DeviceLinkClaimResponse> = error("Not used")
 
     private fun failIf(operation: String) { if (failureOn == operation) throw IOException("offline") }
 

@@ -17,6 +17,7 @@ import java.security.MessageDigest
 import java.security.SecureRandom
 import java.time.LocalDate
 import java.util.Base64
+import java.util.UUID
 
 private val Context.dataStore by preferencesDataStore("settings")
 
@@ -166,6 +167,49 @@ class DataStoreDeviceSessionRepository(private val context: Context) : DeviceSes
     override suspend fun authenticateAdult(email: String) { context.dataStore.edit { it[Keys.email] = email; it[Keys.authenticated] = true; it[Keys.mode] = DeviceMode.ADULT.name } }
     override suspend fun addLinkedProfile(profileKey: String) { context.dataStore.edit { values -> values[Keys.linkedProfiles] = values[Keys.linkedProfiles].orEmpty() + profileKey } }
 }
+
+internal object DeviceIdentityPreferenceKeys {
+    val installationId = stringPreferencesKey("device_installation_id")
+    val deviceId = stringPreferencesKey("device_id")
+    val profileId = stringPreferencesKey("device_profile_id")
+}
+
+internal fun Preferences.toStoredDeviceIdentity() = DeviceIdentity(
+    installationId = this[DeviceIdentityPreferenceKeys.installationId],
+    deviceId = this[DeviceIdentityPreferenceKeys.deviceId],
+    profileId = this[DeviceIdentityPreferenceKeys.profileId],
+)
+
+internal fun MutablePreferences.getOrCreateInstallationId(factory: () -> String): String {
+    this[DeviceIdentityPreferenceKeys.installationId]?.let { return it }
+    return factory().also { this[DeviceIdentityPreferenceKeys.installationId] = it }
+}
+
+internal fun MutablePreferences.storeDeviceLink(profileId: String, deviceId: String) {
+    this[DeviceIdentityPreferenceKeys.profileId] = profileId
+    this[DeviceIdentityPreferenceKeys.deviceId] = deviceId
+}
+
+class DataStoreDeviceIdentityStore(
+    private val context: Context,
+    private val installationIdFactory: () -> String = ::newInstallationId,
+) : DeviceIdentityLocalStore {
+    override val identity = context.dataStore.data.map(Preferences::toStoredDeviceIdentity)
+
+    override suspend fun getOrCreateInstallationId(): String {
+        var installationId: String? = null
+        context.dataStore.edit { values ->
+            installationId = values.getOrCreateInstallationId(installationIdFactory)
+        }
+        return checkNotNull(installationId)
+    }
+
+    override suspend fun saveLink(profileId: String, deviceId: String) {
+        context.dataStore.edit { values -> values.storeDeviceLink(profileId, deviceId) }
+    }
+}
+
+internal fun newInstallationId(): String = UUID.randomUUID().toString()
 
 class HashedPinStore(private val context: Context) : PinStore {
     private val saltKey = stringPreferencesKey("pin_salt")

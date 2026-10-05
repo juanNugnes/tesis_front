@@ -17,13 +17,34 @@ data class ProfileUiState(
     val sleepStart: String = "22:00",
     val sleepEnd: String = "07:00",
     val submitting: Boolean = false,
+    val profileCreatedDevicePending: Boolean = false,
     val errorMessage: String? = null,
 ) {
     val sleepScheduleValid get() = isValidScheduleTime(sleepStart) && isValidScheduleTime(sleepEnd) && sleepStart != sleepEnd
     val valid get() = name.trim().isNotEmpty() && avatar != null && age in 6..12 && schoolSchedules.isNotEmpty() && sleepScheduleValid
 }
-class ProfileViewModel(private val repository: ProfileRepository) : ViewModel() {
+class ProfileViewModel(
+    private val repository: ProfileRepository,
+    private val deviceRepository: DeviceRepository? = null,
+) : ViewModel() {
     private val _state = MutableStateFlow(ProfileUiState()); val state = _state.asStateFlow()
+    init {
+        if (deviceRepository != null) viewModelScope.launch {
+            repository.profile.first()?.takeIf { it.id != null }?.let { profile ->
+                _state.update {
+                    it.copy(
+                        name = profile.name,
+                        avatar = profile.avatar,
+                        age = profile.age,
+                        schoolSchedules = profile.schoolSchedules,
+                        sleepStart = profile.sleepStart ?: it.sleepStart,
+                        sleepEnd = profile.sleepEnd ?: it.sleepEnd,
+                        profileCreatedDevicePending = true,
+                    )
+                }
+            }
+        }
+    }
     fun setName(value: String) { _state.update { it.copy(name = value, errorMessage = null) } }
     fun selectAvatar(value: String) { _state.update { it.copy(avatar = value, errorMessage = null) } }
     fun selectAge(value: Int) { if (value in 6..12) _state.update { it.copy(age = value, errorMessage = null) } }
@@ -44,16 +65,33 @@ class ProfileViewModel(private val repository: ProfileRepository) : ViewModel() 
             sleepStart = current.sleepStart,
             sleepEnd = current.sleepEnd,
         )
+        _state.update { it.copy(submitting = true, errorMessage = null) }
         viewModelScope.launch {
-            _state.update { it.copy(submitting = true, errorMessage = null) }
+            var profileCreated = false
             try {
-                if (remote) repository.create(profile) else repository.save(profile)
-                _state.update { it.copy(submitting = false) }
+                if (remote) {
+                    val pending = deviceRepository?.let { repository.profile.first()?.takeIf { cached -> cached.id != null } }
+                    val created = pending ?: repository.create(profile)
+                    profileCreated = true
+                    val profileId = requireNotNull(created.id) { "Backend profile response did not include id" }
+                    deviceRepository?.registerDevice(profileId)
+                } else {
+                    repository.save(profile)
+                }
+                _state.update { it.copy(submitting = false, profileCreatedDevicePending = false) }
                 onSuccess()
             } catch (exception: CancellationException) {
                 throw exception
-            } catch (_: Exception) {
-                _state.update { it.copy(submitting = false, errorMessage = "No pudimos guardar el perfil. Revisá la conexión e intentá nuevamente.") }
+            } catch (exception: Exception) {
+                val devicePending = remote && deviceRepository != null && (profileCreated || repository.profile.first()?.id != null)
+                val message = when {
+                    devicePending && exception is DeviceLinkException && exception.reason == DeviceLinkFailureReason.INSTALLATION_CONFLICT ->
+                        "No pudimos registrar este dispositivo para el perfil."
+                    devicePending ->
+                        "El perfil se creó, pero no pudimos registrar este dispositivo. Revisá la conexión e intentá nuevamente."
+                    else -> "No pudimos guardar el perfil. Revisá la conexión e intentá nuevamente."
+                }
+                _state.update { it.copy(submitting = false, profileCreatedDevicePending = devicePending, errorMessage = message) }
             }
         }
     }

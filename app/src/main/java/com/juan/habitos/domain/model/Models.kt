@@ -60,3 +60,22 @@ data class DeviceSession(
     val adultAuthenticated: Boolean = false,
     val linkedProfileKeys: Set<String> = emptySet(),
 )
+
+data class DeviceIdentity(
+    val installationId: String? = null,
+    val deviceId: String? = null,
+    val profileId: String? = null,
+)
+
+data class RegisteredDevice(
+    val id: String,
+    val profileId: String,
+    val installationId: String,
+    val platform: String,
+    val active: Boolean,
+)
+
+data class DeviceProfileClaim(
+    val device: RegisteredDevice,
+    val profile: Profile,
+)

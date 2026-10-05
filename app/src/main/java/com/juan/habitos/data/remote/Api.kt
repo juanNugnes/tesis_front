@@ -3,6 +3,7 @@ package com.juan.habitos.data.remote
 import com.google.gson.annotations.SerializedName
 import com.juan.habitos.BuildConfig
 import retrofit2.Retrofit
+import retrofit2.Response
 import retrofit2.converter.gson.GsonConverterFactory
 import retrofit2.http.*
 
@@ -89,6 +90,39 @@ data class ProfileDetailDto(
     val settings: ProfileSettingsDto? = null,
 )
 
+data class DeviceCreateRequest(
+    @SerializedName("installation_id") val installationId: String,
+    val platform: String = "ANDROID",
+)
+
+data class DeviceDto(
+    val id: String,
+    @SerializedName("profile_id") val profileId: String,
+    @SerializedName("installation_id") val installationId: String,
+    val platform: String,
+    val active: Boolean,
+    @SerializedName("created_at") val createdAt: String? = null,
+    @SerializedName("updated_at") val updatedAt: String? = null,
+    @SerializedName("last_seen_at") val lastSeenAt: String? = null,
+)
+
+data class DeviceLinkClaimRequest(
+    val code: String,
+    @SerializedName("installation_id") val installationId: String,
+    val platform: String = "ANDROID",
+)
+
+data class DeviceLinkClaimResponse(
+    val device: DeviceDto,
+    val profile: ProfileDetailDto,
+)
+
+data class DeviceLinkCodeDto(
+    val code: String,
+    @SerializedName("expires_at") val expiresAt: String,
+    val purpose: String,
+)
+
 data class UsageDto(val profileId: String, val currentMinutes: Int, val expectedMinutes: Int)
 data class AnalysisDto(val profileId: String, val summary: String)
 
@@ -105,6 +139,9 @@ interface HabitsApi {
     @GET("api/v1/profiles/{profileId}/contexts/active") suspend fun getActiveProfileContexts(@Path("profileId") profileId: String): List<ProfileContextDto>
     @PUT("api/v1/profiles/{profileId}/contexts/{contextId}") suspend fun updateProfileContext(@Path("profileId") profileId: String, @Path("contextId") contextId: String, @Body request: ProfileContextRequest): ProfileContextDto
     @DELETE("api/v1/profiles/{profileId}/contexts/{contextId}") suspend fun deleteProfileContext(@Path("profileId") profileId: String, @Path("contextId") contextId: String)
+    @POST("api/v1/profiles/{profileId}/devices") suspend fun registerDevice(@Path("profileId") profileId: String, @Body request: DeviceCreateRequest): Response<DeviceDto>
+    @POST("api/v1/profiles/{profileId}/device-link-codes") suspend fun createDeviceLinkCode(@Path("profileId") profileId: String): Response<DeviceLinkCodeDto>
+    @POST("api/v1/device-links/claim") suspend fun claimDeviceLink(@Body request: DeviceLinkClaimRequest): Response<DeviceLinkClaimResponse>
     @POST("api/v1/profiles/{profileId}/usage") suspend fun postUsage(@Path("profileId") id: String, @Body usage: UsageDto): UsageDto
     @GET("api/v1/profiles/{profileId}/usage") suspend fun getUsage(@Path("profileId") id: String): UsageDto
     @POST("api/v1/profiles/{profileId}/analysis") suspend fun postAnalysis(@Path("profileId") id: String): AnalysisDto

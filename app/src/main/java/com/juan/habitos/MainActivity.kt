@@ -24,6 +24,16 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 internal const val EDIT_PROFILE_ROUTE = "editProfile"
+internal const val CHILD_PROFILE_SETUP_ROUTE = "childProfileSetup"
+internal const val DEVICE_PROFILE_LINK_ROUTE = "deviceProfileLink"
+
+internal fun childEntryRoute(profileId: String?, onboardingComplete: Boolean): String = when {
+    profileId == null -> CHILD_PROFILE_SETUP_ROUTE
+    onboardingComplete -> "child"
+    else -> "profile"
+}
+internal fun childSetupDestination(linkExistingProfile: Boolean): String =
+    if (linkExistingProfile) DEVICE_PROFILE_LINK_ROUTE else "profile"
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) { super.onCreate(savedInstanceState); setContent { AppTheme { HabitosApp() } } }
@@ -39,26 +49,29 @@ private inline fun <reified T : ViewModel> factory(crossinline create: () -> T) 
         app.initializeDemoIfNeeded()
         val session = app.deviceSessionRepository.session.first()
         val childOnboardingDone = app.profileRepository.onboardingComplete.first()
+        val storedProfileId = app.profileRepository.profile.first()?.id
         start = when {
             BuildConfig.DEMO_MODE -> "child"
             session.mode == DeviceMode.ADULT && session.adultAuthenticated && session.linkedProfileKeys.isNotEmpty() -> "adult"
             session.mode == DeviceMode.ADULT && session.adultAuthenticated -> "adultLink"
             session.mode == DeviceMode.ADULT -> "adultAuth"
-            session.mode == DeviceMode.CHILD -> if (childOnboardingDone) "child" else "profile"
-            childOnboardingDone -> { app.deviceSessionRepository.setMode(DeviceMode.CHILD); "child" }
+            session.mode == DeviceMode.CHILD -> childEntryRoute(storedProfileId, childOnboardingDone)
+            childOnboardingDone && storedProfileId != null -> { app.deviceSessionRepository.setMode(DeviceMode.CHILD); "child" }
             else -> "deviceMode"
         }
     }
     val startRoute = start ?: return
     val nav = rememberNavController()
     NavHost(nav, startRoute) {
-        composable("deviceMode") { val vm: DeviceModeViewModel = viewModel(factory = factory { DeviceModeViewModel(app.deviceSessionRepository) }); DeviceModeSelectionScreen { mode -> vm.select(mode) { nav.navigate(if (mode == DeviceMode.CHILD) "profile" else "adultAuth") } } }
+        composable("deviceMode") { val vm: DeviceModeViewModel = viewModel(factory = factory { DeviceModeViewModel(app.deviceSessionRepository) }); DeviceModeSelectionScreen { mode -> vm.select(mode) { nav.navigate(if (mode == DeviceMode.CHILD) CHILD_PROFILE_SETUP_ROUTE else "adultAuth") } } }
+        composable(CHILD_PROFILE_SETUP_ROUTE) { ChildProfileSetupScreen({ nav.navigate(childSetupDestination(false)) }, { nav.navigate(childSetupDestination(true)) }) }
+        composable(DEVICE_PROFILE_LINK_ROUTE) { val vm: DeviceProfileLinkViewModel = viewModel(factory = factory { DeviceProfileLinkViewModel(app.deviceRepository, app.profileRepository, app.childPreferencesRepository, app.profileContextRepository) }); val state by vm.state.collectAsStateWithLifecycle(); DeviceProfileLinkScreen(state, vm::code, { vm.submit { nav.navigate("child") { popUpTo(CHILD_PROFILE_SETUP_ROUTE) { inclusive = true } } } }, { nav.popBackStack() }) }
         navigation(startDestination = "adultEmail", route = "adultAuth") {
             composable("adultEmail") { entry -> val parent = remember(entry) { nav.getBackStackEntry("adultAuth") }; val vm: AdultAuthViewModel = viewModel(parent, factory = factory { AdultAuthViewModel(app.authRepository, app.deviceSessionRepository) }); val state by vm.state.collectAsStateWithLifecycle(); AdultEmailScreen(state, vm::email) { vm.requestCode { nav.navigate("adultVerification") } } }
             composable("adultVerification") { entry -> val parent = remember(entry) { nav.getBackStackEntry("adultAuth") }; val vm: AdultAuthViewModel = viewModel(parent, factory = factory { AdultAuthViewModel(app.authRepository, app.deviceSessionRepository) }); val state by vm.state.collectAsStateWithLifecycle(); AdultVerificationScreen(state, vm::code, { vm.verify { nav.navigate("adultLink") { popUpTo("adultAuth") { inclusive = true } } } }, { nav.popBackStack() }) }
         }
         composable("adultLink") { val vm: LinkDeviceViewModel = viewModel(factory = factory { LinkDeviceViewModel(app.linkRepository) }); val state by vm.state.collectAsStateWithLifecycle(); AdultLinkProfileScreen(state, vm::code, vm::find) { vm.confirm { nav.navigate("adult") { popUpTo("adultLink") { inclusive = true } } } } }
-        composable("profile") { val vm: ProfileViewModel = viewModel(factory = factory { ProfileViewModel(app.profileRepository) }); val state by vm.state.collectAsStateWithLifecycle(); ProfileScreen(state, vm::setName, vm::selectAvatar, vm::selectAge, vm::toggleSchoolSchedule, vm::sleepStart, vm::sleepEnd) { if (BuildConfig.DEMO_MODE) vm.save { nav.navigate("createPin") } else vm.create { nav.navigate("createPin") } } }
+        composable("profile") { val vm: ProfileViewModel = viewModel(factory = factory { ProfileViewModel(app.profileRepository, app.deviceRepository) }); val state by vm.state.collectAsStateWithLifecycle(); ProfileScreen(state, vm::setName, vm::selectAvatar, vm::selectAge, vm::toggleSchoolSchedule, vm::sleepStart, vm::sleepEnd) { if (BuildConfig.DEMO_MODE) vm.save { nav.navigate("createPin") } else vm.create { nav.navigate("createPin") } } }
         composable("createPin") { val vm: PinViewModel = viewModel(factory = factory { PinViewModel(app.pinStore) }); val state by vm.state.collectAsStateWithLifecycle(); CreatePinScreen(state, { vm.digit(it, true) { nav.navigate("permissions") } }, vm::delete) }
         composable("permissions") { var granted by rememberSaveable { mutableStateOf(emptySet<Int>()) }; val manager = remember { AndroidPermissionManager(app) }; PermissionsScreen(granted, { index -> manager.request(index); granted = granted + index }, { nav.navigate("preferencesIntro") }) }
         composable("preferencesIntro") { val profile by app.profileRepository.profile.collectAsStateWithLifecycle(initialValue = null); PreferencesOnboardingIntro(profile?.name.orEmpty(), { nav.navigate("preferencesOnboarding") }, { scope.launch { app.profileRepository.completeOnboarding(); nav.navigate("child") { popUpTo("profile") { inclusive = true } } } }) }

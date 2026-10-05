@@ -1,0 +1,25 @@
+package com.juan.habitos
+
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
+import org.junit.Test
+
+class DeviceProfileNavigationTest {
+    @Test fun `child device without profile opens create or link choice`() {
+        assertEquals(CHILD_PROFILE_SETUP_ROUTE, childEntryRoute(profileId = null, onboardingComplete = false))
+    }
+
+    @Test fun `create profile choice opens existing onboarding`() {
+        assertEquals("profile", childSetupDestination(linkExistingProfile = false))
+    }
+
+    @Test fun `link profile choice opens temporary code screen`() {
+        assertEquals(DEVICE_PROFILE_LINK_ROUTE, childSetupDestination(linkExistingProfile = true))
+    }
+
+    @Test fun `stored profile never opens recovery choice`() {
+        assertEquals("profile", childEntryRoute(profileId = "profile-1", onboardingComplete = false))
+        assertEquals("child", childEntryRoute(profileId = "profile-1", onboardingComplete = true))
+        assertNotEquals(CHILD_PROFILE_SETUP_ROUTE, childEntryRoute(profileId = "profile-1", onboardingComplete = true))
+    }
+}
