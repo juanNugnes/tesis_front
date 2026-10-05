@@ -106,8 +106,7 @@ class ProfileContextViewModel(
             } catch (exception: CancellationException) {
                 throw exception
             } catch (_: Exception) {
-                val action = if (form.editingId == null) "crear" else "actualizar"
-                _state.update { it.copy(submitting = false, errorMessage = "No pudimos $action el contexto. Intentá nuevamente.") }
+                _state.update { it.copy(submitting = false, errorMessage = "No pudimos guardar el contexto. Intentá nuevamente.") }
             }
         }
     }
@@ -144,7 +143,7 @@ class ProfileContextViewModel(
         } catch (exception: CancellationException) {
             throw exception
         } catch (_: Exception) {
-            _state.update { it.copy(refreshing = false, errorMessage = "No pudimos actualizar los contextos. Podés seguir usando los datos guardados.") }
+            _state.update { it.copy(refreshing = false, errorMessage = "No pudimos actualizar los contextos.") }
             return
         }
         try {

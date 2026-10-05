@@ -168,7 +168,7 @@ class ProfileContextViewModelTest {
         val viewModel = ProfileContextViewModel(repository, demoMode = false)
         advanceUntilIdle()
         assertEquals(listOf(cached), viewModel.state.value.contexts)
-        assertNotNull(viewModel.state.value.errorMessage)
+        assertEquals("No pudimos actualizar los contextos.", viewModel.state.value.errorMessage)
         assertFalse(viewModel.state.value.refreshing)
     }
 
@@ -182,7 +182,7 @@ class ProfileContextViewModelTest {
         advanceUntilIdle()
         assertEquals(listOf(cached), viewModel.state.value.contexts)
         assertNotNull(viewModel.state.value.form)
-        assertNotNull(viewModel.state.value.errorMessage)
+        assertEquals("No pudimos guardar el contexto. Intentá nuevamente.", viewModel.state.value.errorMessage)
         assertFalse(viewModel.state.value.submitting)
     }
 
@@ -197,7 +197,7 @@ class ProfileContextViewModelTest {
         advanceUntilIdle()
         assertEquals(original, viewModel.state.value.contexts.single())
         assertEquals(ProfileContextType.ILLNESS, viewModel.state.value.form?.type)
-        assertNotNull(viewModel.state.value.errorMessage)
+        assertEquals("No pudimos guardar el contexto. Intentá nuevamente.", viewModel.state.value.errorMessage)
     }
 
     @Test fun `delete error keeps item and allows retry`() = runTest(dispatcher) {
@@ -209,7 +209,7 @@ class ProfileContextViewModelTest {
         advanceUntilIdle()
         assertEquals(listOf(original), viewModel.state.value.contexts)
         assertNull(viewModel.state.value.deletingId)
-        assertNotNull(viewModel.state.value.errorMessage)
+        assertEquals("No pudimos eliminar el contexto. Intentá nuevamente.", viewModel.state.value.errorMessage)
     }
 
     @Test fun `double submit is blocked synchronously`() = runTest(dispatcher) {

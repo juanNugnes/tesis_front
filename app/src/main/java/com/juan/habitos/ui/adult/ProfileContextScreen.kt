@@ -155,9 +155,9 @@ private fun ContextCard(
     }
 }
 
-private fun formatContextRange(context: ProfileContext): String {
+internal fun formatContextRange(context: ProfileContext): String {
     val start = context.startDate.format(contextDateFormatter)
-    return context.endDate?.let { "$start - ${it.format(contextDateFormatter)}" } ?: start
+    return context.endDate?.let { "$start - ${it.format(contextDateFormatter)}" } ?: "Desde $start"
 }
 
 private enum class ContextDateTarget { START, END }
