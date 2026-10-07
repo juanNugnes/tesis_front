@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.juan.habitos.domain.model.ProfileContext
 import com.juan.habitos.domain.model.ProfileContextType
 import com.juan.habitos.domain.repository.ProfileContextRepository
+import com.juan.habitos.domain.repository.AdultAuthenticationRequiredException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -33,6 +34,7 @@ data class ProfileContextUiState(
     val deletingId: String? = null,
     val saved: Boolean = false,
     val errorMessage: String? = null,
+    val adultAuthenticationRequired: Boolean = false,
 )
 
 class ProfileContextViewModel(
@@ -105,8 +107,8 @@ class ProfileContextViewModel(
                 refreshActiveSilently()
             } catch (exception: CancellationException) {
                 throw exception
-            } catch (_: Exception) {
-                _state.update { it.copy(submitting = false, errorMessage = "No pudimos guardar el contexto. Intentá nuevamente.") }
+            } catch (exception: Exception) {
+                _state.update { it.copy(submitting = false, errorMessage = if (exception is AdultAuthenticationRequiredException) "La sesión adulta venció. Iniciá sesión nuevamente." else "No pudimos guardar el contexto. Intentá nuevamente.", adultAuthenticationRequired = exception is AdultAuthenticationRequiredException) }
             }
         }
     }
@@ -127,8 +129,8 @@ class ProfileContextViewModel(
                 }
             } catch (exception: CancellationException) {
                 throw exception
-            } catch (_: Exception) {
-                _state.update { it.copy(deletingId = null, errorMessage = "No pudimos eliminar el contexto. Intentá nuevamente.") }
+            } catch (exception: Exception) {
+                _state.update { it.copy(deletingId = null, errorMessage = if (exception is AdultAuthenticationRequiredException) "La sesión adulta venció. Iniciá sesión nuevamente." else "No pudimos eliminar el contexto. Intentá nuevamente.", adultAuthenticationRequired = exception is AdultAuthenticationRequiredException) }
             }
         }
     }
@@ -142,8 +144,8 @@ class ProfileContextViewModel(
             _state.update { it.copy(contexts = contexts) }
         } catch (exception: CancellationException) {
             throw exception
-        } catch (_: Exception) {
-            _state.update { it.copy(refreshing = false, errorMessage = "No pudimos actualizar los contextos.") }
+        } catch (exception: Exception) {
+            _state.update { it.copy(refreshing = false, errorMessage = if (exception is AdultAuthenticationRequiredException) "La sesión adulta venció. Iniciá sesión nuevamente." else "No pudimos actualizar los contextos.", adultAuthenticationRequired = exception is AdultAuthenticationRequiredException) }
             return
         }
         try {
@@ -151,8 +153,8 @@ class ProfileContextViewModel(
             _state.update { it.copy(activeContextIds = active.mapNotNull(ProfileContext::id).toSet(), refreshing = false) }
         } catch (exception: CancellationException) {
             throw exception
-        } catch (_: Exception) {
-            _state.update { it.copy(refreshing = false, errorMessage = "No pudimos actualizar los contextos activos. El listado sigue disponible.") }
+        } catch (exception: Exception) {
+            _state.update { it.copy(refreshing = false, errorMessage = if (exception is AdultAuthenticationRequiredException) "La sesión adulta venció. Iniciá sesión nuevamente." else "No pudimos actualizar los contextos activos. El listado sigue disponible.", adultAuthenticationRequired = exception is AdultAuthenticationRequiredException) }
         }
     }
 
@@ -163,8 +165,8 @@ class ProfileContextViewModel(
             _state.update { it.copy(activeContextIds = active.mapNotNull(ProfileContext::id).toSet()) }
         } catch (exception: CancellationException) {
             throw exception
-        } catch (_: Exception) {
-            // The CRUD operation already succeeded; keep the last known active markers.
+        } catch (exception: Exception) {
+            if (exception is AdultAuthenticationRequiredException) _state.update { it.copy(adultAuthenticationRequired = true, errorMessage = "La sesión adulta venció. Iniciá sesión nuevamente.") }
         }
     }
 

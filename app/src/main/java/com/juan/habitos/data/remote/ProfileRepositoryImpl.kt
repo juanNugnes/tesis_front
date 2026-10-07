@@ -11,8 +11,11 @@ import kotlinx.coroutines.flow.first
 class CachedProfileRepository(
     private val local: ProfileLocalStore,
     private val api: HabitsApi,
-    private val credentialStore: DeviceCredentialStore,
+    private val authorization: RequestAuthorization,
+    private val bootstrapStore: DeviceCredentialStore? = null,
 ) : ProfileRepository {
+    constructor(local: ProfileLocalStore, api: HabitsApi, credentialStore: DeviceCredentialStore) :
+        this(local, api, DeviceRequestAuthorization(credentialStore), credentialStore)
     override val profile: Flow<Profile?> = local.profile
     override val onboardingComplete: Flow<Boolean> = local.onboardingComplete
 
@@ -23,15 +26,16 @@ class CachedProfileRepository(
         val response = api.createProfile(profile.toCreateProfileRequest())
         val remote = response.toDomain(profile)
         local.save(remote)
-        credentialStore.saveBootstrap(response.bootstrapToken, response.bootstrapExpiresAt)
+        requireNotNull(bootstrapStore) { "Profile creation requires the Device bootstrap flow" }
+            .saveBootstrap(response.bootstrapToken, response.bootstrapExpiresAt)
         return remote
     }
 
     override suspend fun refresh(): Profile? {
         val cached = local.profile.first() ?: return null
         val profileId = cached.id ?: return cached
-        val remote = deviceAuthenticatedRequest(credentialStore) { authorization ->
-            api.getProfile(profileId, authorization)
+        val remote = authorization.execute { header ->
+            api.getProfile(profileId, header)
         }.toDomain(cached)
         local.save(remote)
         return remote
@@ -45,8 +49,8 @@ class CachedProfileRepository(
             return profile
         }
         val candidate = profile.copy(id = profileId)
-        val remote = deviceAuthenticatedRequest(credentialStore) { authorization ->
-            api.updateProfile(profileId, authorization, candidate.toUpdateProfileRequest())
+        val remote = authorization.execute { header ->
+            api.updateProfile(profileId, header, candidate.toUpdateProfileRequest())
         }.toDomain(candidate)
         local.save(remote)
         return remote
@@ -55,8 +59,8 @@ class CachedProfileRepository(
     override suspend fun refreshSettings(): Profile? {
         val cached = local.profile.first() ?: return null
         val profileId = cached.id ?: return cached
-        val refreshed = cached.withSettings(deviceAuthenticatedRequest(credentialStore) { authorization ->
-            api.getProfileSettings(profileId, authorization)
+        val refreshed = cached.withSettings(authorization.execute { header ->
+            api.getProfileSettings(profileId, header)
         })
         local.save(refreshed)
         return refreshed
@@ -76,8 +80,8 @@ class CachedProfileRepository(
             local.save(candidate)
             return candidate
         }
-        val remote = candidate.withSettings(deviceAuthenticatedRequest(credentialStore) { authorization ->
-            api.updateProfileSettings(profileId, authorization, candidate.toSettingsRequest())
+        val remote = candidate.withSettings(authorization.execute { header ->
+            api.updateProfileSettings(profileId, header, candidate.toSettingsRequest())
         })
         local.save(remote)
         return remote

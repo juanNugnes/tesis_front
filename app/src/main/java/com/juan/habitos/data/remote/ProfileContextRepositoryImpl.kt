@@ -15,20 +15,21 @@ class CachedProfileContextRepository(
     private val profileStore: ProfileLocalStore,
     private val api: HabitsApi,
     private val remoteEnabled: Boolean,
+    private val authorization: RequestAuthorization? = null,
 ) : ProfileContextRepository {
     override val contexts: Flow<List<ProfileContext>> = local.contexts
 
     override suspend fun refresh(): List<ProfileContext> {
         val cached = local.contexts.first()
         val profileId = remoteProfileId() ?: return cached
-        val remote = api.getProfileContexts(profileId).map(ProfileContextDto::toDomainContext)
+        val remote = adultAuthorization().execute { header -> api.getProfileContexts(profileId, header) }.map(ProfileContextDto::toDomainContext)
         local.save(remote)
         return remote
     }
 
     override suspend fun getActiveContexts(): List<ProfileContext> {
         val profileId = remoteProfileId() ?: return emptyList()
-        return api.getActiveProfileContexts(profileId).map(ProfileContextDto::toDomainContext)
+        return adultAuthorization().execute { header -> api.getActiveProfileContexts(profileId, header) }.map(ProfileContextDto::toDomainContext)
     }
 
     override suspend fun create(context: ProfileContext): ProfileContext {
@@ -37,7 +38,7 @@ class CachedProfileContextRepository(
         val saved = if (profileId == null) {
             context.copy(id = context.id ?: "local-${UUID.randomUUID()}")
         } else {
-            api.createProfileContext(profileId, request).toDomainContext()
+            adultAuthorization().execute { header -> api.createProfileContext(profileId, header, request) }.toDomainContext()
         }
         local.save((listOf(saved) + local.contexts.first().filterNot { it.id == saved.id }).sortedForDisplay())
         return saved
@@ -47,18 +48,20 @@ class CachedProfileContextRepository(
         val contextId = requireNotNull(context.id) { "Cannot update a context without an id" }
         val request = context.toProfileContextRequest()
         val profileId = remoteProfileId()
-        val saved = if (profileId == null) context else api.updateProfileContext(profileId, contextId, request).toDomainContext()
+        val saved = if (profileId == null) context else adultAuthorization().execute { header -> api.updateProfileContext(profileId, contextId, header, request) }.toDomainContext()
         local.save(local.contexts.first().map { existing -> if (existing.id == contextId) saved else existing }.sortedForDisplay())
         return saved
     }
 
     override suspend fun delete(contextId: String) {
         val profileId = remoteProfileId()
-        if (profileId != null) api.deleteProfileContext(profileId, contextId)
+        if (profileId != null) adultAuthorization().execute { header -> api.deleteProfileContext(profileId, contextId, header) }
         local.save(local.contexts.first().filterNot { it.id == contextId })
     }
 
     private suspend fun remoteProfileId(): String? = if (remoteEnabled) profileStore.profile.first()?.id else null
+    private fun adultAuthorization(): RequestAuthorization = requireNotNull(authorization) { "Remote ProfileContext requires Adult authorization" }
+        .also { require(it.principal == RequestPrincipal.ADULT) { "ProfileContext is Adult-only" } }
 }
 
 internal class IncompatibleProfileContextException(message: String) : IllegalArgumentException(message)

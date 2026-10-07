@@ -221,11 +221,11 @@ interface HabitsApi {
     @PUT("api/v1/profiles/{profileId}/settings") suspend fun updateProfileSettings(@Path("profileId") id: String, @Header("Authorization") authorization: String, @Body request: ProfileSettingsRequest): ProfileSettingsDto
     @GET("api/v1/profiles/{profileId}/activity-preferences") suspend fun getActivityPreferences(@Path("profileId") id: String, @Header("Authorization") authorization: String): ActivityPreferencesDto
     @PUT("api/v1/profiles/{profileId}/activity-preferences") suspend fun updateActivityPreferences(@Path("profileId") id: String, @Header("Authorization") authorization: String, @Body request: ActivityPreferencesRequest): ActivityPreferencesDto
-    @POST("api/v1/profiles/{profileId}/contexts") suspend fun createProfileContext(@Path("profileId") profileId: String, @Body request: ProfileContextRequest): ProfileContextDto
-    @GET("api/v1/profiles/{profileId}/contexts") suspend fun getProfileContexts(@Path("profileId") profileId: String): List<ProfileContextDto>
-    @GET("api/v1/profiles/{profileId}/contexts/active") suspend fun getActiveProfileContexts(@Path("profileId") profileId: String): List<ProfileContextDto>
-    @PUT("api/v1/profiles/{profileId}/contexts/{contextId}") suspend fun updateProfileContext(@Path("profileId") profileId: String, @Path("contextId") contextId: String, @Body request: ProfileContextRequest): ProfileContextDto
-    @DELETE("api/v1/profiles/{profileId}/contexts/{contextId}") suspend fun deleteProfileContext(@Path("profileId") profileId: String, @Path("contextId") contextId: String)
+    @POST("api/v1/profiles/{profileId}/contexts") suspend fun createProfileContext(@Path("profileId") profileId: String, @Header("Authorization") authorization: String, @Body request: ProfileContextRequest): ProfileContextDto
+    @GET("api/v1/profiles/{profileId}/contexts") suspend fun getProfileContexts(@Path("profileId") profileId: String, @Header("Authorization") authorization: String): List<ProfileContextDto>
+    @GET("api/v1/profiles/{profileId}/contexts/active") suspend fun getActiveProfileContexts(@Path("profileId") profileId: String, @Header("Authorization") authorization: String): List<ProfileContextDto>
+    @PUT("api/v1/profiles/{profileId}/contexts/{contextId}") suspend fun updateProfileContext(@Path("profileId") profileId: String, @Path("contextId") contextId: String, @Header("Authorization") authorization: String, @Body request: ProfileContextRequest): ProfileContextDto
+    @DELETE("api/v1/profiles/{profileId}/contexts/{contextId}") suspend fun deleteProfileContext(@Path("profileId") profileId: String, @Path("contextId") contextId: String, @Header("Authorization") authorization: String)
     @POST("api/v1/profiles/{profileId}/devices") suspend fun registerDevice(@Path("profileId") profileId: String, @Header("Authorization") authorization: String, @Body request: DeviceCreateRequest): Response<DeviceRegistrationDto>
     @POST("api/v1/profiles/{profileId}/device-link-codes") suspend fun createDeviceLinkCode(@Path("profileId") profileId: String): Response<DeviceLinkCodeDto>
     @POST("api/v1/device-links/claim") suspend fun claimDeviceLink(@Body request: DeviceLinkClaimRequest): Response<DeviceLinkClaimResponse>

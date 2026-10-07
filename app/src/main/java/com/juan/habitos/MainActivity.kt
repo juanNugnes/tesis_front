@@ -81,12 +81,62 @@ private inline fun <reified T : ViewModel> factory(crossinline create: () -> T) 
         composable("preferencesOnboarding") { val vm: ChildPreferencesViewModel = viewModel(factory = factory { ChildPreferencesViewModel(app.childPreferencesRepository, app.profileRepository, BuildConfig.DEMO_MODE) }); val state by vm.state.collectAsStateWithLifecycle(); ChildPreferencesScreen(state, vm::toggleInterest, vm::adaptationType, vm::toggleConsideration, vm::toggleRestriction, vm::notes, vm::validUntil, { vm.save { scope.launch { app.profileRepository.completeOnboarding(); nav.navigate("child") { popUpTo("profile") { inclusive = true } } } } }, { nav.popBackStack() }) }
         composable("child") { val vm: ChildViewModel = viewModel(factory = factory { ChildViewModel(app.profileRepository, app.usageRepository) }); val state by vm.state.collectAsStateWithLifecycle(); ChildHomeScreen(state, { nav.navigate("adultPin") }, vm::showAnotherActivity, vm::startActivity, vm::finishActivity) }
         composable("adultPin") { val vm: PinViewModel = viewModel(factory = factory { PinViewModel(app.pinStore) }); val state by vm.state.collectAsStateWithLifecycle(); DisposableEffect(Unit) { vm.clear(); onDispose {} }; AdultPinScreen(state, { vm.digit(it, false) { nav.navigate("adult") { popUpTo("adultPin") { inclusive = true } } } }, vm::delete) { nav.popBackStack() } }
-        composable("adult") { val vm: AdultViewModel = viewModel(factory = factory { AdultViewModel(app.profileRepository, app.usageRepository, app.alertRepository) }); val state by vm.state.collectAsStateWithLifecycle(); val session by app.deviceSessionRepository.session.collectAsStateWithLifecycle(initialValue = DeviceSession()); AdultDashboardScreen(state, vm::period, { nav.navigate("adultProfile") }) { if (session.mode == DeviceMode.CHILD) nav.navigate("child") { popUpTo("child") { inclusive = true } } } }
-        composable("adultProfile") { val profile by app.profileRepository.profile.collectAsStateWithLifecycle(initialValue = null); val session by app.deviceSessionRepository.session.collectAsStateWithLifecycle(initialValue = DeviceSession()); profile?.let { AdultProfileScreen(it, { nav.navigate(EDIT_PROFILE_ROUTE) }, { nav.navigate("profileSchedules") }, { nav.navigate("preferencesAdult") }, { nav.navigate("profileContexts") }, if (session.mode == DeviceMode.CHILD) ({ nav.navigate("adultProfileLinkCode") }) else null, if (BuildConfig.DEBUG && UsageDiagnosticsLauncher.isAvailable) ({ UsageDiagnosticsLauncher.open(app) }) else null, { nav.popBackStack() }) } }
+        composable("adult") {
+            val session by app.deviceSessionRepository.session.collectAsStateWithLifecycle(initialValue = DeviceSession())
+            val mode = session.mode ?: return@composable
+            val profileRepository = if (mode == DeviceMode.ADULT) app.adultProfileRepository else app.profileRepository
+            val vm: AdultViewModel = viewModel(key = "adult-dashboard-$mode", factory = factory { AdultViewModel(profileRepository, app.usageRepository, app.alertRepository) })
+            val state by vm.state.collectAsStateWithLifecycle()
+            AdultDashboardScreen(state, vm::period, { nav.navigate("adultProfile") }) { if (session.mode == DeviceMode.CHILD) nav.navigate("child") { popUpTo("child") { inclusive = true } } }
+        }
+        composable("adultProfile") {
+            val session by app.deviceSessionRepository.session.collectAsStateWithLifecycle(initialValue = DeviceSession())
+            val mode = session.mode ?: return@composable
+            val profileRepository = if (mode == DeviceMode.ADULT) app.adultProfileRepository else app.profileRepository
+            val profile by profileRepository.profile.collectAsStateWithLifecycle(initialValue = null)
+            profile?.let { AdultProfileScreen(it, { nav.navigate(EDIT_PROFILE_ROUTE) }, { nav.navigate("profileSchedules") }, { nav.navigate("preferencesAdult") }, if (session.mode == DeviceMode.ADULT) ({ nav.navigate("profileContexts") }) else null, if (session.mode == DeviceMode.CHILD) ({ nav.navigate("adultProfileLinkCode") }) else null, if (BuildConfig.DEBUG && UsageDiagnosticsLauncher.isAvailable) ({ UsageDiagnosticsLauncher.open(app) }) else null, { nav.popBackStack() }) }
+        }
         composable("adultProfileLinkCode") { val vm: AdultProfileLinkCodeViewModel = viewModel(factory = factory { AdultProfileLinkCodeViewModel(app.deviceRepository) }); val state by vm.state.collectAsStateWithLifecycle(); AdultProfileLinkCodeScreen(state, vm::generate) { nav.popBackStack() } }
-        composable(EDIT_PROFILE_ROUTE) { val vm: EditProfileViewModel = viewModel(factory = factory { EditProfileViewModel(app.profileRepository, BuildConfig.DEMO_MODE) }); val state by vm.state.collectAsStateWithLifecycle(); EditProfileScreen(state, vm::name, vm::age, vm::avatar, { vm.save { nav.popBackStack() } }) { nav.popBackStack() } }
-        composable("profileSchedules") { val vm: ProfileScheduleViewModel = viewModel(factory = factory { ProfileScheduleViewModel(app.profileRepository, BuildConfig.DEMO_MODE) }); val state by vm.state.collectAsStateWithLifecycle(); ProfileScheduleScreen(state, vm::schoolStart, vm::schoolEnd, vm::sleepStart, vm::sleepEnd, vm::save) { nav.popBackStack() } }
-        composable("preferencesAdult") { val vm: ChildPreferencesViewModel = viewModel(factory = factory { ChildPreferencesViewModel(app.childPreferencesRepository, app.profileRepository, BuildConfig.DEMO_MODE) }); val state by vm.state.collectAsStateWithLifecycle(); ChildPreferencesScreen(state, vm::toggleInterest, vm::adaptationType, vm::toggleConsideration, vm::toggleRestriction, vm::notes, vm::validUntil, { vm.save() }, { nav.popBackStack() }) }
-        composable("profileContexts") { val vm: ProfileContextViewModel = viewModel(factory = factory { ProfileContextViewModel(app.profileContextRepository, BuildConfig.DEMO_MODE) }); val state by vm.state.collectAsStateWithLifecycle(); ProfileContextScreen(state, vm::beginCreate, vm::beginEdit, vm::delete, vm::type, vm::startDate, vm::endDate, vm::description, vm::save, vm::dismissForm) { nav.popBackStack() } }
+        composable(EDIT_PROFILE_ROUTE) {
+            val session by app.deviceSessionRepository.session.collectAsStateWithLifecycle(initialValue = DeviceSession())
+            val mode = session.mode ?: return@composable
+            val adultActor = mode == DeviceMode.ADULT
+            val repository = if (adultActor) app.adultProfileRepository else app.profileRepository
+            val vm: EditProfileViewModel = viewModel(key = "edit-profile-$mode", factory = factory { EditProfileViewModel(repository, BuildConfig.DEMO_MODE) })
+            val state by vm.state.collectAsStateWithLifecycle()
+            LaunchedEffect(state.adultAuthenticationRequired) { if (state.adultAuthenticationRequired) nav.navigate("adultAuth") { popUpTo("adult") { inclusive = true } } }
+            EditProfileScreen(state, vm::name, vm::age, vm::avatar, { vm.save { nav.popBackStack() } }) { nav.popBackStack() }
+        }
+        composable("profileSchedules") {
+            val session by app.deviceSessionRepository.session.collectAsStateWithLifecycle(initialValue = DeviceSession())
+            val mode = session.mode ?: return@composable
+            val adultActor = mode == DeviceMode.ADULT
+            val repository = if (adultActor) app.adultProfileRepository else app.profileRepository
+            val vm: ProfileScheduleViewModel = viewModel(key = "profile-schedules-$mode", factory = factory { ProfileScheduleViewModel(repository, BuildConfig.DEMO_MODE) })
+            val state by vm.state.collectAsStateWithLifecycle()
+            LaunchedEffect(state.adultAuthenticationRequired) { if (state.adultAuthenticationRequired) nav.navigate("adultAuth") { popUpTo("adult") { inclusive = true } } }
+            ProfileScheduleScreen(state, vm::schoolStart, vm::schoolEnd, vm::sleepStart, vm::sleepEnd, vm::save) { nav.popBackStack() }
+        }
+        composable("preferencesAdult") {
+            val session by app.deviceSessionRepository.session.collectAsStateWithLifecycle(initialValue = DeviceSession())
+            val mode = session.mode ?: return@composable
+            val adultActor = mode == DeviceMode.ADULT
+            val preferencesRepository = if (adultActor) app.adultPreferencesRepository else app.childPreferencesRepository
+            val profileRepository = if (adultActor) app.adultProfileRepository else app.profileRepository
+            val vm: ChildPreferencesViewModel = viewModel(key = "profile-preferences-$mode", factory = factory { ChildPreferencesViewModel(preferencesRepository, profileRepository, BuildConfig.DEMO_MODE) })
+            val state by vm.state.collectAsStateWithLifecycle()
+            LaunchedEffect(state.adultAuthenticationRequired) { if (state.adultAuthenticationRequired) nav.navigate("adultAuth") { popUpTo("adult") { inclusive = true } } }
+            ChildPreferencesScreen(state, vm::toggleInterest, vm::adaptationType, vm::toggleConsideration, vm::toggleRestriction, vm::notes, vm::validUntil, { vm.save() }, { nav.popBackStack() })
+        }
+        composable("profileContexts") {
+            val session by app.deviceSessionRepository.session.collectAsStateWithLifecycle(initialValue = DeviceSession())
+            val mode = session.mode ?: return@composable
+            if (mode == DeviceMode.ADULT) {
+                val vm: ProfileContextViewModel = viewModel(factory = factory { ProfileContextViewModel(app.profileContextRepository, BuildConfig.DEMO_MODE) })
+                val state by vm.state.collectAsStateWithLifecycle()
+                LaunchedEffect(state.adultAuthenticationRequired) { if (state.adultAuthenticationRequired) nav.navigate("adultAuth") { popUpTo("adult") { inclusive = true } } }
+                ProfileContextScreen(state, vm::beginCreate, vm::beginEdit, vm::delete, vm::type, vm::startDate, vm::endDate, vm::description, vm::save, vm::dismissForm) { nav.popBackStack() }
+            }
+        }
     }
 }

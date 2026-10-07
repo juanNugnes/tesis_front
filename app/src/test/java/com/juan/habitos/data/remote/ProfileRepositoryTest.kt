@@ -86,11 +86,11 @@ private class FakeHabitsApi : HabitsApi {
 
     override suspend fun getActivityPreferences(id: String, authorization: String) = ActivityPreferencesDto()
     override suspend fun updateActivityPreferences(id: String, authorization: String, request: ActivityPreferencesRequest) = ActivityPreferencesDto()
-    override suspend fun createProfileContext(profileId: String, request: ProfileContextRequest): ProfileContextDto = error("Not used")
-    override suspend fun getProfileContexts(profileId: String): List<ProfileContextDto> = error("Not used")
-    override suspend fun getActiveProfileContexts(profileId: String): List<ProfileContextDto> = error("Not used")
-    override suspend fun updateProfileContext(profileId: String, contextId: String, request: ProfileContextRequest): ProfileContextDto = error("Not used")
-    override suspend fun deleteProfileContext(profileId: String, contextId: String) = error("Not used")
+    override suspend fun createProfileContext(profileId: String, authorization: String, request: ProfileContextRequest): ProfileContextDto = error("Not used")
+    override suspend fun getProfileContexts(profileId: String, authorization: String): List<ProfileContextDto> = error("Not used")
+    override suspend fun getActiveProfileContexts(profileId: String, authorization: String): List<ProfileContextDto> = error("Not used")
+    override suspend fun updateProfileContext(profileId: String, contextId: String, authorization: String, request: ProfileContextRequest): ProfileContextDto = error("Not used")
+    override suspend fun deleteProfileContext(profileId: String, contextId: String, authorization: String) = error("Not used")
     override suspend fun registerDevice(profileId: String, authorization: String, request: DeviceCreateRequest): retrofit2.Response<DeviceRegistrationDto> = error("Not used")
     override suspend fun createDeviceLinkCode(profileId: String): retrofit2.Response<DeviceLinkCodeDto> = error("Not used")
     override suspend fun claimDeviceLink(request: DeviceLinkClaimRequest): retrofit2.Response<DeviceLinkClaimResponse> = error("Not used")
@@ -395,5 +395,22 @@ class ProfileRepositoryTest {
         assertEquals("09:00", local.profile.value?.schoolStart)
         assertEquals(0, api.settingsGetCalls)
         assertEquals(0, api.settingsPutCalls)
+    }
+
+    @Test fun `adult profile and settings GET and PUT use only Adult bearer`() = runTest {
+        val cached = Profile("Local", "fox", 9, schoolStart = "08:00", schoolEnd = "12:30", sleepStart = "22:00", sleepEnd = "07:00", id = "profile-123")
+        val local = FakeProfileLocalStore(cached)
+        val api = FakeHabitsApi().apply { response = detail(); settingsResponse = settings() }
+        val repository = CachedProfileRepository(local, api, AdultRequestAuthorization(TestAdultCredentialStore("adult-token")))
+
+        repository.refresh()
+        assertEquals("Bearer adult-token", api.authorization)
+        repository.update(cached.copy(name = "Editado"))
+        assertEquals("Bearer adult-token", api.authorization)
+        repository.refreshSettings()
+        assertEquals("Bearer adult-token", api.authorization)
+        repository.updateSettings(cached)
+        assertEquals("Bearer adult-token", api.authorization)
+        assertNotEquals("Bearer device-token", api.authorization)
     }
 }

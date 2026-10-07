@@ -107,6 +107,7 @@ data class ProfileScheduleUiState(
     val submitting: Boolean = false,
     val errorMessage: String? = null,
     val deviceAuthenticationRequired: Boolean = false,
+    val adultAuthenticationRequired: Boolean = false,
 ) {
     val valid: Boolean get() = profile?.let {
         listOf(it.schoolStart, it.schoolEnd, it.sleepStart, it.sleepEnd).all(::isValidScheduleTime) &&
@@ -129,8 +130,9 @@ class ProfileScheduleViewModel(
                     throw exception
                 } catch (exception: Exception) {
                     _state.update { it.copy(
-                        errorMessage = if (exception is DeviceAuthenticationRequiredException) "Este dispositivo necesita volver a vincularse." else "No pudimos actualizar los horarios. Podés seguir usando los datos guardados.",
+                        errorMessage = when (exception) { is DeviceAuthenticationRequiredException -> "Este dispositivo necesita volver a vincularse."; is AdultAuthenticationRequiredException -> "La sesión adulta venció. Iniciá sesión nuevamente."; else -> "No pudimos actualizar los horarios. Podés seguir usando los datos guardados." },
                         deviceAuthenticationRequired = exception is DeviceAuthenticationRequiredException,
+                        adultAuthenticationRequired = exception is AdultAuthenticationRequiredException,
                     ) }
                 }
             }
@@ -160,8 +162,9 @@ class ProfileScheduleViewModel(
                 _state.update { it.copy(
                     submitting = false,
                     saved = false,
-                    errorMessage = if (exception is DeviceAuthenticationRequiredException) "Este dispositivo necesita volver a vincularse." else "No pudimos guardar los horarios. Intentá nuevamente.",
+                    errorMessage = when (exception) { is DeviceAuthenticationRequiredException -> "Este dispositivo necesita volver a vincularse."; is AdultAuthenticationRequiredException -> "La sesión adulta venció. Iniciá sesión nuevamente."; else -> "No pudimos guardar los horarios. Intentá nuevamente." },
                     deviceAuthenticationRequired = exception is DeviceAuthenticationRequiredException,
+                    adultAuthenticationRequired = exception is AdultAuthenticationRequiredException,
                 ) }
             }
         }
@@ -287,6 +290,7 @@ data class ChildPreferencesUiState(
     val errorMessage: String? = null,
     val dirty: Boolean = false,
     val deviceAuthenticationRequired: Boolean = false,
+    val adultAuthenticationRequired: Boolean = false,
 )
 class ChildPreferencesViewModel(
     private val repository: ChildPreferencesRepository,
@@ -309,8 +313,9 @@ class ChildPreferencesViewModel(
                 } catch (exception: Exception) {
                     _state.update { it.copy(
                         refreshing = false,
-                        errorMessage = if (exception is DeviceAuthenticationRequiredException) "Este dispositivo necesita volver a vincularse." else "No pudimos actualizar las preferencias. Podés seguir usando los datos guardados.",
+                        errorMessage = when (exception) { is DeviceAuthenticationRequiredException -> "Este dispositivo necesita volver a vincularse."; is AdultAuthenticationRequiredException -> "La sesión adulta venció. Iniciá sesión nuevamente."; else -> "No pudimos actualizar las preferencias. Podés seguir usando los datos guardados." },
                         deviceAuthenticationRequired = exception is DeviceAuthenticationRequiredException,
+                        adultAuthenticationRequired = exception is AdultAuthenticationRequiredException,
                     ) }
                 }
             }
@@ -352,8 +357,9 @@ class ChildPreferencesViewModel(
                 _state.update { it.copy(
                     submitting = false,
                     saved = false,
-                    errorMessage = if (exception is DeviceAuthenticationRequiredException) "Este dispositivo necesita volver a vincularse." else "No pudimos guardar las preferencias. Intentá nuevamente.",
+                    errorMessage = when (exception) { is DeviceAuthenticationRequiredException -> "Este dispositivo necesita volver a vincularse."; is AdultAuthenticationRequiredException -> "La sesión adulta venció. Iniciá sesión nuevamente."; else -> "No pudimos guardar las preferencias. Intentá nuevamente." },
                     deviceAuthenticationRequired = exception is DeviceAuthenticationRequiredException,
+                    adultAuthenticationRequired = exception is AdultAuthenticationRequiredException,
                 ) }
             }
         }

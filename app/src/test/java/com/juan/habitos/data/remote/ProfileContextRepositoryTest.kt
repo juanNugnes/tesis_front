@@ -45,42 +45,48 @@ private class FakeProfileContextApi : HabitsApi {
     var profileId: String? = null
     var contextId: String? = null
     var request: ProfileContextRequest? = null
+    var authorization: String? = null
 
-    override suspend fun getProfileContexts(profileId: String): List<ProfileContextDto> {
+    override suspend fun getProfileContexts(profileId: String, authorization: String): List<ProfileContextDto> {
         getCalls++
         this.profileId = profileId
+        this.authorization = authorization
         failIf("get")
         return contextsResponse
     }
 
-    override suspend fun getActiveProfileContexts(profileId: String): List<ProfileContextDto> {
+    override suspend fun getActiveProfileContexts(profileId: String, authorization: String): List<ProfileContextDto> {
         activeCalls++
         this.profileId = profileId
+        this.authorization = authorization
         failIf("active")
         return activeResponse
     }
 
-    override suspend fun createProfileContext(profileId: String, request: ProfileContextRequest): ProfileContextDto {
+    override suspend fun createProfileContext(profileId: String, authorization: String, request: ProfileContextRequest): ProfileContextDto {
         createCalls++
         this.profileId = profileId
+        this.authorization = authorization
         this.request = request
         failIf("create")
         return createResponse
     }
 
-    override suspend fun updateProfileContext(profileId: String, contextId: String, request: ProfileContextRequest): ProfileContextDto {
+    override suspend fun updateProfileContext(profileId: String, contextId: String, authorization: String, request: ProfileContextRequest): ProfileContextDto {
         updateCalls++
         this.profileId = profileId
         this.contextId = contextId
+        this.authorization = authorization
         this.request = request
         failIf("update")
         return updateResponse
     }
 
-    override suspend fun deleteProfileContext(profileId: String, contextId: String) {
+    override suspend fun deleteProfileContext(profileId: String, contextId: String, authorization: String) {
         deleteCalls++
         this.profileId = profileId
         this.contextId = contextId
+        this.authorization = authorization
         failIf("delete")
     }
     override suspend fun registerDevice(profileId: String, authorization: String, request: DeviceCreateRequest): retrofit2.Response<DeviceRegistrationDto> = error("Not used")
@@ -155,6 +161,7 @@ class ProfileContextRepositoryTest {
 
         assertEquals(1, api.getCalls)
         assertEquals("profile-123", api.profileId)
+        assertEquals("Bearer adult-token", api.authorization)
         assertEquals("new", result.single().id)
         assertEquals(ProfileContextType.SCHOOL_ACTIVITY, store.contexts.value.single().type)
     }
@@ -196,6 +203,7 @@ class ProfileContextRepositoryTest {
         val result = repository(FakeProfileContextStore(), api).getActiveContexts()
         assertEquals(1, api.activeCalls)
         assertEquals("profile-123", api.profileId)
+        assertEquals("Bearer adult-token", api.authorization)
         assertEquals(listOf("active"), result.map(ProfileContext::id))
     }
 
@@ -210,6 +218,7 @@ class ProfileContextRepositoryTest {
 
         assertEquals(1, api.createCalls)
         assertEquals("profile-123", api.profileId)
+        assertEquals("Bearer adult-token", api.authorization)
         assertEquals("OTHER", api.request?.type)
         assertNull(api.request?.endDate)
         assertEquals("new", created.id)
@@ -232,6 +241,7 @@ class ProfileContextRepositoryTest {
 
         assertEquals("profile-123", api.profileId)
         assertEquals("context-1", api.contextId)
+        assertEquals("Bearer adult-token", api.authorization)
         assertEquals("ROUTINE_CHANGE", api.request?.type)
         assertEquals(ProfileContextType.ROUTINE_CHANGE, store.contexts.value.first { it.id == "context-1" }.type)
         assertEquals(untouched, store.contexts.value.first { it.id == "context-2" })
@@ -253,6 +263,7 @@ class ProfileContextRepositoryTest {
 
         assertEquals("profile-123", api.profileId)
         assertEquals("context-1", api.contextId)
+        assertEquals("Bearer adult-token", api.authorization)
         assertEquals(listOf("context-2"), store.contexts.value.map(ProfileContext::id))
 
         val stable = store.contexts.value
@@ -261,10 +272,28 @@ class ProfileContextRepositoryTest {
         assertEquals(stable, store.contexts.value)
     }
 
+    @Test fun `context rejects Device principal before making a request`() = runTest {
+        val api = FakeProfileContextApi()
+        val repository = CachedProfileContextRepository(
+            FakeProfileContextStore(),
+            FakeContextProfileStore(Profile("Sofía", "fox", 9, id = "profile-123")),
+            api,
+            remoteEnabled = true,
+            authorization = DeviceRequestAuthorization(TestDeviceCredentialStore()),
+        )
+
+        try { repository.refresh(); fail("Expected Adult-only authorization") }
+        catch (exception: IllegalArgumentException) { assertTrue(exception.message!!.contains("Adult-only")) }
+
+        assertEquals(0, api.getCalls)
+        assertNull(api.authorization)
+    }
+
     private fun repository(store: FakeProfileContextStore, api: FakeProfileContextApi) = CachedProfileContextRepository(
         store,
         FakeContextProfileStore(Profile("Sofía", "🦊", 9, id = "profile-123")),
         api,
         remoteEnabled = true,
+        authorization = AdultRequestAuthorization(TestAdultCredentialStore()),
     )
 }

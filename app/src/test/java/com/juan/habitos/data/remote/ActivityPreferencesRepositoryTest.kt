@@ -65,11 +65,11 @@ private class FakeActivityPreferencesApi : HabitsApi {
     override suspend fun updateProfile(id: String, authorization: String, request: ProfileUpdateRequest): ProfileDetailDto = error("Not used")
     override suspend fun getProfileSettings(id: String, authorization: String): ProfileSettingsDto = error("Not used")
     override suspend fun updateProfileSettings(id: String, authorization: String, request: ProfileSettingsRequest): ProfileSettingsDto = error("Not used")
-    override suspend fun createProfileContext(profileId: String, request: ProfileContextRequest): ProfileContextDto = error("Not used")
-    override suspend fun getProfileContexts(profileId: String): List<ProfileContextDto> = error("Not used")
-    override suspend fun getActiveProfileContexts(profileId: String): List<ProfileContextDto> = error("Not used")
-    override suspend fun updateProfileContext(profileId: String, contextId: String, request: ProfileContextRequest): ProfileContextDto = error("Not used")
-    override suspend fun deleteProfileContext(profileId: String, contextId: String) = error("Not used")
+    override suspend fun createProfileContext(profileId: String, authorization: String, request: ProfileContextRequest): ProfileContextDto = error("Not used")
+    override suspend fun getProfileContexts(profileId: String, authorization: String): List<ProfileContextDto> = error("Not used")
+    override suspend fun getActiveProfileContexts(profileId: String, authorization: String): List<ProfileContextDto> = error("Not used")
+    override suspend fun updateProfileContext(profileId: String, contextId: String, authorization: String, request: ProfileContextRequest): ProfileContextDto = error("Not used")
+    override suspend fun deleteProfileContext(profileId: String, contextId: String, authorization: String) = error("Not used")
     override suspend fun registerDevice(profileId: String, authorization: String, request: DeviceCreateRequest): retrofit2.Response<DeviceRegistrationDto> = error("Not used")
     override suspend fun createDeviceLinkCode(profileId: String): retrofit2.Response<DeviceLinkCodeDto> = error("Not used")
     override suspend fun claimDeviceLink(request: DeviceLinkClaimRequest): retrofit2.Response<DeviceLinkClaimResponse> = error("Not used")
@@ -261,5 +261,18 @@ class ActivityPreferencesRepositoryTest {
         assertEquals(edited, local.preferences.value)
         assertEquals(0, api.getCalls)
         assertEquals(0, api.putCalls)
+    }
+
+    @Test fun `adult preferences GET and PUT use only Adult bearer`() = runTest {
+        val local = FakeChildPreferencesStore()
+        val profileStore = FakeActivityProfileStore(Profile("Sofía", "fox", 9, id = "profile-123"))
+        val api = FakeActivityPreferencesApi()
+        val repository = CachedChildPreferencesRepository(local, profileStore, api, AdultRequestAuthorization(TestAdultCredentialStore("adult-token")))
+
+        repository.refresh()
+        assertEquals("Bearer adult-token", api.authorization)
+        repository.update(ChildPreferences(activitiesToAvoid = setOf(ActivityRestriction.NONE)))
+        assertEquals("Bearer adult-token", api.authorization)
+        assertNotEquals("Bearer device-token", api.authorization)
     }
 }

@@ -17,8 +17,10 @@ class CachedChildPreferencesRepository(
     private val local: ChildPreferencesLocalStore,
     private val profileStore: ProfileLocalStore,
     private val api: HabitsApi,
-    private val credentialStore: DeviceCredentialStore,
+    private val authorization: RequestAuthorization,
 ) : ChildPreferencesRepository {
+    constructor(local: ChildPreferencesLocalStore, profileStore: ProfileLocalStore, api: HabitsApi, credentialStore: DeviceCredentialStore) :
+        this(local, profileStore, api, DeviceRequestAuthorization(credentialStore))
     override val preferences: Flow<ChildPreferences> = local.preferences
 
     override suspend fun save(preferences: ChildPreferences) = local.save(preferences)
@@ -26,8 +28,8 @@ class CachedChildPreferencesRepository(
     override suspend fun refresh(): ChildPreferences {
         val cached = local.preferences.first()
         val profileId = profileStore.profile.first()?.id ?: return cached
-        val remote = deviceAuthenticatedRequest(credentialStore) { authorization ->
-            api.getActivityPreferences(profileId, authorization)
+        val remote = authorization.execute { header ->
+            api.getActivityPreferences(profileId, header)
         }.toDomainPreferences()
         local.save(remote)
         return remote
@@ -39,8 +41,8 @@ class CachedChildPreferencesRepository(
             local.save(preferences)
             return preferences
         }
-        val remote = deviceAuthenticatedRequest(credentialStore) { authorization ->
-            api.updateActivityPreferences(profileId, authorization, preferences.toActivityPreferencesRequest())
+        val remote = authorization.execute { header ->
+            api.updateActivityPreferences(profileId, header, preferences.toActivityPreferencesRequest())
         }.toDomainPreferences()
         local.save(remote)
         return remote

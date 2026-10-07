@@ -2,6 +2,7 @@ package com.juan.habitos.data.remote
 
 import com.juan.habitos.domain.model.DeviceCredentials
 import com.juan.habitos.domain.repository.DeviceCredentialStore
+import com.juan.habitos.domain.repository.AdultCredentialStore
 import kotlinx.coroutines.flow.MutableStateFlow
 
 internal class TestDeviceCredentialStore(
@@ -26,4 +27,11 @@ internal class TestDeviceCredentialStore(
         clearAccessTokenCalls++
         credentials.value = credentials.value.copy(accessToken = null)
     }
+}
+
+internal class TestAdultCredentialStore(initialToken: String? = "adult-token") : AdultCredentialStore {
+    override val adultAccessToken = MutableStateFlow(initialToken)
+    var clearCalls = 0
+    override suspend fun saveAdultAccessToken(token: String) { adultAccessToken.value = token }
+    override suspend fun clearAdultAuthentication() { clearCalls++; adultAccessToken.value = null }
 }
