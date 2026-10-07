@@ -4,12 +4,14 @@ import com.juan.habitos.domain.model.Profile
 import com.juan.habitos.domain.model.SchoolSchedule
 import com.juan.habitos.domain.repository.ProfileLocalStore
 import com.juan.habitos.domain.repository.ProfileRepository
+import com.juan.habitos.domain.repository.DeviceCredentialStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 
 class CachedProfileRepository(
     private val local: ProfileLocalStore,
     private val api: HabitsApi,
+    private val credentialStore: DeviceCredentialStore,
 ) : ProfileRepository {
     override val profile: Flow<Profile?> = local.profile
     override val onboardingComplete: Flow<Boolean> = local.onboardingComplete
@@ -18,15 +20,19 @@ class CachedProfileRepository(
     override suspend fun completeOnboarding() = local.completeOnboarding()
 
     override suspend fun create(profile: Profile): Profile {
-        val remote = api.createProfile(profile.toCreateProfileRequest()).toDomain(profile)
+        val response = api.createProfile(profile.toCreateProfileRequest())
+        val remote = response.toDomain(profile)
         local.save(remote)
+        credentialStore.saveBootstrap(response.bootstrapToken, response.bootstrapExpiresAt)
         return remote
     }
 
     override suspend fun refresh(): Profile? {
         val cached = local.profile.first() ?: return null
         val profileId = cached.id ?: return cached
-        val remote = api.getProfile(profileId).toDomain(cached)
+        val remote = deviceAuthenticatedRequest(credentialStore) { authorization ->
+            api.getProfile(profileId, authorization)
+        }.toDomain(cached)
         local.save(remote)
         return remote
     }
@@ -39,7 +45,9 @@ class CachedProfileRepository(
             return profile
         }
         val candidate = profile.copy(id = profileId)
-        val remote = api.updateProfile(profileId, candidate.toUpdateProfileRequest()).toDomain(candidate)
+        val remote = deviceAuthenticatedRequest(credentialStore) { authorization ->
+            api.updateProfile(profileId, authorization, candidate.toUpdateProfileRequest())
+        }.toDomain(candidate)
         local.save(remote)
         return remote
     }
@@ -47,7 +55,9 @@ class CachedProfileRepository(
     override suspend fun refreshSettings(): Profile? {
         val cached = local.profile.first() ?: return null
         val profileId = cached.id ?: return cached
-        val refreshed = cached.withSettings(api.getProfileSettings(profileId))
+        val refreshed = cached.withSettings(deviceAuthenticatedRequest(credentialStore) { authorization ->
+            api.getProfileSettings(profileId, authorization)
+        })
         local.save(refreshed)
         return refreshed
     }
@@ -66,7 +76,9 @@ class CachedProfileRepository(
             local.save(candidate)
             return candidate
         }
-        val remote = candidate.withSettings(api.updateProfileSettings(profileId, candidate.toSettingsRequest()))
+        val remote = candidate.withSettings(deviceAuthenticatedRequest(credentialStore) { authorization ->
+            api.updateProfileSettings(profileId, authorization, candidate.toSettingsRequest())
+        })
         local.save(remote)
         return remote
     }
@@ -109,6 +121,17 @@ internal fun ProfileDetailDto.toDomain(localFallback: Profile? = null) = Profile
     id = id,
     active = active,
 )
+
+internal fun ProfileBootstrapDto.toDomain(localFallback: Profile? = null) = ProfileDetailDto(
+    id = id,
+    alias = alias,
+    age = age,
+    avatar = avatar,
+    active = active,
+    createdAt = createdAt,
+    updatedAt = updatedAt,
+    settings = settings,
+).toDomain(localFallback)
 
 internal fun Profile.toSettingsRequest(): ProfileSettingsRequest {
     val schoolStart = requireNotNull(normalizeProfileTime(schoolStart)) { "schoolStart must use HH:mm" }

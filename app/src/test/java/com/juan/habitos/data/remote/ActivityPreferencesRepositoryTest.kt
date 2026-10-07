@@ -29,39 +29,48 @@ private class FakeActivityProfileStore(initial: Profile?) : ProfileLocalStore {
 }
 
 private class FakeActivityPreferencesApi : HabitsApi {
+    override suspend fun requestAdultOtp(request: AdultOtpRequest): AdultOtpRequestResponse = error("Not used")
+    override suspend fun verifyAdultOtp(request: AdultOtpVerifyRequest): AdultAccessTokenDto = error("Not used")
+    override suspend fun getAdultMe(authorization: String): AdultDto = error("Not used")
+    override suspend fun getAdultProfiles(authorization: String): List<ProfileDetailDto> = error("Not used")
+    override suspend fun claimAdultProfileLink(authorization: String, request: AdultProfileLinkClaimRequest): AdultProfileLinkClaimResponse = error("Not used")
+    override suspend fun createAdultProfileLinkCode(profileId: String, authorization: String): AdultProfileLinkCodeDto = error("Not used")
     var response = ActivityPreferencesDto()
     var failure: Exception? = null
     var getCalls = 0
     var putCalls = 0
     var requestedId: String? = null
+    var authorization: String? = null
     var request: ActivityPreferencesRequest? = null
 
-    override suspend fun getActivityPreferences(id: String): ActivityPreferencesDto {
+    override suspend fun getActivityPreferences(id: String, authorization: String): ActivityPreferencesDto {
         failure?.let { throw it }
+        this.authorization = authorization
         getCalls++
         requestedId = id
         return response
     }
 
-    override suspend fun updateActivityPreferences(id: String, request: ActivityPreferencesRequest): ActivityPreferencesDto {
+    override suspend fun updateActivityPreferences(id: String, authorization: String, request: ActivityPreferencesRequest): ActivityPreferencesDto {
         failure?.let { throw it }
+        this.authorization = authorization
         putCalls++
         requestedId = id
         this.request = request
         return response
     }
 
-    override suspend fun createProfile(request: CreateProfileRequest): ProfileDetailDto = error("Not used")
-    override suspend fun getProfile(id: String): ProfileDetailDto = error("Not used")
-    override suspend fun updateProfile(id: String, request: ProfileUpdateRequest): ProfileDetailDto = error("Not used")
-    override suspend fun getProfileSettings(id: String): ProfileSettingsDto = error("Not used")
-    override suspend fun updateProfileSettings(id: String, request: ProfileSettingsRequest): ProfileSettingsDto = error("Not used")
+    override suspend fun createProfile(request: CreateProfileRequest): ProfileBootstrapDto = error("Not used")
+    override suspend fun getProfile(id: String, authorization: String): ProfileDetailDto = error("Not used")
+    override suspend fun updateProfile(id: String, authorization: String, request: ProfileUpdateRequest): ProfileDetailDto = error("Not used")
+    override suspend fun getProfileSettings(id: String, authorization: String): ProfileSettingsDto = error("Not used")
+    override suspend fun updateProfileSettings(id: String, authorization: String, request: ProfileSettingsRequest): ProfileSettingsDto = error("Not used")
     override suspend fun createProfileContext(profileId: String, request: ProfileContextRequest): ProfileContextDto = error("Not used")
     override suspend fun getProfileContexts(profileId: String): List<ProfileContextDto> = error("Not used")
     override suspend fun getActiveProfileContexts(profileId: String): List<ProfileContextDto> = error("Not used")
     override suspend fun updateProfileContext(profileId: String, contextId: String, request: ProfileContextRequest): ProfileContextDto = error("Not used")
     override suspend fun deleteProfileContext(profileId: String, contextId: String) = error("Not used")
-    override suspend fun registerDevice(profileId: String, request: DeviceCreateRequest): retrofit2.Response<DeviceDto> = error("Not used")
+    override suspend fun registerDevice(profileId: String, authorization: String, request: DeviceCreateRequest): retrofit2.Response<DeviceRegistrationDto> = error("Not used")
     override suspend fun createDeviceLinkCode(profileId: String): retrofit2.Response<DeviceLinkCodeDto> = error("Not used")
     override suspend fun claimDeviceLink(request: DeviceLinkClaimRequest): retrofit2.Response<DeviceLinkClaimResponse> = error("Not used")
     override suspend fun postUsage(id: String, usage: UsageDto) = usage
@@ -71,6 +80,12 @@ private class FakeActivityPreferencesApi : HabitsApi {
 }
 
 class ActivityPreferencesRepositoryTest {
+    private fun repository(
+        local: ChildPreferencesLocalStore,
+        profileStore: ProfileLocalStore,
+        api: HabitsApi,
+        credentials: TestDeviceCredentialStore = TestDeviceCredentialStore(),
+    ) = CachedChildPreferencesRepository(local, profileStore, api, credentials)
     @Test fun `all interests use explicit backend names and round trip`() {
         val expected = setOf(
             "DRAWING_CREATING", "READING_STORIES", "MUSIC", "GAMES_CHALLENGES", "OUTDOORS",
@@ -162,12 +177,13 @@ class ActivityPreferencesRepositoryTest {
         val profile = Profile("Sofía", "🦋", 8, id = "profile-123")
         val profileStore = FakeActivityProfileStore(profile)
         val api = FakeActivityPreferencesApi()
-        val repository = CachedChildPreferencesRepository(local, profileStore, api)
+        val repository = repository(local, profileStore, api)
 
         val refreshed = repository.refresh()
 
         assertEquals(1, api.getCalls)
         assertEquals("profile-123", api.requestedId)
+        assertEquals("Bearer device-token", api.authorization)
         assertTrue(refreshed.interests.isEmpty())
         assertEquals(AdaptationType.NONE, refreshed.adaptationType)
         assertEquals(setOf(ActivityRestriction.NONE), refreshed.activitiesToAvoid)
@@ -180,7 +196,7 @@ class ActivityPreferencesRepositoryTest {
         val local = FakeChildPreferencesStore(cached)
         val profileStore = FakeActivityProfileStore(Profile("Sofía", "🦋", 8, id = "profile-123"))
         val api = FakeActivityPreferencesApi().apply { failure = IOException("offline") }
-        val repository = CachedChildPreferencesRepository(local, profileStore, api)
+        val repository = repository(local, profileStore, api)
         try { repository.refresh(); fail("Expected GET failure") } catch (_: IOException) {}
         assertEquals(cached, local.preferences.value)
 
@@ -213,12 +229,13 @@ class ActivityPreferencesRepositoryTest {
                 validUntil = "2026-10-20",
             )
         }
-        val repository = CachedChildPreferencesRepository(local, profileStore, api)
+        val repository = repository(local, profileStore, api)
 
         val updated = repository.update(edited)
 
         assertEquals(1, api.putCalls)
         assertEquals("profile-123", api.requestedId)
+        assertEquals("Bearer device-token", api.authorization)
         assertEquals(setOf("DRAWING_CREATING", "BUILDING"), api.request!!.interests.toSet())
         assertEquals(setOf("RUNNING", "JUMPING"), api.request!!.activitiesToAvoid.toSet())
         assertEquals("2026-10-20", api.request!!.validUntil)
@@ -233,7 +250,7 @@ class ActivityPreferencesRepositoryTest {
         val local = FakeChildPreferencesStore(previous)
         val profileStore = FakeActivityProfileStore(Profile("Sofía", "🦋", 8, id = "profile-123"))
         val api = FakeActivityPreferencesApi().apply { failure = IOException("offline") }
-        val repository = CachedChildPreferencesRepository(local, profileStore, api)
+        val repository = repository(local, profileStore, api)
         try { repository.update(edited); fail("Expected PUT failure") } catch (_: IOException) {}
         assertEquals(previous, local.preferences.value)
 

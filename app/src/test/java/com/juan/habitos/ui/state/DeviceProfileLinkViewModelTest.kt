@@ -4,13 +4,11 @@ import com.juan.habitos.domain.model.ChildPreferences
 import com.juan.habitos.domain.model.DeviceIdentity
 import com.juan.habitos.domain.model.DeviceProfileClaim
 import com.juan.habitos.domain.model.Profile
-import com.juan.habitos.domain.model.ProfileContext
 import com.juan.habitos.domain.model.RegisteredDevice
 import com.juan.habitos.domain.repository.ChildPreferencesRepository
 import com.juan.habitos.domain.repository.DeviceLinkException
 import com.juan.habitos.domain.repository.DeviceLinkFailureReason
 import com.juan.habitos.domain.repository.DeviceRepository
-import com.juan.habitos.domain.repository.ProfileContextRepository
 import com.juan.habitos.domain.repository.ProfileRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -30,6 +28,7 @@ import org.junit.Test
 import java.io.IOException
 
 private class ClaimDeviceRepository : DeviceRepository {
+    override suspend fun createAdultProfileLinkCode() = error("Not used")
     override val identity = MutableStateFlow(DeviceIdentity(installationId = "installation-1"))
     var failure: Exception? = null
     var claimCalls = 0
@@ -77,21 +76,6 @@ private class ClaimPreferencesRepository : ChildPreferencesRepository {
     override suspend fun update(preferences: ChildPreferences): ChildPreferences = error("Not used")
 }
 
-private class ClaimContextRepository : ProfileContextRepository {
-    override val contexts = MutableStateFlow<List<ProfileContext>>(emptyList())
-    var refreshCalls = 0
-    var failure: Exception? = null
-    override suspend fun refresh(): List<ProfileContext> {
-        refreshCalls++
-        failure?.let { throw it }
-        return contexts.value
-    }
-    override suspend fun getActiveContexts(): List<ProfileContext> = emptyList()
-    override suspend fun create(context: ProfileContext): ProfileContext = error("Not used")
-    override suspend fun update(context: ProfileContext): ProfileContext = error("Not used")
-    override suspend fun delete(contextId: String) = Unit
-}
-
 @OptIn(ExperimentalCoroutinesApi::class)
 class DeviceProfileLinkViewModelTest {
     private val dispatcher = StandardTestDispatcher()
@@ -112,8 +96,7 @@ class DeviceProfileLinkViewModelTest {
         val device = ClaimDeviceRepository()
         val profile = ClaimProfileRepository()
         val preferences = ClaimPreferencesRepository()
-        val contexts = ClaimContextRepository()
-        val vm = DeviceProfileLinkViewModel(device, profile, preferences, contexts)
+        val vm = DeviceProfileLinkViewModel(device, profile, preferences)
         var navigations = 0
         vm.code("483921")
 
@@ -125,7 +108,6 @@ class DeviceProfileLinkViewModelTest {
         assertEquals(1, device.claimCalls)
         assertEquals(1, profile.settingsRefreshCalls)
         assertEquals(1, preferences.refreshCalls)
-        assertEquals(1, contexts.refreshCalls)
         assertTrue(profile.onboardingComplete.value)
         assertEquals("profile-1", device.identity.value.profileId)
         assertEquals("device-1", device.identity.value.deviceId)
@@ -161,8 +143,7 @@ class DeviceProfileLinkViewModelTest {
         val device = ClaimDeviceRepository()
         val profile = ClaimProfileRepository()
         val preferences = ClaimPreferencesRepository().apply { failure = IOException("offline") }
-        val contexts = ClaimContextRepository()
-        val vm = DeviceProfileLinkViewModel(device, profile, preferences, contexts)
+        val vm = DeviceProfileLinkViewModel(device, profile, preferences)
         var linked = false
         vm.code("483921")
         vm.submit { linked = true }
@@ -173,29 +154,11 @@ class DeviceProfileLinkViewModelTest {
         assertEquals("profile-1", device.identity.value.profileId)
         assertEquals("device-1", device.identity.value.deviceId)
         assertTrue(profile.onboardingComplete.value)
-        assertEquals(1, contexts.refreshCalls)
-    }
-
-    @Test fun `profile context refresh failure never asks for code again`() = runTest(dispatcher) {
-        val device = ClaimDeviceRepository()
-        val profile = ClaimProfileRepository()
-        val contexts = ClaimContextRepository().apply { failure = IOException("offline") }
-        val vm = DeviceProfileLinkViewModel(device, profile, ClaimPreferencesRepository(), contexts)
-        vm.code("483921")
-        vm.submit {}
-        advanceUntilIdle()
-
-        assertTrue(vm.state.value.success)
-        assertNull(vm.state.value.errorMessage)
-        assertEquals("483921", vm.state.value.code)
-        assertEquals("profile-1", device.identity.value.profileId)
-        assertTrue(profile.onboardingComplete.value)
     }
 
     private fun viewModel(device: ClaimDeviceRepository = ClaimDeviceRepository()) = DeviceProfileLinkViewModel(
         device,
         ClaimProfileRepository(),
         ClaimPreferencesRepository(),
-        ClaimContextRepository(),
     )
 }

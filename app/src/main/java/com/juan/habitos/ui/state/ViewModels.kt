@@ -8,6 +8,8 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.time.LocalDate
+import java.time.Duration
+import java.time.Instant
 
 data class ProfileUiState(
     val name: String = "",
@@ -85,6 +87,8 @@ class ProfileViewModel(
             } catch (exception: Exception) {
                 val devicePending = remote && deviceRepository != null && (profileCreated || repository.profile.first()?.id != null)
                 val message = when {
+                    devicePending && exception is DeviceLinkException && exception.reason == DeviceLinkFailureReason.BOOTSTRAP_EXPIRED ->
+                        "La autorización para registrar este dispositivo venció. El perfil quedó guardado."
                     devicePending && exception is DeviceLinkException && exception.reason == DeviceLinkFailureReason.INSTALLATION_CONFLICT ->
                         "No pudimos registrar este dispositivo para el perfil."
                     devicePending ->
@@ -102,6 +106,7 @@ data class ProfileScheduleUiState(
     val saved: Boolean = false,
     val submitting: Boolean = false,
     val errorMessage: String? = null,
+    val deviceAuthenticationRequired: Boolean = false,
 ) {
     val valid: Boolean get() = profile?.let {
         listOf(it.schoolStart, it.schoolEnd, it.sleepStart, it.sleepEnd).all(::isValidScheduleTime) &&
@@ -122,8 +127,11 @@ class ProfileScheduleViewModel(
                     repository.refreshSettings()?.let(::showProfile)
                 } catch (exception: CancellationException) {
                     throw exception
-                } catch (_: Exception) {
-                    _state.update { it.copy(errorMessage = "No pudimos actualizar los horarios. Podés seguir usando los datos guardados.") }
+                } catch (exception: Exception) {
+                    _state.update { it.copy(
+                        errorMessage = if (exception is DeviceAuthenticationRequiredException) "Este dispositivo necesita volver a vincularse." else "No pudimos actualizar los horarios. Podés seguir usando los datos guardados.",
+                        deviceAuthenticationRequired = exception is DeviceAuthenticationRequiredException,
+                    ) }
                 }
             }
         }
@@ -148,8 +156,13 @@ class ProfileScheduleViewModel(
                 showProfile(saved, saved = true)
             } catch (exception: CancellationException) {
                 throw exception
-            } catch (_: Exception) {
-                _state.update { it.copy(submitting = false, saved = false, errorMessage = "No pudimos guardar los horarios. Intentá nuevamente.") }
+            } catch (exception: Exception) {
+                _state.update { it.copy(
+                    submitting = false,
+                    saved = false,
+                    errorMessage = if (exception is DeviceAuthenticationRequiredException) "Este dispositivo necesita volver a vincularse." else "No pudimos guardar los horarios. Intentá nuevamente.",
+                    deviceAuthenticationRequired = exception is DeviceAuthenticationRequiredException,
+                ) }
             }
         }
     }
@@ -182,22 +195,86 @@ class DeviceModeViewModel(private val repository: DeviceSessionRepository) : Vie
     fun select(mode: DeviceMode, onSelected: () -> Unit) = viewModelScope.launch { repository.setMode(mode); onSelected() }
 }
 
-data class AdultAuthUiState(val email: String = "", val code: String = "", val emailError: Boolean = false, val codeError: Boolean = false, val loading: Boolean = false)
-class AdultAuthViewModel(private val authRepository: AuthRepository, private val sessionRepository: DeviceSessionRepository) : ViewModel() {
+data class AdultAuthUiState(val email: String = "", val code: String = "", val emailError: Boolean = false, val codeError: Boolean = false, val loading: Boolean = false, val devCode: String? = null, val errorMessage: String? = null)
+class AdultAuthViewModel(private val authRepository: AuthRepository, private val sessionRepository: DeviceSessionRepository, private val showDevCode: Boolean = false) : ViewModel() {
     private val _state = MutableStateFlow(AdultAuthUiState()); val state = _state.asStateFlow()
-    fun email(value: String) { _state.update { it.copy(email = value.trim(), emailError = false) } }
-    fun code(value: String) { _state.update { it.copy(code = value.filter(Char::isDigit).take(6), codeError = false) } }
-    fun requestCode(onSent: () -> Unit) { val email = state.value.email; if (!isValidEmail(email)) { _state.update { it.copy(emailError = true) }; return }; viewModelScope.launch { _state.update { it.copy(loading = true) }; authRepository.requestVerificationCode(email); _state.update { it.copy(loading = false) }; onSent() } }
-    fun verify(onVerified: () -> Unit) = viewModelScope.launch { val current = state.value; _state.update { it.copy(loading = true, codeError = false) }; if (authRepository.verifyCode(current.email, current.code)) { sessionRepository.authenticateAdult(current.email); _state.update { it.copy(loading = false) }; onVerified() } else _state.update { it.copy(loading = false, codeError = true) } }
+    fun email(value: String) { _state.update { it.copy(email = value.trim(), emailError = false, errorMessage = null) } }
+    fun code(value: String) { _state.update { it.copy(code = value.filter(Char::isDigit).take(6), codeError = false, errorMessage = null) } }
+    fun requestCode(onSent: () -> Unit) { val email = state.value.email; if (!isValidEmail(email)) { _state.update { it.copy(emailError = true) }; return }; viewModelScope.launch {
+        _state.update { it.copy(loading = true, errorMessage = null) }
+        try {
+            val challenge = authRepository.requestVerificationCode(email)
+            _state.update { it.copy(loading = false, devCode = challenge.devCode.takeIf { showDevCode }) }
+            onSent()
+        } catch (exception: CancellationException) { throw exception }
+        catch (_: Exception) { _state.update { it.copy(loading = false, errorMessage = "No pudimos enviar el código. Intentá nuevamente.") } }
+    } }
+    fun verify(onVerified: () -> Unit) = viewModelScope.launch {
+        val current = state.value
+        if (!current.code.matches(Regex("\\d{6}"))) { _state.update { it.copy(codeError = true) }; return@launch }
+        _state.update { it.copy(loading = true, codeError = false, errorMessage = null) }
+        try {
+            if (authRepository.verifyCode(current.email, current.code)) {
+                sessionRepository.authenticateAdult(current.email)
+                _state.update { it.copy(loading = false) }
+                onVerified()
+            } else _state.update { it.copy(loading = false, codeError = true) }
+        } catch (exception: CancellationException) { throw exception }
+        catch (_: Exception) { _state.update { it.copy(loading = false, errorMessage = "No pudimos verificar el código. Intentá nuevamente.") } }
+    }
     companion object { fun isValidEmail(value: String) = value.matches(Regex("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$")) }
 }
 
-data class LinkDeviceUiState(val code: String = "", val foundProfile: Profile? = null, val error: Boolean = false, val loading: Boolean = false)
+data class LinkDeviceUiState(val code: String = "", val profiles: List<Profile> = emptyList(), val foundProfile: Profile? = null, val errorMessage: String? = null, val loading: Boolean = false, val loaded: Boolean = false, val authenticationRequired: Boolean = false)
 class LinkDeviceViewModel(private val repository: LinkRepository) : ViewModel() {
     private val _state = MutableStateFlow(LinkDeviceUiState()); val state = _state.asStateFlow()
-    fun code(value: String) { _state.update { it.copy(code = value.filter(Char::isDigit).take(6), error = false, foundProfile = null) } }
-    fun find() = viewModelScope.launch { _state.update { it.copy(loading = true, error = false) }; val profile = repository.findProfile(state.value.code); _state.update { it.copy(foundProfile = profile, error = profile == null, loading = false) } }
-    fun confirm(onLinked: () -> Unit) { val profile = state.value.foundProfile ?: return; viewModelScope.launch { repository.link(profile); onLinked() } }
+    init { refreshProfiles() }
+    fun code(value: String) { _state.update { it.copy(code = value.filter(Char::isDigit).take(6), errorMessage = null, foundProfile = null) } }
+    fun refreshProfiles() = viewModelScope.launch {
+        _state.update { it.copy(loading = true, errorMessage = null, authenticationRequired = false) }
+        try { _state.update { it.copy(profiles = repository.profiles(), loading = false, loaded = true) } }
+        catch (exception: CancellationException) { throw exception }
+        catch (exception: AdultAuthenticationRequiredException) { _state.update { it.copy(loading = false, loaded = true, authenticationRequired = true, errorMessage = "La sesión adulta venció. Iniciá sesión nuevamente.") } }
+        catch (exception: AdultAuthorizationException) { _state.update { it.copy(loading = false, loaded = true, errorMessage = "No tenés permiso para consultar estos perfiles.") } }
+        catch (_: Exception) { _state.update { it.copy(loading = false, loaded = true, errorMessage = "No pudimos cargar los perfiles vinculados.") } }
+    }
+    fun find() = viewModelScope.launch {
+        if (!state.value.code.matches(Regex("\\d{6}"))) return@launch
+        _state.update { it.copy(loading = true, errorMessage = null) }
+        try {
+            val profile = repository.findProfile(state.value.code)
+            _state.update { it.copy(foundProfile = profile, errorMessage = if (profile == null) "El código no es válido o venció. Generá uno nuevo e intentá nuevamente." else null, loading = false) }
+        } catch (exception: CancellationException) { throw exception }
+        catch (exception: AdultAuthenticationRequiredException) { _state.update { it.copy(loading = false, authenticationRequired = true, errorMessage = "La sesión adulta venció. Iniciá sesión nuevamente.") } }
+        catch (exception: AdultLinkException) { _state.update { it.copy(loading = false, errorMessage = if (exception.reason == AdultLinkFailureReason.REVOKED_LINK) "No pudimos volver a vincular este perfil automáticamente." else "El código no es válido o venció. Generá uno nuevo e intentá nuevamente.") } }
+        catch (exception: AdultAuthorizationException) { _state.update { it.copy(loading = false, errorMessage = "No tenés permiso para vincular este perfil.") } }
+        catch (_: Exception) { _state.update { it.copy(loading = false, errorMessage = "No pudimos vincular el perfil. Intentá nuevamente.") } }
+    }
+    fun confirm(onLinked: () -> Unit) { state.value.foundProfile?.let { open(it, onLinked) } }
+    fun open(profile: Profile, onLinked: () -> Unit) = viewModelScope.launch {
+        try { repository.link(profile); onLinked() }
+        catch (exception: CancellationException) { throw exception }
+        catch (_: Exception) { _state.update { it.copy(errorMessage = "No pudimos abrir el perfil.") } }
+    }
+}
+
+data class AdultProfileLinkCodeUiState(val loading: Boolean = true, val code: String? = null, val validForMinutes: Long? = null, val errorMessage: String? = null)
+class AdultProfileLinkCodeViewModel(
+    private val repository: DeviceRepository,
+    private val now: () -> Instant = Instant::now,
+) : ViewModel() {
+    private val _state = MutableStateFlow(AdultProfileLinkCodeUiState()); val state = _state.asStateFlow()
+    init { generate() }
+    fun generate() = viewModelScope.launch {
+        _state.value = AdultProfileLinkCodeUiState(loading = true)
+        try {
+            val link = repository.createAdultProfileLinkCode()
+            val minutes = runCatching { Duration.between(now(), Instant.parse(link.expiresAt)).toMinutes().coerceAtLeast(1) }.getOrNull()
+            _state.value = AdultProfileLinkCodeUiState(loading = false, code = link.code, validForMinutes = minutes)
+        } catch (exception: CancellationException) { throw exception }
+        catch (exception: DeviceAuthenticationRequiredException) { _state.value = AdultProfileLinkCodeUiState(loading = false, errorMessage = "Este dispositivo necesita volver a vincularse.") }
+        catch (_: Exception) { _state.value = AdultProfileLinkCodeUiState(loading = false, errorMessage = "No pudimos generar el código. Intentá nuevamente.") }
+    }
 }
 
 data class ChildPreferencesUiState(
@@ -209,6 +286,7 @@ data class ChildPreferencesUiState(
     val submitting: Boolean = false,
     val errorMessage: String? = null,
     val dirty: Boolean = false,
+    val deviceAuthenticationRequired: Boolean = false,
 )
 class ChildPreferencesViewModel(
     private val repository: ChildPreferencesRepository,
@@ -228,8 +306,12 @@ class ChildPreferencesViewModel(
                     _state.update { current -> current.copy(preferences = if (current.dirty) current.preferences else remote, refreshing = false) }
                 } catch (exception: CancellationException) {
                     throw exception
-                } catch (_: Exception) {
-                    _state.update { it.copy(refreshing = false, errorMessage = "No pudimos actualizar las preferencias. Podés seguir usando los datos guardados.") }
+                } catch (exception: Exception) {
+                    _state.update { it.copy(
+                        refreshing = false,
+                        errorMessage = if (exception is DeviceAuthenticationRequiredException) "Este dispositivo necesita volver a vincularse." else "No pudimos actualizar las preferencias. Podés seguir usando los datos guardados.",
+                        deviceAuthenticationRequired = exception is DeviceAuthenticationRequiredException,
+                    ) }
                 }
             }
         }
@@ -266,8 +348,13 @@ class ChildPreferencesViewModel(
                 onSaved()
             } catch (exception: CancellationException) {
                 throw exception
-            } catch (_: Exception) {
-                _state.update { it.copy(submitting = false, saved = false, errorMessage = "No pudimos guardar las preferencias. Intentá nuevamente.") }
+            } catch (exception: Exception) {
+                _state.update { it.copy(
+                    submitting = false,
+                    saved = false,
+                    errorMessage = if (exception is DeviceAuthenticationRequiredException) "Este dispositivo necesita volver a vincularse." else "No pudimos guardar las preferencias. Intentá nuevamente.",
+                    deviceAuthenticationRequired = exception is DeviceAuthenticationRequiredException,
+                ) }
             }
         }
     }

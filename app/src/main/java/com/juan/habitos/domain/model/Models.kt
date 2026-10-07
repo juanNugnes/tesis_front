@@ -67,6 +67,29 @@ data class DeviceIdentity(
     val profileId: String? = null,
 )
 
+data class DeviceCredentials(
+    val bootstrapToken: String? = null,
+    val bootstrapExpiresAt: String? = null,
+    val accessToken: String? = null,
+)
+
+data class AdultAccount(
+    val id: String,
+    val email: String,
+    val active: Boolean,
+)
+
+data class AdultOtpChallenge(
+    val message: String,
+    val devCode: String? = null,
+)
+
+data class AdultProfileLinkCode(
+    val code: String,
+    val expiresAt: String,
+    val purpose: String,
+)
+
 data class RegisteredDevice(
     val id: String,
     val profileId: String,

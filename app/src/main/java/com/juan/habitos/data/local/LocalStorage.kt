@@ -161,17 +161,23 @@ private fun StoredProfileContext.toDomainContext() = ProfileContext(
 )
 
 class DataStoreDeviceSessionRepository(private val context: Context) : DeviceSessionRepository {
-    private object Keys { val mode = stringPreferencesKey("device_mode"); val email = stringPreferencesKey("adult_email"); val authenticated = booleanPreferencesKey("adult_authenticated"); val linkedProfiles = stringSetPreferencesKey("adult_linked_profiles") }
+    private object Keys { val mode = stringPreferencesKey("device_mode"); val email = stringPreferencesKey("adult_email"); val authenticated = booleanPreferencesKey("adult_authenticated"); val linkedProfiles = stringSetPreferencesKey("adult_linked_profiles"); val accessToken = stringPreferencesKey("adult_access_token") }
     override val session = context.dataStore.data.map { values -> DeviceSession(values[Keys.mode]?.let { name -> DeviceMode.entries.find { it.name == name } }, values[Keys.email], values[Keys.authenticated] ?: false, values[Keys.linkedProfiles].orEmpty()) }
+    override val adultAccessToken = context.dataStore.data.map { values -> values[Keys.accessToken] }
     override suspend fun setMode(mode: DeviceMode) { context.dataStore.edit { it[Keys.mode] = mode.name } }
     override suspend fun authenticateAdult(email: String) { context.dataStore.edit { it[Keys.email] = email; it[Keys.authenticated] = true; it[Keys.mode] = DeviceMode.ADULT.name } }
     override suspend fun addLinkedProfile(profileKey: String) { context.dataStore.edit { values -> values[Keys.linkedProfiles] = values[Keys.linkedProfiles].orEmpty() + profileKey } }
+    override suspend fun saveAdultAccessToken(token: String) { context.dataStore.edit { it[Keys.accessToken] = token } }
+    override suspend fun clearAdultAuthentication() { context.dataStore.edit { values -> values.remove(Keys.accessToken); values[Keys.authenticated] = false } }
 }
 
 internal object DeviceIdentityPreferenceKeys {
     val installationId = stringPreferencesKey("device_installation_id")
     val deviceId = stringPreferencesKey("device_id")
     val profileId = stringPreferencesKey("device_profile_id")
+    val bootstrapToken = stringPreferencesKey("device_bootstrap_token")
+    val bootstrapExpiresAt = stringPreferencesKey("device_bootstrap_expires_at")
+    val accessToken = stringPreferencesKey("device_access_token")
 }
 
 internal fun Preferences.toStoredDeviceIdentity() = DeviceIdentity(
@@ -180,14 +186,32 @@ internal fun Preferences.toStoredDeviceIdentity() = DeviceIdentity(
     profileId = this[DeviceIdentityPreferenceKeys.profileId],
 )
 
+internal fun Preferences.toStoredDeviceCredentials() = DeviceCredentials(
+    bootstrapToken = this[DeviceIdentityPreferenceKeys.bootstrapToken],
+    bootstrapExpiresAt = this[DeviceIdentityPreferenceKeys.bootstrapExpiresAt],
+    accessToken = this[DeviceIdentityPreferenceKeys.accessToken],
+)
+
 internal fun MutablePreferences.getOrCreateInstallationId(factory: () -> String): String {
     this[DeviceIdentityPreferenceKeys.installationId]?.let { return it }
     return factory().also { this[DeviceIdentityPreferenceKeys.installationId] = it }
 }
 
-internal fun MutablePreferences.storeDeviceLink(profileId: String, deviceId: String) {
+internal fun MutablePreferences.storeBootstrap(token: String, expiresAt: String) {
+    this[DeviceIdentityPreferenceKeys.bootstrapToken] = token
+    this[DeviceIdentityPreferenceKeys.bootstrapExpiresAt] = expiresAt
+}
+
+internal fun MutablePreferences.clearBootstrap() {
+    remove(DeviceIdentityPreferenceKeys.bootstrapToken)
+    remove(DeviceIdentityPreferenceKeys.bootstrapExpiresAt)
+}
+
+internal fun MutablePreferences.storeAuthenticatedDeviceLink(profileId: String, deviceId: String, accessToken: String) {
     this[DeviceIdentityPreferenceKeys.profileId] = profileId
     this[DeviceIdentityPreferenceKeys.deviceId] = deviceId
+    this[DeviceIdentityPreferenceKeys.accessToken] = accessToken
+    clearBootstrap()
 }
 
 class DataStoreDeviceIdentityStore(
@@ -195,6 +219,7 @@ class DataStoreDeviceIdentityStore(
     private val installationIdFactory: () -> String = ::newInstallationId,
 ) : DeviceIdentityLocalStore {
     override val identity = context.dataStore.data.map(Preferences::toStoredDeviceIdentity)
+    override val credentials = context.dataStore.data.map(Preferences::toStoredDeviceCredentials)
 
     override suspend fun getOrCreateInstallationId(): String {
         var installationId: String? = null
@@ -204,8 +229,20 @@ class DataStoreDeviceIdentityStore(
         return checkNotNull(installationId)
     }
 
-    override suspend fun saveLink(profileId: String, deviceId: String) {
-        context.dataStore.edit { values -> values.storeDeviceLink(profileId, deviceId) }
+    override suspend fun saveBootstrap(token: String, expiresAt: String) {
+        context.dataStore.edit { values -> values.storeBootstrap(token, expiresAt) }
+    }
+
+    override suspend fun clearBootstrap() {
+        context.dataStore.edit(MutablePreferences::clearBootstrap)
+    }
+
+    override suspend fun saveAuthenticatedLink(profileId: String, deviceId: String, accessToken: String) {
+        context.dataStore.edit { values -> values.storeAuthenticatedDeviceLink(profileId, deviceId, accessToken) }
+    }
+
+    override suspend fun clearDeviceAccessToken() {
+        context.dataStore.edit { values -> values.remove(DeviceIdentityPreferenceKeys.accessToken) }
     }
 }
 

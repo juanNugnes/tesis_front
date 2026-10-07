@@ -8,6 +8,8 @@ import com.juan.habitos.data.remote.CachedChildPreferencesRepository
 import com.juan.habitos.data.remote.CachedProfileContextRepository
 import com.juan.habitos.data.remote.HabitsApiClient
 import com.juan.habitos.data.remote.RemoteDeviceRepository
+import com.juan.habitos.data.remote.RemoteAdultAuthRepository
+import com.juan.habitos.data.remote.RemoteLinkRepository
 import com.juan.habitos.domain.model.*
 import kotlinx.coroutines.flow.first
 
@@ -17,13 +19,13 @@ class HabitosApplication : Application() {
     private val localProfileContextStore by lazy { DataStoreProfileContextStore(this) }
     private val localDeviceIdentityStore by lazy { DataStoreDeviceIdentityStore(this) }
     val habitsApi by lazy { HabitsApiClient.api }
-    val profileRepository by lazy { CachedProfileRepository(localProfileStore, habitsApi) }
-    val childPreferencesRepository by lazy { CachedChildPreferencesRepository(localChildPreferencesStore, localProfileStore, habitsApi) }
+    val profileRepository by lazy { CachedProfileRepository(localProfileStore, habitsApi, localDeviceIdentityStore) }
+    val childPreferencesRepository by lazy { CachedChildPreferencesRepository(localChildPreferencesStore, localProfileStore, habitsApi, localDeviceIdentityStore) }
     val profileContextRepository by lazy { CachedProfileContextRepository(localProfileContextStore, localProfileStore, habitsApi, remoteEnabled = !BuildConfig.DEMO_MODE) }
     val deviceSessionRepository by lazy { DataStoreDeviceSessionRepository(this) }
     val deviceRepository by lazy { RemoteDeviceRepository(localDeviceIdentityStore, localProfileStore, habitsApi) }
-    val authRepository by lazy { MockAuthRepository() }
-    val linkRepository by lazy { MockLinkRepository(profileRepository, deviceSessionRepository) }
+    val authRepository by lazy { if (BuildConfig.DEMO_MODE) MockAuthRepository() else RemoteAdultAuthRepository(habitsApi, deviceSessionRepository) }
+    val linkRepository by lazy { if (BuildConfig.DEMO_MODE) MockLinkRepository(profileRepository, deviceSessionRepository) else RemoteLinkRepository(habitsApi, deviceSessionRepository, localProfileStore) }
     val pinStore by lazy { HashedPinStore(this) }
     val usageRepository by lazy { FakeUsageRepository() }
     val alertRepository by lazy { FakeAlertRepository() }

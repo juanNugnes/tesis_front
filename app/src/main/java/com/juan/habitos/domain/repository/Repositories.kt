@@ -37,11 +37,22 @@ interface UsageRepository { suspend fun daily(period: DashboardPeriod = Dashboar
 interface AlertRepository { suspend fun alerts(): List<Alert> }
 interface PinStore { suspend fun save(pin: String); suspend fun verify(pin: String): Boolean }
 interface DeviceUsageDataSource { suspend fun getDailyUsage(): DailyUsage; suspend fun getApplicationUsage(): List<AppUsage> }
-interface DeviceSessionRepository { val session: Flow<DeviceSession>; suspend fun setMode(mode: DeviceMode); suspend fun authenticateAdult(email: String); suspend fun addLinkedProfile(profileKey: String) }
-interface DeviceIdentityLocalStore {
+interface AdultCredentialStore {
+    val adultAccessToken: Flow<String?>
+    suspend fun saveAdultAccessToken(token: String)
+    suspend fun clearAdultAuthentication()
+}
+interface DeviceSessionRepository : AdultCredentialStore { val session: Flow<DeviceSession>; suspend fun setMode(mode: DeviceMode); suspend fun authenticateAdult(email: String); suspend fun addLinkedProfile(profileKey: String) }
+interface DeviceCredentialStore {
+    val credentials: Flow<DeviceCredentials>
+    suspend fun saveBootstrap(token: String, expiresAt: String)
+    suspend fun clearBootstrap()
+    suspend fun saveAuthenticatedLink(profileId: String, deviceId: String, accessToken: String)
+    suspend fun clearDeviceAccessToken()
+}
+interface DeviceIdentityLocalStore : DeviceCredentialStore {
     val identity: Flow<DeviceIdentity>
     suspend fun getOrCreateInstallationId(): String
-    suspend fun saveLink(profileId: String, deviceId: String)
 }
 interface DeviceRepository {
     val identity: Flow<DeviceIdentity>
@@ -49,8 +60,22 @@ interface DeviceRepository {
     suspend fun getStoredDeviceId(): String?
     suspend fun registerDevice(profileId: String): RegisteredDevice
     suspend fun claimProfile(code: String): DeviceProfileClaim
+    suspend fun createAdultProfileLinkCode(): AdultProfileLinkCode
 }
-enum class DeviceLinkFailureReason { INVALID_OR_EXPIRED_CODE, INSTALLATION_CONFLICT, SERVER_ERROR }
+enum class DeviceLinkFailureReason { INVALID_OR_EXPIRED_CODE, INSTALLATION_CONFLICT, BOOTSTRAP_EXPIRED, SERVER_ERROR }
 class DeviceLinkException(val reason: DeviceLinkFailureReason, message: String) : Exception(message)
-interface AuthRepository { suspend fun requestVerificationCode(email: String); suspend fun verifyCode(email: String, code: String): Boolean }
-interface LinkRepository { suspend fun findProfile(code: String): Profile?; suspend fun link(profile: Profile) }
+class DeviceAuthenticationRequiredException : Exception("Device authentication required")
+class AdultAuthenticationRequiredException : Exception("Adult authentication required")
+class AdultAuthorizationException : Exception("Adult operation forbidden")
+enum class AdultLinkFailureReason { INVALID_OR_EXPIRED_CODE, REVOKED_LINK }
+class AdultLinkException(val reason: AdultLinkFailureReason, message: String) : Exception(message)
+interface AuthRepository {
+    suspend fun requestVerificationCode(email: String): AdultOtpChallenge
+    suspend fun verifyCode(email: String, code: String): Boolean
+    suspend fun validateSession(): AdultAccount
+}
+interface LinkRepository {
+    suspend fun profiles(): List<Profile>
+    suspend fun findProfile(code: String): Profile?
+    suspend fun link(profile: Profile)
+}

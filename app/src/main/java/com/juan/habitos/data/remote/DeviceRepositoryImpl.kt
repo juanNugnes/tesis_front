@@ -1,6 +1,7 @@
 package com.juan.habitos.data.remote
 
 import com.juan.habitos.domain.model.DeviceProfileClaim
+import com.juan.habitos.domain.model.AdultProfileLinkCode
 import com.juan.habitos.domain.model.RegisteredDevice
 import com.juan.habitos.domain.repository.DeviceIdentityLocalStore
 import com.juan.habitos.domain.repository.DeviceLinkException
@@ -9,11 +10,13 @@ import com.juan.habitos.domain.repository.DeviceRepository
 import com.juan.habitos.domain.repository.ProfileLocalStore
 import kotlinx.coroutines.flow.first
 import retrofit2.Response
+import java.time.Instant
 
 class RemoteDeviceRepository(
     private val local: DeviceIdentityLocalStore,
     private val profileStore: ProfileLocalStore,
     private val api: HabitsApi,
+    private val now: () -> Instant = Instant::now,
 ) : DeviceRepository {
     override val identity = local.identity
 
@@ -23,11 +26,22 @@ class RemoteDeviceRepository(
 
     override suspend fun registerDevice(profileId: String): RegisteredDevice {
         val installationId = getOrCreateInstallationId()
-        val response = api.registerDevice(profileId, DeviceCreateRequest(installationId))
-        val device = response.bodyOrDeviceLinkFailure().toDomainDevice()
+        val bootstrap = local.credentials.first()
+        val bootstrapToken = bootstrap.bootstrapToken
+        if (bootstrapToken == null || bootstrap.bootstrapExpiresAt.isExpired(now())) {
+            local.clearBootstrap()
+            throw DeviceLinkException(DeviceLinkFailureReason.BOOTSTRAP_EXPIRED, "Device bootstrap credential is missing or expired")
+        }
+        val response = api.registerDevice(profileId, "Bearer $bootstrapToken", DeviceCreateRequest(installationId))
+        if (response.code() == 401) {
+            local.clearBootstrap()
+            throw DeviceLinkException(DeviceLinkFailureReason.BOOTSTRAP_EXPIRED, "Device bootstrap credential was rejected")
+        }
+        val registration = response.bodyOrDeviceLinkFailure()
+        val device = registration.toDomainDevice()
         require(device.profileId == profileId) { "Registered device belongs to another profile" }
         require(device.installationId == installationId) { "Registered device belongs to another installation" }
-        local.saveLink(profileId, device.id)
+        local.saveAuthenticatedLink(profileId, device.id, registration.accessToken)
         return device
     }
 
@@ -41,8 +55,17 @@ class RemoteDeviceRepository(
         require(device.profileId == profile.id) { "Claimed device and profile do not match" }
         require(device.installationId == installationId) { "Claimed device belongs to another installation" }
         profileStore.save(profile)
-        local.saveLink(requireNotNull(profile.id), device.id)
+        local.saveAuthenticatedLink(requireNotNull(profile.id), device.id, claimed.accessToken)
         return DeviceProfileClaim(device, profile)
+    }
+
+    override suspend fun createAdultProfileLinkCode(): AdultProfileLinkCode {
+        val profileId = local.identity.first().profileId
+            ?: profileStore.profile.first()?.id
+            ?: throw IllegalStateException("A linked profile is required")
+        return deviceAuthenticatedRequest(local) { authorization ->
+            api.createAdultProfileLinkCode(profileId, authorization)
+        }.let { response -> AdultProfileLinkCode(response.code, response.expiresAt, response.purpose) }
     }
 }
 
@@ -53,6 +76,18 @@ internal fun DeviceDto.toDomainDevice() = RegisteredDevice(
     platform = platform,
     active = active,
 )
+
+internal fun DeviceRegistrationDto.toDomainDevice() = RegisteredDevice(
+    id = id,
+    profileId = profileId,
+    installationId = installationId,
+    platform = platform,
+    active = active,
+)
+
+private fun String?.isExpired(now: Instant): Boolean = this?.let { value ->
+    runCatching { !Instant.parse(value).isAfter(now) }.getOrDefault(false)
+} ?: true
 
 private fun <T> Response<T>.bodyOrDeviceLinkFailure(): T {
     if (isSuccessful) return body() ?: throw DeviceLinkException(DeviceLinkFailureReason.SERVER_ERROR, "Empty device-link response")

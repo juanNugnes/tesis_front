@@ -6,7 +6,6 @@ import com.juan.habitos.domain.repository.ChildPreferencesRepository
 import com.juan.habitos.domain.repository.DeviceLinkException
 import com.juan.habitos.domain.repository.DeviceLinkFailureReason
 import com.juan.habitos.domain.repository.DeviceRepository
-import com.juan.habitos.domain.repository.ProfileContextRepository
 import com.juan.habitos.domain.repository.ProfileRepository
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -27,7 +26,6 @@ class DeviceProfileLinkViewModel(
     private val deviceRepository: DeviceRepository,
     private val profileRepository: ProfileRepository,
     private val preferencesRepository: ChildPreferencesRepository,
-    private val contextRepository: ProfileContextRepository,
 ) : ViewModel() {
     private val _state = MutableStateFlow(DeviceProfileLinkUiState())
     val state = _state.asStateFlow()
@@ -48,7 +46,6 @@ class DeviceProfileLinkViewModel(
                 profileRepository.completeOnboarding()
                 refreshWithoutInvalidatingClaim { profileRepository.refreshSettings() }
                 refreshWithoutInvalidatingClaim { preferencesRepository.refresh() }
-                refreshWithoutInvalidatingClaim { contextRepository.refresh() }
                 _state.update { it.copy(submitting = false, success = true, errorMessage = null) }
                 if (!navigationDelivered) {
                     navigationDelivered = true

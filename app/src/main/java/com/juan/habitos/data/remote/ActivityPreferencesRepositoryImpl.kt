@@ -8,6 +8,7 @@ import com.juan.habitos.domain.model.ChildPreferences
 import com.juan.habitos.domain.repository.ChildPreferencesLocalStore
 import com.juan.habitos.domain.repository.ChildPreferencesRepository
 import com.juan.habitos.domain.repository.ProfileLocalStore
+import com.juan.habitos.domain.repository.DeviceCredentialStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import java.time.LocalDate
@@ -16,6 +17,7 @@ class CachedChildPreferencesRepository(
     private val local: ChildPreferencesLocalStore,
     private val profileStore: ProfileLocalStore,
     private val api: HabitsApi,
+    private val credentialStore: DeviceCredentialStore,
 ) : ChildPreferencesRepository {
     override val preferences: Flow<ChildPreferences> = local.preferences
 
@@ -24,7 +26,9 @@ class CachedChildPreferencesRepository(
     override suspend fun refresh(): ChildPreferences {
         val cached = local.preferences.first()
         val profileId = profileStore.profile.first()?.id ?: return cached
-        val remote = api.getActivityPreferences(profileId).toDomainPreferences()
+        val remote = deviceAuthenticatedRequest(credentialStore) { authorization ->
+            api.getActivityPreferences(profileId, authorization)
+        }.toDomainPreferences()
         local.save(remote)
         return remote
     }
@@ -35,7 +39,9 @@ class CachedChildPreferencesRepository(
             local.save(preferences)
             return preferences
         }
-        val remote = api.updateActivityPreferences(profileId, preferences.toActivityPreferencesRequest()).toDomainPreferences()
+        val remote = deviceAuthenticatedRequest(credentialStore) { authorization ->
+            api.updateActivityPreferences(profileId, authorization, preferences.toActivityPreferencesRequest())
+        }.toDomainPreferences()
         local.save(remote)
         return remote
     }

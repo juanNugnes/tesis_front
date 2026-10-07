@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.juan.habitos.domain.model.Profile
 import com.juan.habitos.domain.repository.ProfileRepository
+import com.juan.habitos.domain.repository.DeviceAuthenticationRequiredException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -19,6 +20,7 @@ data class EditProfileUiState(
     val submitting: Boolean = false,
     val saved: Boolean = false,
     val errorMessage: String? = null,
+    val deviceAuthenticationRequired: Boolean = false,
 ) {
     val valid: Boolean get() = name.trim().isNotEmpty() && age in 6..12 && !avatar.isNullOrBlank()
 }
@@ -74,12 +76,13 @@ class EditProfileViewModel(
                 onSaved()
             } catch (exception: CancellationException) {
                 throw exception
-            } catch (_: Exception) {
+            } catch (exception: Exception) {
                 _state.update {
                     it.copy(
                         submitting = false,
                         saved = false,
-                        errorMessage = "No pudimos guardar los cambios. Intentá nuevamente.",
+                        errorMessage = if (exception is DeviceAuthenticationRequiredException) "Este dispositivo necesita volver a vincularse." else "No pudimos guardar los cambios. Intentá nuevamente.",
+                        deviceAuthenticationRequired = exception is DeviceAuthenticationRequiredException,
                     )
                 }
             }

@@ -26,6 +26,12 @@ private class FakeContextProfileStore(initial: Profile?) : ProfileLocalStore {
 }
 
 private class FakeProfileContextApi : HabitsApi {
+    override suspend fun requestAdultOtp(request: AdultOtpRequest): AdultOtpRequestResponse = error("Not used")
+    override suspend fun verifyAdultOtp(request: AdultOtpVerifyRequest): AdultAccessTokenDto = error("Not used")
+    override suspend fun getAdultMe(authorization: String): AdultDto = error("Not used")
+    override suspend fun getAdultProfiles(authorization: String): List<ProfileDetailDto> = error("Not used")
+    override suspend fun claimAdultProfileLink(authorization: String, request: AdultProfileLinkClaimRequest): AdultProfileLinkClaimResponse = error("Not used")
+    override suspend fun createAdultProfileLinkCode(profileId: String, authorization: String): AdultProfileLinkCodeDto = error("Not used")
     var contextsResponse: List<ProfileContextDto> = emptyList()
     var activeResponse: List<ProfileContextDto> = emptyList()
     var createResponse: ProfileContextDto = contextDto("created")
@@ -77,19 +83,19 @@ private class FakeProfileContextApi : HabitsApi {
         this.contextId = contextId
         failIf("delete")
     }
-    override suspend fun registerDevice(profileId: String, request: DeviceCreateRequest): retrofit2.Response<DeviceDto> = error("Not used")
+    override suspend fun registerDevice(profileId: String, authorization: String, request: DeviceCreateRequest): retrofit2.Response<DeviceRegistrationDto> = error("Not used")
     override suspend fun createDeviceLinkCode(profileId: String): retrofit2.Response<DeviceLinkCodeDto> = error("Not used")
     override suspend fun claimDeviceLink(request: DeviceLinkClaimRequest): retrofit2.Response<DeviceLinkClaimResponse> = error("Not used")
 
     private fun failIf(operation: String) { if (failureOn == operation) throw IOException("offline") }
 
-    override suspend fun createProfile(request: CreateProfileRequest): ProfileDetailDto = error("Not used")
-    override suspend fun getProfile(id: String): ProfileDetailDto = error("Not used")
-    override suspend fun updateProfile(id: String, request: ProfileUpdateRequest): ProfileDetailDto = error("Not used")
-    override suspend fun getProfileSettings(id: String): ProfileSettingsDto = error("Not used")
-    override suspend fun updateProfileSettings(id: String, request: ProfileSettingsRequest): ProfileSettingsDto = error("Not used")
-    override suspend fun getActivityPreferences(id: String): ActivityPreferencesDto = error("Not used")
-    override suspend fun updateActivityPreferences(id: String, request: ActivityPreferencesRequest): ActivityPreferencesDto = error("Not used")
+    override suspend fun createProfile(request: CreateProfileRequest): ProfileBootstrapDto = error("Not used")
+    override suspend fun getProfile(id: String, authorization: String): ProfileDetailDto = error("Not used")
+    override suspend fun updateProfile(id: String, authorization: String, request: ProfileUpdateRequest): ProfileDetailDto = error("Not used")
+    override suspend fun getProfileSettings(id: String, authorization: String): ProfileSettingsDto = error("Not used")
+    override suspend fun updateProfileSettings(id: String, authorization: String, request: ProfileSettingsRequest): ProfileSettingsDto = error("Not used")
+    override suspend fun getActivityPreferences(id: String, authorization: String): ActivityPreferencesDto = error("Not used")
+    override suspend fun updateActivityPreferences(id: String, authorization: String, request: ActivityPreferencesRequest): ActivityPreferencesDto = error("Not used")
     override suspend fun postUsage(id: String, usage: UsageDto) = usage
     override suspend fun getUsage(id: String) = UsageDto(id, 0, 0)
     override suspend fun postAnalysis(id: String) = AnalysisDto(id, "")

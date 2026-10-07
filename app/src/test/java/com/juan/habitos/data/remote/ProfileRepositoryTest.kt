@@ -1,6 +1,7 @@
 package com.juan.habitos.data.remote
 
 import com.google.gson.Gson
+import com.juan.habitos.domain.model.DeviceCredentials
 import com.juan.habitos.domain.model.Profile
 import com.juan.habitos.domain.model.SchoolSchedule
 import com.juan.habitos.domain.repository.ProfileLocalStore
@@ -18,6 +19,12 @@ private class FakeProfileLocalStore(initial: Profile? = null) : ProfileLocalStor
 }
 
 private class FakeHabitsApi : HabitsApi {
+    override suspend fun requestAdultOtp(request: AdultOtpRequest): AdultOtpRequestResponse = error("Not used")
+    override suspend fun verifyAdultOtp(request: AdultOtpVerifyRequest): AdultAccessTokenDto = error("Not used")
+    override suspend fun getAdultMe(authorization: String): AdultDto = error("Not used")
+    override suspend fun getAdultProfiles(authorization: String): List<ProfileDetailDto> = error("Not used")
+    override suspend fun claimAdultProfileLink(authorization: String, request: AdultProfileLinkClaimRequest): AdultProfileLinkClaimResponse = error("Not used")
+    override suspend fun createAdultProfileLinkCode(profileId: String, authorization: String): AdultProfileLinkCodeDto = error("Not used")
     var createRequest: CreateProfileRequest? = null
     var updateRequest: ProfileUpdateRequest? = null
     var settingsRequest: ProfileSettingsRequest? = null
@@ -25,52 +32,66 @@ private class FakeHabitsApi : HabitsApi {
     var settingsRequestedId: String? = null
     var settingsGetCalls = 0
     var settingsPutCalls = 0
+    var authorization: String? = null
     var failure: Exception? = null
     lateinit var response: ProfileDetailDto
     lateinit var settingsResponse: ProfileSettingsDto
 
-    override suspend fun createProfile(request: CreateProfileRequest): ProfileDetailDto {
+    override suspend fun createProfile(request: CreateProfileRequest): ProfileBootstrapDto {
         failure?.let { throw it }
         createRequest = request
-        return response
+        return ProfileBootstrapDto(
+            id = response.id,
+            alias = response.alias,
+            age = response.age,
+            avatar = response.avatar,
+            active = response.active,
+            settings = response.settings,
+            bootstrapToken = "bootstrap-token",
+            bootstrapExpiresAt = "2099-01-01T00:00:00Z",
+        )
     }
 
-    override suspend fun getProfile(id: String): ProfileDetailDto {
+    override suspend fun getProfile(id: String, authorization: String): ProfileDetailDto {
         failure?.let { throw it }
+        this.authorization = authorization
         requestedId = id
         return response
     }
 
-    override suspend fun updateProfile(id: String, request: ProfileUpdateRequest): ProfileDetailDto {
+    override suspend fun updateProfile(id: String, authorization: String, request: ProfileUpdateRequest): ProfileDetailDto {
         failure?.let { throw it }
+        this.authorization = authorization
         requestedId = id
         updateRequest = request
         return response
     }
 
-    override suspend fun getProfileSettings(id: String): ProfileSettingsDto {
+    override suspend fun getProfileSettings(id: String, authorization: String): ProfileSettingsDto {
         failure?.let { throw it }
+        this.authorization = authorization
         settingsGetCalls++
         settingsRequestedId = id
         return settingsResponse
     }
 
-    override suspend fun updateProfileSettings(id: String, request: ProfileSettingsRequest): ProfileSettingsDto {
+    override suspend fun updateProfileSettings(id: String, authorization: String, request: ProfileSettingsRequest): ProfileSettingsDto {
         failure?.let { throw it }
+        this.authorization = authorization
         settingsPutCalls++
         settingsRequestedId = id
         settingsRequest = request
         return settingsResponse
     }
 
-    override suspend fun getActivityPreferences(id: String) = ActivityPreferencesDto()
-    override suspend fun updateActivityPreferences(id: String, request: ActivityPreferencesRequest) = ActivityPreferencesDto()
+    override suspend fun getActivityPreferences(id: String, authorization: String) = ActivityPreferencesDto()
+    override suspend fun updateActivityPreferences(id: String, authorization: String, request: ActivityPreferencesRequest) = ActivityPreferencesDto()
     override suspend fun createProfileContext(profileId: String, request: ProfileContextRequest): ProfileContextDto = error("Not used")
     override suspend fun getProfileContexts(profileId: String): List<ProfileContextDto> = error("Not used")
     override suspend fun getActiveProfileContexts(profileId: String): List<ProfileContextDto> = error("Not used")
     override suspend fun updateProfileContext(profileId: String, contextId: String, request: ProfileContextRequest): ProfileContextDto = error("Not used")
     override suspend fun deleteProfileContext(profileId: String, contextId: String) = error("Not used")
-    override suspend fun registerDevice(profileId: String, request: DeviceCreateRequest): retrofit2.Response<DeviceDto> = error("Not used")
+    override suspend fun registerDevice(profileId: String, authorization: String, request: DeviceCreateRequest): retrofit2.Response<DeviceRegistrationDto> = error("Not used")
     override suspend fun createDeviceLinkCode(profileId: String): retrofit2.Response<DeviceLinkCodeDto> = error("Not used")
     override suspend fun claimDeviceLink(request: DeviceLinkClaimRequest): retrofit2.Response<DeviceLinkClaimResponse> = error("Not used")
 
@@ -81,6 +102,11 @@ private class FakeHabitsApi : HabitsApi {
 }
 
 class ProfileRepositoryTest {
+    private fun repository(
+        local: ProfileLocalStore,
+        api: HabitsApi,
+        credentials: TestDeviceCredentialStore = TestDeviceCredentialStore(),
+    ) = CachedProfileRepository(local, api, credentials)
     private fun settings(
         profileId: String = "profile-123",
         schoolStart: String = "08:00:00",
@@ -168,23 +194,28 @@ class ProfileRepositoryTest {
     @Test fun `create stores the remote response including id`() = runTest {
         val local = FakeProfileLocalStore()
         val api = FakeHabitsApi().apply { response = detail() }
-        val repository = CachedProfileRepository(local, api)
+        val credentials = TestDeviceCredentialStore(DeviceCredentials())
+        val repository = repository(local, api, credentials)
 
         val created = repository.create(Profile("Juana", "🐸", 9, schoolSchedules = setOf(SchoolSchedule.MORNING)))
 
         assertEquals("Juana", api.createRequest?.alias)
         assertEquals("profile-123", created.id)
         assertEquals(created, local.profile.value)
+        assertEquals("bootstrap-token", credentials.credentials.value.bootstrapToken)
+        assertEquals("2099-01-01T00:00:00Z", credentials.credentials.value.bootstrapExpiresAt)
+        assertNull(credentials.credentials.value.accessToken)
     }
 
     @Test fun `refresh uses stored id and replaces the local cache`() = runTest {
         val local = FakeProfileLocalStore(Profile("Anterior", "🦊", 8, id = "profile-123"))
         val api = FakeHabitsApi().apply { response = detail(alias = "Actualizada", age = 10) }
-        val repository = CachedProfileRepository(local, api)
+        val repository = repository(local, api)
 
         val refreshed = repository.refresh()
 
         assertEquals("profile-123", api.requestedId)
+        assertEquals("Bearer device-token", api.authorization)
         assertEquals("Actualizada", refreshed?.name)
         assertEquals(10, local.profile.value?.age)
     }
@@ -192,11 +223,12 @@ class ProfileRepositoryTest {
     @Test fun `update sends profile fields and replaces the local cache`() = runTest {
         val local = FakeProfileLocalStore(Profile("Juana", "🐸", 9, id = "profile-123"))
         val api = FakeHabitsApi().apply { response = detail(alias = "Juanita", age = 10, avatar = "fox", active = false) }
-        val repository = CachedProfileRepository(local, api)
+        val repository = repository(local, api)
 
         val updated = repository.update(Profile("Juanita", "🦊", 10, id = "profile-123", active = false))
 
         assertEquals("profile-123", api.requestedId)
+        assertEquals("Bearer device-token", api.authorization)
         assertEquals("Juanita", api.updateRequest?.alias)
         assertEquals("fox", api.updateRequest?.avatar)
         assertEquals(false, api.updateRequest?.active)
@@ -222,7 +254,7 @@ class ProfileRepositoryTest {
         val api = FakeHabitsApi().apply {
             response = detail(alias = "Sofía", age = 10, avatar = "frog", active = false, profileSettings = null)
         }
-        val repository = CachedProfileRepository(local, api)
+        val repository = repository(local, api)
 
         val updated = repository.update(cached.copy(name = "Sofía", age = 10, avatar = "🐸"))
 
@@ -246,7 +278,7 @@ class ProfileRepositoryTest {
         val cached = Profile("Anterior", "🦊", 8, schoolStart = "08:00", schoolEnd = "12:30", sleepStart = "22:00", sleepEnd = "07:00", id = "profile-123", active = false)
         val local = FakeProfileLocalStore(cached)
         val api = FakeHabitsApi().apply { response = detail(); failure = IOException("offline") }
-        val repository = CachedProfileRepository(local, api)
+        val repository = repository(local, api)
 
         try { repository.update(cached.copy(name = "Editado")); fail("Expected PUT failure") } catch (_: IOException) {}
 
@@ -257,7 +289,7 @@ class ProfileRepositoryTest {
         val cached = Profile("Anterior", "🦊", 8, active = false)
         val local = FakeProfileLocalStore(cached)
         val api = FakeHabitsApi()
-        val repository = CachedProfileRepository(local, api)
+        val repository = repository(local, api)
         val edited = cached.copy(name = "Local", age = 9, avatar = "🐸")
 
         val updated = repository.update(edited)
@@ -271,7 +303,7 @@ class ProfileRepositoryTest {
         val cached = Profile("Local", "🦊", 9, id = "profile-123")
         val local = FakeProfileLocalStore(cached)
         val api = FakeHabitsApi().apply { response = detail(); failure = IOException("offline") }
-        val repository = CachedProfileRepository(local, api)
+        val repository = repository(local, api)
 
         try {
             repository.refresh()
@@ -285,11 +317,12 @@ class ProfileRepositoryTest {
         val cached = Profile("Local", "🦊", 9, schoolStart = "07:30", schoolEnd = "11:30", sleepStart = "21:30", sleepEnd = "06:30", id = "profile-123")
         val local = FakeProfileLocalStore(cached)
         val api = FakeHabitsApi().apply { settingsResponse = settings() }
-        val repository = CachedProfileRepository(local, api)
+        val repository = repository(local, api)
 
         val refreshed = repository.refreshSettings()
 
         assertEquals("profile-123", api.settingsRequestedId)
+        assertEquals("Bearer device-token", api.authorization)
         assertEquals(1, api.settingsGetCalls)
         assertEquals("08:00", refreshed?.schoolStart)
         assertEquals("12:30", local.profile.value?.schoolEnd)
@@ -303,12 +336,13 @@ class ProfileRepositoryTest {
         val cached = Profile("Local", "🦊", 9, schoolStart = "08:00", schoolEnd = "12:30", sleepStart = "22:00", sleepEnd = "07:00", id = "profile-123", active = false)
         val local = FakeProfileLocalStore(cached)
         val api = FakeHabitsApi().apply { settingsResponse = settings(schoolStart = "09:15:00", schoolEnd = "13:45:00", sleepStart = "23:10:00", sleepEnd = "07:20:00") }
-        val repository = CachedProfileRepository(local, api)
+        val repository = repository(local, api)
         val edited = cached.copy(schoolStart = "09:15", schoolEnd = "13:45", sleepStart = "23:10", sleepEnd = "07:20")
 
         val updated = repository.updateSettings(edited)
 
         assertEquals("profile-123", api.settingsRequestedId)
+        assertEquals("Bearer device-token", api.authorization)
         assertEquals(1, api.settingsPutCalls)
         assertEquals("09:15", api.settingsRequest?.schoolStart)
         assertEquals("13:45", api.settingsRequest?.schoolEnd)
@@ -330,7 +364,7 @@ class ProfileRepositoryTest {
         val cached = Profile("Local", "🦊", 9, schoolStart = "08:00", schoolEnd = "12:30", sleepStart = "22:00", sleepEnd = "07:00", id = "profile-123")
         val local = FakeProfileLocalStore(cached)
         val api = FakeHabitsApi().apply { failure = IOException("offline") }
-        val repository = CachedProfileRepository(local, api)
+        val repository = repository(local, api)
 
         try {
             repository.refreshSettings()
@@ -352,7 +386,7 @@ class ProfileRepositoryTest {
         val cached = Profile("Local", "🦊", 9, schoolStart = "08:00", schoolEnd = "12:30", sleepStart = "22:00", sleepEnd = "07:00")
         val local = FakeProfileLocalStore(cached)
         val api = FakeHabitsApi()
-        val repository = CachedProfileRepository(local, api)
+        val repository = repository(local, api)
 
         assertEquals(cached, repository.refreshSettings())
         val updated = repository.updateSettings(cached.copy(schoolStart = "09:00"))
