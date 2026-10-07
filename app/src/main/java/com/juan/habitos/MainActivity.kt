@@ -94,7 +94,7 @@ private inline fun <reified T : ViewModel> factory(crossinline create: () -> T) 
             val mode = session.mode ?: return@composable
             val profileRepository = if (mode == DeviceMode.ADULT) app.adultProfileRepository else app.profileRepository
             val profile by profileRepository.profile.collectAsStateWithLifecycle(initialValue = null)
-            profile?.let { AdultProfileScreen(it, { nav.navigate(EDIT_PROFILE_ROUTE) }, { nav.navigate("profileSchedules") }, { nav.navigate("preferencesAdult") }, if (session.mode == DeviceMode.ADULT) ({ nav.navigate("profileContexts") }) else null, if (session.mode == DeviceMode.CHILD) ({ nav.navigate("adultProfileLinkCode") }) else null, if (BuildConfig.DEBUG && UsageDiagnosticsLauncher.isAvailable) ({ UsageDiagnosticsLauncher.open(app) }) else null, { nav.popBackStack() }) }
+            profile?.let { AdultProfileScreen(it, { nav.navigate(EDIT_PROFILE_ROUTE) }, { nav.navigate("profileSchedules") }, { nav.navigate("preferencesAdult") }, if (session.mode == DeviceMode.ADULT) ({ nav.navigate("profileContexts") }) else null, if (session.mode == DeviceMode.ADULT) ({ nav.navigate("monitoringConsent") }) else null, if (session.mode == DeviceMode.CHILD) ({ nav.navigate("adultProfileLinkCode") }) else null, if (BuildConfig.DEBUG && UsageDiagnosticsLauncher.isAvailable) ({ UsageDiagnosticsLauncher.open(app) }) else null, { nav.popBackStack() }) }
         }
         composable("adultProfileLinkCode") { val vm: AdultProfileLinkCodeViewModel = viewModel(factory = factory { AdultProfileLinkCodeViewModel(app.deviceRepository) }); val state by vm.state.collectAsStateWithLifecycle(); AdultProfileLinkCodeScreen(state, vm::generate) { nav.popBackStack() } }
         composable(EDIT_PROFILE_ROUTE) {
@@ -136,6 +136,22 @@ private inline fun <reified T : ViewModel> factory(crossinline create: () -> T) 
                 val state by vm.state.collectAsStateWithLifecycle()
                 LaunchedEffect(state.adultAuthenticationRequired) { if (state.adultAuthenticationRequired) nav.navigate("adultAuth") { popUpTo("adult") { inclusive = true } } }
                 ProfileContextScreen(state, vm::beginCreate, vm::beginEdit, vm::delete, vm::type, vm::startDate, vm::endDate, vm::description, vm::save, vm::dismissForm) { nav.popBackStack() }
+            }
+        }
+        composable("monitoringConsent") {
+            val session by app.deviceSessionRepository.session.collectAsStateWithLifecycle(initialValue = DeviceSession())
+            if (session.mode == DeviceMode.ADULT) {
+                val profile by app.adultProfileRepository.profile.collectAsStateWithLifecycle(initialValue = null)
+                val profileId = profile?.id ?: return@composable
+                val vm: MonitoringConsentViewModel = viewModel(
+                    key = "monitoring-consent-$profileId",
+                    factory = factory { MonitoringConsentViewModel(app.monitoringConsentRepository, profileId, BuildConfig.DEMO_MODE) },
+                )
+                val state by vm.state.collectAsStateWithLifecycle()
+                LaunchedEffect(state.adultAuthenticationRequired) {
+                    if (state.adultAuthenticationRequired) nav.navigate("adultAuth") { popUpTo("adult") { inclusive = true } }
+                }
+                MonitoringConsentScreen(state, vm::grant, vm::requestRevoke, vm::confirmRevoke, vm::cancelRevoke) { nav.popBackStack() }
             }
         }
     }

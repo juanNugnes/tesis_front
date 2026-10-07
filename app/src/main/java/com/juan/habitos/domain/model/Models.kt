@@ -90,6 +90,25 @@ data class AdultProfileLinkCode(
     val purpose: String,
 )
 
+enum class RepresentativeVerificationStatus { PENDING, APPROVED, REJECTED }
+data class RepresentativeVerification(
+    val id: String,
+    val profileId: String,
+    val status: RepresentativeVerificationStatus,
+    val verifiedAt: String? = null,
+)
+
+enum class MonitoringConsentStatus { ACTIVE, REVOKED }
+data class MonitoringConsent(
+    val id: String,
+    val profileId: String,
+    val status: MonitoringConsentStatus,
+    val privacyNoticeVersion: String,
+    val purposes: Set<String>,
+    val grantedAt: String,
+    val revokedAt: String? = null,
+)
+
 data class RegisteredDevice(
     val id: String,
     val profileId: String,

@@ -79,3 +79,9 @@ interface LinkRepository {
     suspend fun findProfile(code: String): Profile?
     suspend fun link(profile: Profile)
 }
+interface MonitoringConsentRepository {
+    suspend fun getRepresentativeVerification(profileId: String): RepresentativeVerification?
+    suspend fun getCurrentConsent(profileId: String): MonitoringConsent?
+    suspend fun grantConsent(profileId: String, privacyNoticeVersion: String, purposes: Set<String>): MonitoringConsent
+    suspend fun revokeConsent(profileId: String, consentId: String): MonitoringConsent
+}

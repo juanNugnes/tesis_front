@@ -204,6 +204,34 @@ data class AdultProfileLinkCodeDto(
     val purpose: String,
 )
 
+data class RepresentativeVerificationDto(
+    val id: String,
+    @SerializedName("profile_id") val profileId: String,
+    val status: String,
+    @SerializedName("verified_at") val verifiedAt: String? = null,
+    @SerializedName("verified_by") val verifiedBy: String? = null,
+    val notes: String? = null,
+    @SerializedName("created_at") val createdAt: String,
+    @SerializedName("updated_at") val updatedAt: String,
+)
+
+data class ConsentGrantRequest(
+    @SerializedName("privacy_notice_version") val privacyNoticeVersion: String,
+    val purposes: List<String>,
+)
+
+data class ConsentDto(
+    val id: String,
+    @SerializedName("profile_id") val profileId: String,
+    val status: String,
+    @SerializedName("privacy_notice_version") val privacyNoticeVersion: String,
+    val purposes: List<String>,
+    @SerializedName("granted_at") val grantedAt: String,
+    @SerializedName("revoked_at") val revokedAt: String? = null,
+    @SerializedName("created_at") val createdAt: String,
+    @SerializedName("updated_at") val updatedAt: String,
+)
+
 data class UsageDto(val profileId: String, val currentMinutes: Int, val expectedMinutes: Int)
 data class AnalysisDto(val profileId: String, val summary: String)
 
@@ -214,6 +242,10 @@ interface HabitsApi {
     @GET("api/v1/adult/profiles") suspend fun getAdultProfiles(@Header("Authorization") authorization: String): List<ProfileDetailDto>
     @POST("api/v1/adult/profile-links/claim") suspend fun claimAdultProfileLink(@Header("Authorization") authorization: String, @Body request: AdultProfileLinkClaimRequest): AdultProfileLinkClaimResponse
     @POST("api/v1/profiles/{profileId}/adult-link-codes") suspend fun createAdultProfileLinkCode(@Path("profileId") profileId: String, @Header("Authorization") authorization: String): AdultProfileLinkCodeDto
+    @GET("api/v1/profiles/{profileId}/representative-verification") suspend fun getRepresentativeVerification(@Path("profileId") profileId: String, @Header("Authorization") authorization: String): RepresentativeVerificationDto
+    @POST("api/v1/profiles/{profileId}/consents") suspend fun grantConsent(@Path("profileId") profileId: String, @Header("Authorization") authorization: String, @Body request: ConsentGrantRequest): ConsentDto
+    @GET("api/v1/profiles/{profileId}/consents/current") suspend fun getCurrentConsent(@Path("profileId") profileId: String, @Header("Authorization") authorization: String): ConsentDto
+    @POST("api/v1/profiles/{profileId}/consents/{consentId}/revoke") suspend fun revokeConsent(@Path("profileId") profileId: String, @Path("consentId") consentId: String, @Header("Authorization") authorization: String): ConsentDto
     @POST("api/v1/profiles") suspend fun createProfile(@Body request: CreateProfileRequest): ProfileBootstrapDto
     @GET("api/v1/profiles/{profileId}") suspend fun getProfile(@Path("profileId") id: String, @Header("Authorization") authorization: String): ProfileDetailDto
     @PUT("api/v1/profiles/{profileId}") suspend fun updateProfile(@Path("profileId") id: String, @Header("Authorization") authorization: String, @Body request: ProfileUpdateRequest): ProfileDetailDto

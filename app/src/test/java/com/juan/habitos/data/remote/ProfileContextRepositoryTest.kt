@@ -102,6 +102,10 @@ private class FakeProfileContextApi : HabitsApi {
     override suspend fun updateProfileSettings(id: String, authorization: String, request: ProfileSettingsRequest): ProfileSettingsDto = error("Not used")
     override suspend fun getActivityPreferences(id: String, authorization: String): ActivityPreferencesDto = error("Not used")
     override suspend fun updateActivityPreferences(id: String, authorization: String, request: ActivityPreferencesRequest): ActivityPreferencesDto = error("Not used")
+    override suspend fun getRepresentativeVerification(profileId: String, authorization: String): RepresentativeVerificationDto = error("Not used")
+    override suspend fun grantConsent(profileId: String, authorization: String, request: ConsentGrantRequest): ConsentDto = error("Not used")
+    override suspend fun getCurrentConsent(profileId: String, authorization: String): ConsentDto = error("Not used")
+    override suspend fun revokeConsent(profileId: String, consentId: String, authorization: String): ConsentDto = error("Not used")
     override suspend fun postUsage(id: String, usage: UsageDto) = usage
     override suspend fun getUsage(id: String) = UsageDto(id, 0, 0)
     override suspend fun postAnalysis(id: String) = AnalysisDto(id, "")

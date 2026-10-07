@@ -11,6 +11,7 @@ import com.juan.habitos.data.remote.RemoteDeviceRepository
 import com.juan.habitos.data.remote.RemoteAdultAuthRepository
 import com.juan.habitos.data.remote.RemoteLinkRepository
 import com.juan.habitos.data.remote.AdultRequestAuthorization
+import com.juan.habitos.data.remote.RemoteMonitoringConsentRepository
 import com.juan.habitos.domain.model.*
 import kotlinx.coroutines.flow.first
 
@@ -26,6 +27,7 @@ class HabitosApplication : Application() {
     val childPreferencesRepository by lazy { CachedChildPreferencesRepository(localChildPreferencesStore, localProfileStore, habitsApi, localDeviceIdentityStore) }
     val adultPreferencesRepository by lazy { CachedChildPreferencesRepository(localChildPreferencesStore, localProfileStore, habitsApi, adultRequestAuthorization) }
     val profileContextRepository by lazy { CachedProfileContextRepository(localProfileContextStore, localProfileStore, habitsApi, remoteEnabled = !BuildConfig.DEMO_MODE, authorization = adultRequestAuthorization) }
+    val monitoringConsentRepository by lazy { RemoteMonitoringConsentRepository(habitsApi, adultRequestAuthorization) }
     val deviceSessionRepository by lazy { DataStoreDeviceSessionRepository(this) }
     val deviceRepository by lazy { RemoteDeviceRepository(localDeviceIdentityStore, localProfileStore, habitsApi) }
     val authRepository by lazy { if (BuildConfig.DEMO_MODE) MockAuthRepository() else RemoteAdultAuthRepository(habitsApi, deviceSessionRepository) }
