@@ -2,7 +2,9 @@ package com.juan.habitos.diagnostics
 
 import android.content.ClipData
 import android.content.ClipboardManager
+import android.content.Intent
 import android.os.Bundle
+import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -21,12 +23,19 @@ import androidx.lifecycle.*
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.core.content.FileProvider
+import com.juan.habitos.HabitosApplication
 import com.juan.habitos.data.device.*
 import com.juan.habitos.permission.AndroidPermissionManager
 import com.juan.habitos.ui.theme.*
 import java.time.Instant
+import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class UsageDiagnosticsActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) { super.onCreate(savedInstanceState); setContent { AppTheme { UsageDiagnosticsRoute() } } }
@@ -34,23 +43,84 @@ class UsageDiagnosticsActivity : ComponentActivity() {
 
 @Composable private fun UsageDiagnosticsRoute() {
     val context = LocalContext.current
+    val application = context.applicationContext as HabitosApplication
     val repository = remember { UsageDiagnosticsRepository(AndroidDeviceUsageDataSource(context.applicationContext)) }
-    val vm: UsageDiagnosticsViewModel = viewModel(factory = object : ViewModelProvider.Factory { @Suppress("UNCHECKED_CAST") override fun <T : ViewModel> create(modelClass: Class<T>): T = UsageDiagnosticsViewModel(repository) as T })
+    val vm: UsageDiagnosticsViewModel = viewModel(factory = object : ViewModelProvider.Factory { @Suppress("UNCHECKED_CAST") override fun <T : ViewModel> create(modelClass: Class<T>): T = UsageDiagnosticsViewModel(repository, { application.profileRepository.profile.first()?.id }, { application.deviceRepository.identity.first().deviceId }) as T })
     val state by vm.state.collectAsStateWithLifecycle()
+    val coroutineScope = rememberCoroutineScope()
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) { val observer = LifecycleEventObserver { _, event -> if (event == Lifecycle.Event.ON_RESUME) vm.refresh() }; lifecycleOwner.lifecycle.addObserver(observer); onDispose { lifecycleOwner.lifecycle.removeObserver(observer) } }
-    UsageDiagnosticsScreen(state, vm::selectRange, vm::refresh, { AndroidPermissionManager(context.applicationContext).request(0) }) {
-        vm.exportText()?.let { text ->
-            context.getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("Usage diagnostics", text))
-            Toast.makeText(context, "Diagnóstico copiado", Toast.LENGTH_SHORT).show()
+    val copyText: (String, String, String, String) -> Unit = { label, text, successMessage, tooLargeMessage ->
+        val copied = HistoricalJsonFileExporter.copyToClipboardIfSafe(text) { safeText ->
+            context.getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText(label, safeText))
+        }
+        if (copied) {
+            Toast.makeText(context, successMessage, Toast.LENGTH_SHORT).show()
+        } else {
+            Toast.makeText(context, tooLargeMessage, Toast.LENGTH_LONG).show()
         }
     }
+    val shareHistoricalJson: (String) -> Unit = { json ->
+        coroutineScope.launch {
+            try {
+                val prepared = withContext(Dispatchers.IO) {
+                    HistoricalJsonFileExporter.prepare(
+                        cacheDirectory = context.cacheDir,
+                        json = json,
+                        date = LocalDate.now(ZoneId.systemDefault()),
+                    )
+                }
+                val uri = FileProvider.getUriForFile(
+                    context,
+                    context.packageName + HistoricalJsonFileExporter.FILE_PROVIDER_AUTHORITY_SUFFIX,
+                    prepared.file,
+                )
+                val sendIntent = Intent(Intent.ACTION_SEND).apply {
+                    type = prepared.mimeType
+                    putExtra(Intent.EXTRA_STREAM, uri)
+                    clipData = ClipData.newUri(context.contentResolver, prepared.file.name, uri)
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+                context.startActivity(Intent.createChooser(sendIntent, "Compartir JSON histórico"))
+            } catch (exception: Exception) {
+                Log.e("UsageDiagnostics", "Unable to share historical JSON file", exception)
+                Toast.makeText(context, "No pudimos preparar el archivo para compartir.", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+    UsageDiagnosticsScreen(
+        state = state,
+        onRange = vm::selectRange,
+        onRefresh = vm::refresh,
+        onOpenSettings = { AndroidPermissionManager(context.applicationContext).request(0) },
+        onCopyDiagnostic = { vm.exportText()?.let { copyText("Usage diagnostics", it, "Diagnóstico copiado", "El diagnóstico es demasiado grande para copiar.") } },
+        onGenerateHistorical = { vm.generateHistoricalJson(false) },
+        onGenerateOverlapping = { vm.generateHistoricalJson(true) },
+        onShareHistorical = { vm.historicalJson()?.let(shareHistoricalJson) },
+        onCopyHistorical = { vm.historicalJson()?.let { copyText("Historical usage JSON", it, "JSON histórico copiado", "El diagnóstico es demasiado grande para copiar. Usá Compartir JSON.") } },
+        onCalculateObservation = vm::calculateInteractiveScreenObservation,
+        onCopyObservation = { vm.observationJson()?.let { copyText("Interactive screen observation", it, "Observación compacta copiada", "La observación es demasiado grande para copiar.") } },
+    )
 }
 
-@Composable private fun UsageDiagnosticsScreen(state: UsageDiagnosticsUiState, onRange: (DiagnosticRange) -> Unit, onRefresh: () -> Unit, onOpenSettings: () -> Unit, onCopy: () -> Unit) {
+@Composable private fun UsageDiagnosticsScreen(
+    state: UsageDiagnosticsUiState,
+    onRange: (DiagnosticRange) -> Unit,
+    onRefresh: () -> Unit,
+    onOpenSettings: () -> Unit,
+    onCopyDiagnostic: () -> Unit,
+    onGenerateHistorical: () -> Unit,
+    onGenerateOverlapping: () -> Unit,
+    onShareHistorical: () -> Unit,
+    onCopyHistorical: () -> Unit,
+    onCalculateObservation: () -> Unit,
+    onCopyObservation: () -> Unit,
+) {
     LazyColumn(Modifier.fillMaxSize().background(AppColors.Background).statusBarsPadding(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         item { Text("Diagnóstico de uso", color = Color.White, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold); Text("Herramienta experimental · solo build debug", color = Color(0xFF94A3B8)) }
         item { AccessCard(state.hasAccess, onOpenSettings) }
+        item { InteractiveScreenObservationCard(state, onCalculateObservation, onCopyObservation) }
+        item { HistoricalExportCard(state, onGenerateHistorical, onGenerateOverlapping, onShareHistorical, onCopyHistorical) }
         if (state.hasAccess) {
             item { RangeSelector(state.range, onRange) }
             if (state.loading) item { LinearProgressIndicator(Modifier.fillMaxWidth()) }
@@ -58,7 +128,7 @@ class UsageDiagnosticsActivity : ComponentActivity() {
             state.snapshot?.let { snapshot ->
                 item { IntervalCard(snapshot) }
                 item { DiagnosticSummaryCard(state.range, snapshot) }
-                item { Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) { Button(onRefresh, Modifier.weight(1f)) { Text("Actualizar") }; OutlinedButton(onCopy, Modifier.weight(1f)) { Text("Copiar diagnóstico") } } }
+                item { Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) { Button(onRefresh, Modifier.weight(1f)) { Text("Actualizar") }; OutlinedButton(onCopyDiagnostic, Modifier.weight(1f)) { Text("Copiar diagnóstico") } } }
                 item { SectionTitle("DEVICE SESSIONS") }
                 if (snapshot.deviceSessions.isEmpty()) item { EmptyText("No se encontraron pares completos SCREEN_INTERACTIVE → SCREEN_NON_INTERACTIVE.") }
                 snapshot.deviceSessions.forEachIndexed { index, session -> item { SessionRow(index + 1, session) } }
@@ -82,6 +152,68 @@ class UsageDiagnosticsActivity : ComponentActivity() {
             }
         }
         item { Spacer(Modifier.navigationBarsPadding()) }
+    }
+}
+
+@Composable private fun InteractiveScreenObservationCard(
+    state: UsageDiagnosticsUiState,
+    onCalculate: () -> Unit,
+    onCopy: () -> Unit,
+) {
+    DiagnosticCard {
+        Text("MINUTOS DE PANTALLA INTERACTIVA", color = AppColors.PurpleSoft, fontWeight = FontWeight.Bold)
+        Text("Observación técnica de la pantalla del dispositivo; no identifica quién usó físicamente el teléfono.", color = Color(0xFFCBD5E1), style = MaterialTheme.typography.bodySmall)
+        Button(onCalculate, Modifier.fillMaxWidth(), enabled = !state.observationCalculating) {
+            Text(if (state.observationCalculating) "Calculando…" else "Calcular observación diaria")
+        }
+        state.observationError?.let { Text("Error: $it", color = MaterialTheme.colorScheme.error) }
+        state.interactiveScreenObservation?.let { observation ->
+            HorizontalDivider(color = AppColors.Divider)
+            SummaryLine("Fecha", observation.localDate)
+            SummaryLine("Minutos", observation.interactiveScreenMinutes?.toString() ?: "No disponible")
+            SummaryLine("Milisegundos exactos", observation.interactiveScreenMillis?.toString() ?: "No disponible")
+            SummaryLine("Estado", observation.status.name)
+            SummaryLine("Motivo incompleto", observation.incompleteReason?.name ?: "—")
+            SummaryLine("Versión", observation.calculationVersion)
+            SummaryLine("Runs considerados", observation.qualityEvidence.collectorRuns.size.toString())
+            SummaryLine("Runs exitosos", observation.qualityEvidence.collectorRuns.count { it.status == CollectorRunQualityStatus.SUCCESS }.toString())
+            SummaryLine("Segmentos canónicos", observation.qualityEvidence.canonicalSegments.size.toString())
+            SummaryLine("Huecos de cobertura", observation.qualityEvidence.coverageGaps.size.toString())
+            SummaryLine(
+                "Cobertura",
+                "${UsageDiagnosticsRepository.formatDuration(observation.qualityEvidence.coveredMillis)} / ${UsageDiagnosticsRepository.formatDuration(observation.qualityEvidence.expectedCoverageMillis)}",
+            )
+            OutlinedButton(onCopy, Modifier.fillMaxWidth()) { Text("Copiar observación compacta") }
+        }
+    }
+}
+
+@Composable private fun HistoricalExportCard(
+    state: UsageDiagnosticsUiState,
+    onGenerate: () -> Unit,
+    onGenerateOverlapping: () -> Unit,
+    onShare: () -> Unit,
+    onCopy: () -> Unit,
+) {
+    DiagnosticCard {
+        Text("EXPORT HISTÓRICO RAW", color = AppColors.PurpleSoft, fontWeight = FontWeight.Bold)
+        Text("Genera un JSON local con eventos sin deduplicar. No calcula minutos ni envía información al backend.", color = Color(0xFFCBD5E1), style = MaterialTheme.typography.bodySmall)
+        Button(onGenerate, Modifier.fillMaxWidth(), enabled = !state.historicalExporting) {
+            Text(if (state.historicalExporting) "Generando…" else "Generar JSON del día")
+        }
+        OutlinedButton(onGenerateOverlapping, Modifier.fillMaxWidth(), enabled = !state.historicalExporting) {
+            Text("Generar con consultas solapadas")
+        }
+        state.historicalError?.let { Text("Error: $it", color = MaterialTheme.colorScheme.error) }
+        if (state.historicalJson != null) {
+            Text(
+                if (state.historicalIncludesOverlaps) "JSON listo · incluye dos consultas solapadas" else "JSON listo · consulta diaria y estado previo",
+                color = Color(0xFF34D399),
+                style = MaterialTheme.typography.bodySmall,
+            )
+            Button(onShare, Modifier.fillMaxWidth()) { Text("Compartir JSON histórico") }
+            OutlinedButton(onCopy, Modifier.fillMaxWidth()) { Text("Copiar JSON histórico (si es pequeño)") }
+        }
     }
 }
 

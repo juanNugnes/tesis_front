@@ -3,6 +3,11 @@ package com.juan.habitos.diagnostics
 import android.os.Build
 import android.util.Log
 import com.juan.habitos.data.device.AndroidDeviceUsageDataSource
+import com.juan.habitos.data.device.DailyHistoricalUsageDiagnosticCollector
+import com.juan.habitos.data.device.DailyDeviceInteractiveScreenObservation
+import com.juan.habitos.data.device.DailyInteractiveScreenObservationJson
+import com.juan.habitos.data.device.HistoricalUsageDiagnosticJson
+import com.juan.habitos.data.device.InteractiveScreenObservationCalculator
 import com.juan.habitos.data.device.UsageDiagnosticSnapshot
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -64,6 +69,49 @@ class UsageDiagnosticsRepository(private val dataSource: AndroidDeviceUsageDataS
         appendLine("RAW EVENTS")
         snapshot.events.forEach { appendLine("${date.format(Instant.ofEpochMilli(it.timestamp))} | ${it.packageName ?: "Android/System"} | ${it.eventName}") }
     }
+
+    suspend fun generateHistoricalJson(
+        profileId: String?,
+        deviceId: String?,
+        includeOverlappingRuns: Boolean,
+    ): String = withContext(Dispatchers.IO) {
+        val result = collectHistoricalDiagnostic(LocalDate.now(), profileId, deviceId, includeOverlappingRuns)
+        Log.d(
+            TAG,
+            "historicalDate=${result.localDate} runs=${result.collectorRuns.size} events=${result.collectorRuns.sumOf { it.eventCount }} overlap=$includeOverlappingRuns",
+        )
+        HistoricalUsageDiagnosticJson.encode(result)
+    }
+
+    suspend fun calculateInteractiveScreenObservation(
+        profileId: String?,
+        deviceId: String?,
+    ): DailyDeviceInteractiveScreenObservation = withContext(Dispatchers.IO) {
+        InteractiveScreenObservationCalculator.calculate(
+            collectHistoricalDiagnostic(
+                date = LocalDate.now().minusDays(1),
+                profileId = profileId,
+                deviceId = deviceId,
+                includeOverlappingRuns = false,
+            )
+        )
+    }
+
+    fun observationJson(observation: DailyDeviceInteractiveScreenObservation): String =
+        DailyInteractiveScreenObservationJson.encode(observation)
+
+    private fun collectHistoricalDiagnostic(
+        date: LocalDate,
+        profileId: String?,
+        deviceId: String?,
+        includeOverlappingRuns: Boolean,
+    ) = DailyHistoricalUsageDiagnosticCollector(dataSource).collect(
+        date = date,
+        zoneId = ZoneId.systemDefault(),
+        profileId = profileId,
+        deviceId = deviceId,
+        includeOverlappingRuns = includeOverlappingRuns,
+    )
 
     companion object {
         const val TAG = "UsageDiagnostics"

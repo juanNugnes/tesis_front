@@ -6,13 +6,15 @@ import android.app.usage.UsageStatsManager
 import android.content.Context
 import android.os.Build
 import android.os.Process
+import android.util.Log
 import com.juan.habitos.domain.model.AppUsage
 import com.juan.habitos.domain.model.DailyUsage
 import com.juan.habitos.domain.repository.DeviceUsageDataSource
 import java.time.LocalDate
 import java.time.ZoneId
+import java.util.UUID
 
-class AndroidDeviceUsageDataSource(private val context: Context) : DeviceUsageDataSource {
+class AndroidDeviceUsageDataSource(private val context: Context) : DeviceUsageDataSource, UsageEventRunCollector {
     private val manager = context.getSystemService(UsageStatsManager::class.java)
 
     fun hasUsageAccess(): Boolean {
@@ -46,6 +48,83 @@ class AndroidDeviceUsageDataSource(private val context: Context) : DeviceUsageDa
         return UsageDiagnosticSnapshot(fromMillis, toMillis, apps, events, sessionAnalysis.completed, sessionAnalysis.incomplete, UsageDiagnosticsCalculator.unlockTimestamps(events), UsageDiagnosticsCalculator.reconstructAppUsage(events, toMillis), UsageDiagnosticsCalculator.summary(apps, events, toMillis))
     }
 
+    override fun collectRun(requestedStartEpochMillis: Long, requestedEndEpochMillis: Long): UsageCollectorRun {
+        val collectorRunId = UUID.randomUUID().toString()
+        val androidVersion = "${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})"
+        val deviceModel = Build.MODEL
+        val usagePermissionAvailable = try {
+            hasUsageAccess()
+        } catch (exception: Exception) {
+            Log.e(TAG, "Unable to inspect usage permission for collectorRunId=$collectorRunId", exception)
+            return UsageCollectorRunFactory.exception(
+                collectorRunId = collectorRunId,
+                requestedStartEpochMillis = requestedStartEpochMillis,
+                requestedEndEpochMillis = requestedEndEpochMillis,
+                collectedAtEpochMillis = System.currentTimeMillis(),
+                androidVersion = androidVersion,
+                deviceModel = deviceModel,
+                throwable = exception,
+                usagePermissionAvailable = false,
+            )
+        }
+        if (!usagePermissionAvailable) {
+            return UsageCollectorRunFactory.permissionUnavailable(
+                collectorRunId = collectorRunId,
+                requestedStartEpochMillis = requestedStartEpochMillis,
+                requestedEndEpochMillis = requestedEndEpochMillis,
+                collectedAtEpochMillis = System.currentTimeMillis(),
+                androidVersion = androidVersion,
+                deviceModel = deviceModel,
+            )
+        }
+        return try {
+            val stream = manager.queryEvents(requestedStartEpochMillis, requestedEndEpochMillis)
+                ?: return UsageCollectorRunFactory.queryReturnedNull(
+                    collectorRunId = collectorRunId,
+                    requestedStartEpochMillis = requestedStartEpochMillis,
+                    requestedEndEpochMillis = requestedEndEpochMillis,
+                    collectedAtEpochMillis = System.currentTimeMillis(),
+                    androidVersion = androidVersion,
+                    deviceModel = deviceModel,
+                )
+            val events = buildList {
+                val event = UsageEvents.Event()
+                while (stream.hasNextEvent()) {
+                    stream.getNextEvent(event)
+                    add(
+                        CollectedUsageEvent(
+                            timestampEpochMillis = event.timeStamp,
+                            eventTypeCode = event.eventType,
+                            eventTypeName = eventName(event.eventType),
+                            packageName = event.packageName?.takeIf { it.isNotBlank() },
+                            className = event.className?.takeIf { it.isNotBlank() },
+                        )
+                    )
+                }
+            }
+            UsageCollectorRunFactory.success(
+                collectorRunId = collectorRunId,
+                requestedStartEpochMillis = requestedStartEpochMillis,
+                requestedEndEpochMillis = requestedEndEpochMillis,
+                collectedAtEpochMillis = System.currentTimeMillis(),
+                androidVersion = androidVersion,
+                deviceModel = deviceModel,
+                eventsInQueryOrder = events,
+            )
+        } catch (exception: Exception) {
+            Log.e(TAG, "queryEvents failed for collectorRunId=$collectorRunId", exception)
+            UsageCollectorRunFactory.exception(
+                collectorRunId = collectorRunId,
+                requestedStartEpochMillis = requestedStartEpochMillis,
+                requestedEndEpochMillis = requestedEndEpochMillis,
+                collectedAtEpochMillis = System.currentTimeMillis(),
+                androidVersion = androidVersion,
+                deviceModel = deviceModel,
+                throwable = exception,
+            )
+        }
+    }
+
     override suspend fun getDailyUsage(): DailyUsage {
         val now = System.currentTimeMillis()
         val start = LocalDate.now().atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
@@ -62,23 +141,26 @@ class AndroidDeviceUsageDataSource(private val context: Context) : DeviceUsageDa
     private fun emptySnapshot(from: Long, to: Long): UsageDiagnosticSnapshot = UsageDiagnosticSnapshot(from, to, emptyList(), emptyList(), emptyList(), emptyList(), emptyList(), emptyList(), UsageDiagnosticsCalculator.summary(emptyList(), emptyList(), to))
 
     companion object {
+        private const val TAG = "UsageCollector"
+
         fun eventName(type: Int): String = when (type) {
-            UsageEvents.Event.ACTIVITY_RESUMED -> "ACTIVITY_RESUMED"
-            UsageEvents.Event.ACTIVITY_PAUSED -> "ACTIVITY_PAUSED"
-            UsageEvents.Event.ACTIVITY_STOPPED -> "ACTIVITY_STOPPED"
-            UsageEvents.Event.SCREEN_INTERACTIVE -> "SCREEN_INTERACTIVE"
-            UsageEvents.Event.SCREEN_NON_INTERACTIVE -> "SCREEN_NON_INTERACTIVE"
-            UsageEvents.Event.KEYGUARD_SHOWN -> "KEYGUARD_SHOWN"
-            UsageEvents.Event.KEYGUARD_HIDDEN -> "KEYGUARD_HIDDEN"
-            UsageEvents.Event.USER_INTERACTION -> "USER_INTERACTION"
-            UsageEvents.Event.SHORTCUT_INVOCATION -> "SHORTCUT_INVOCATION"
-            UsageEvents.Event.STANDBY_BUCKET_CHANGED -> "STANDBY_BUCKET_CHANGED"
-            UsageEvents.Event.FOREGROUND_SERVICE_START -> "FOREGROUND_SERVICE_START"
-            UsageEvents.Event.FOREGROUND_SERVICE_STOP -> "FOREGROUND_SERVICE_STOP"
-            UsageEvents.Event.CONFIGURATION_CHANGE -> "CONFIGURATION_CHANGE"
-            UsageEvents.Event.DEVICE_SHUTDOWN -> "DEVICE_SHUTDOWN"
-            UsageEvents.Event.DEVICE_STARTUP -> "DEVICE_STARTUP"
-            else -> "EVENT_$type"
+            0 -> "NONE"
+            1 -> "ACTIVITY_RESUMED"
+            2 -> "ACTIVITY_PAUSED"
+            5 -> "CONFIGURATION_CHANGE"
+            7 -> "USER_INTERACTION"
+            8 -> "SHORTCUT_INVOCATION"
+            11 -> "STANDBY_BUCKET_CHANGED"
+            15 -> "SCREEN_INTERACTIVE"
+            16 -> "SCREEN_NON_INTERACTIVE"
+            17 -> "KEYGUARD_SHOWN"
+            18 -> "KEYGUARD_HIDDEN"
+            19 -> "FOREGROUND_SERVICE_START"
+            20 -> "FOREGROUND_SERVICE_STOP"
+            23 -> "ACTIVITY_STOPPED"
+            26 -> "DEVICE_SHUTDOWN"
+            27 -> "DEVICE_STARTUP"
+            else -> "UNKNOWN_$type"
         }
     }
 }
