@@ -2,6 +2,7 @@ package com.juan.habitos.data.remote
 
 import com.juan.habitos.domain.model.DeviceCredentials
 import com.juan.habitos.domain.model.Profile
+import com.juan.habitos.domain.model.ActivitySelection
 import com.juan.habitos.domain.repository.ProfileLocalStore
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.runTest
@@ -24,16 +25,22 @@ private class SuggestionProfileStore : ProfileLocalStore {
 }
 
 private class SuggestionApiHandler : InvocationHandler {
-    var response = ActivitySuggestionsResponseDto("voluntary", emptyList())
+    var response = ActivitySuggestionsResponseDto(context = "voluntary", activities = emptyList())
+    var selectionResponse = ActivitySelectionResponseDto()
     var failure: Exception? = null
-    val calls = mutableListOf<List<Any?>>()
+    val calls = mutableListOf<Pair<String, List<Any?>>>()
 
     override fun invoke(proxy: Any, method: Method, args: Array<out Any?>?): Any? {
         return when (method.name) {
             "getActivitySuggestions" -> {
-                calls += args.orEmpty().toList().dropLast(1)
+                calls += method.name to args.orEmpty().toList().dropLast(1)
                 failure?.let { throw it }
                 response
+            }
+            "createActivitySelection" -> {
+                calls += method.name to args.orEmpty().toList().dropLast(1)
+                failure?.let { throw it }
+                selectionResponse
             }
             "toString" -> "SuggestionApi"
             "hashCode" -> System.identityHashCode(proxy)
@@ -68,14 +75,15 @@ private fun suggestionHttpException(code: Int) = HttpException(
 class ActivitySuggestionRepositoryTest {
     @Test fun `response with activities uses current profile Device bearer voluntary context and keeps at most three`() = runTest {
         val handler = SuggestionApiHandler().apply {
-            response = ActivitySuggestionsResponseDto("voluntary", (1..4).map(::suggestionDto))
+            response = ActivitySuggestionsResponseDto("offer-1", "voluntary", (1..4).map(::suggestionDto))
         }
         val repository = repository(handler)
 
         val result = repository.suggestions()
 
-        assertEquals(listOf("activity-1", "activity-2", "activity-3"), result.map { it.id })
-        val args = handler.calls.single()
+        assertEquals("offer-1", result.offerId)
+        assertEquals(listOf("activity-1", "activity-2", "activity-3"), result.activities.map { it.id })
+        val args = handler.calls.single().second
         assertEquals("profile-1", args[0])
         assertEquals("Bearer device-jwt", args[1])
         assertEquals("voluntary", (args[2] as ActivitySuggestionsRequest).context)
@@ -83,13 +91,13 @@ class ActivitySuggestionRepositoryTest {
 
     @Test fun `response with one activity remains selectable`() = runTest {
         val handler = SuggestionApiHandler().apply {
-            response = ActivitySuggestionsResponseDto("voluntary", listOf(suggestionDto(1)))
+            response = ActivitySuggestionsResponseDto("offer-1", "voluntary", listOf(suggestionDto(1)))
         }
 
         val result = repository(handler).suggestions()
 
-        assertEquals(1, result.size)
-        assertEquals("Idea 1", result.single().title)
+        assertEquals(1, result.activities.size)
+        assertEquals("Idea 1", result.activities.single().title)
     }
 
     @Test fun `empty response stays empty without fallback`() = runTest {
@@ -97,7 +105,7 @@ class ActivitySuggestionRepositoryTest {
 
         val result = repository(handler).suggestions()
 
-        assertTrue(result.isEmpty())
+        assertTrue(result.activities.isEmpty())
     }
 
     @Test fun `HTTP error is propagated instead of returning hardcoded activities`() = runTest {
@@ -111,6 +119,26 @@ class ActivitySuggestionRepositoryTest {
         }
 
         assertEquals(503, status)
+    }
+
+    @Test fun `selection uses current profile Device bearer and exact payload`() = runTest {
+        val handler = SuggestionApiHandler()
+        val selection = ActivitySelection(
+            selectionId = "selection-1",
+            offerId = "offer-1",
+            activityId = "activity-2",
+            selectedAtEpochMillis = 1_234_567_890L,
+        )
+
+        repository(handler).registerSelection(selection)
+
+        val args = handler.calls.single().second
+        assertEquals("profile-1", args[0])
+        assertEquals("Bearer device-jwt", args[1])
+        assertEquals(
+            ActivitySelectionRequest("selection-1", "offer-1", "activity-2", 1_234_567_890L),
+            args[2],
+        )
     }
 
     private fun repository(handler: SuggestionApiHandler) = RemoteActivitySuggestionRepository(

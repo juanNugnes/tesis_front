@@ -17,11 +17,15 @@ class FakeUsageRepository : UsageRepository, DeviceUsageDataSource {
 
 /** Demo/preview-only suggestions. Non-demo builds always use the backend repository. */
 class PreviewActivitySuggestionRepository : ActivitySuggestionRepository {
-    override suspend fun suggestions() = listOf(
-        ActivitySuggestion("demo-draw", "Dibujá algo que te guste", "Elegí colores y creá un dibujo libre.", "CREATIVE", "LOW", false, false, false),
-        ActivitySuggestion("demo-move", "Bailá una canción", "Poné una canción y movete a tu manera.", "MOVEMENT", "MEDIUM", false, false, true),
-        ActivitySuggestion("demo-story", "Inventá una historia", "Imaginá un personaje y contá una aventura.", "STORIES", "LOW", true, false, false),
+    override suspend fun suggestions() = ActivitySuggestionOffer(
+        offerId = null,
+        activities = listOf(
+            ActivitySuggestion("demo-draw", "Dibujá algo que te guste", "Elegí colores y creá un dibujo libre.", "CREATIVE", "LOW", false, false, false),
+            ActivitySuggestion("demo-move", "Bailá una canción", "Poné una canción y movete a tu manera.", "MOVEMENT", "MEDIUM", false, false, true),
+            ActivitySuggestion("demo-story", "Inventá una historia", "Imaginá un personaje y contá una aventura.", "STORIES", "LOW", true, false, false),
+        ),
     )
+    override suspend fun registerSelection(selection: ActivitySelection) = Unit
 }
 class FakeAlertRepository : AlertRepository {
     override suspend fun alerts() = listOf(

@@ -24,7 +24,7 @@ import kotlinx.coroutines.launch
 private val ChildCardColor = Color.White.copy(alpha = .11f)
 private val ChildBorderColor = Color.White.copy(alpha = .20f)
 
-@Composable fun ChildHomeScreen(state: ChildHomeUiState, onLock: () -> Unit, onAnotherActivity: () -> Unit, onStartActivity: () -> Unit, onFinishActivity: () -> Unit, onRetryActivity: () -> Unit) {
+@Composable fun ChildHomeScreen(state: ChildHomeUiState, onLock: () -> Unit, onAnotherActivity: () -> Unit, onStartActivity: () -> Unit, onFinishActivity: () -> Unit, onRetryActivity: () -> Unit, onRetrySelection: () -> Unit) {
     val gradient = Brush.verticalGradient(listOf(Color(0xFF5B21B6), Color(0xFF4F46E5), Color(0xFF2563EB)))
     LazyColumn(
         modifier = Modifier.fillMaxSize().background(gradient).statusBarsPadding(),
@@ -34,7 +34,7 @@ private val ChildBorderColor = Color.White.copy(alpha = .20f)
         item { ChildHeader(state, onLock) }
         item { DaySceneCard(state.profile.avatar, state.chosenActivities) }
         item { DayUsageSummary(state.usage.currentMinutes, state.habitualUsageMinutes) }
-        item { ActivitySuggestionCard(state.profile.avatar, state.activityState, onAnotherActivity, onStartActivity, onFinishActivity, onRetryActivity) }
+        item { ActivitySuggestionCard(state.profile.avatar, state.activityState, state.selectionRegistrationFailed, onAnotherActivity, onStartActivity, onFinishActivity, onRetryActivity, onRetrySelection) }
         item { DayPeriodUsageCard(state.periodUsage) }
         item { ActivityHistory(state.chosenActivities) }
         item { Spacer(Modifier.navigationBarsPadding()) }
@@ -78,7 +78,7 @@ private val ChildBorderColor = Color.White.copy(alpha = .20f)
 }
 private fun periodPresentation(period: DayPeriod) = when (period) { DayPeriod.MORNING -> "🌅" to "Mañana"; DayPeriod.AFTERNOON -> "☀️" to "Tarde"; DayPeriod.NIGHT -> "🌙" to "Noche" }
 
-@Composable fun ActivitySuggestionCard(avatar: String, activityState: ActivityState, onAnotherIdea: () -> Unit, onStart: () -> Unit, onFinish: () -> Unit, onRetry: () -> Unit) {
+@Composable fun ActivitySuggestionCard(avatar: String, activityState: ActivityState, selectionRegistrationFailed: Boolean, onAnotherIdea: () -> Unit, onStart: () -> Unit, onFinish: () -> Unit, onRetry: () -> Unit, onRetrySelection: () -> Unit) {
     val scope = rememberCoroutineScope()
     val avatarScale = remember { Animatable(1f) }
     val refreshRotation = remember { Animatable(0f) }
@@ -101,6 +101,7 @@ private fun periodPresentation(period: DayPeriod) = when (period) { DayPeriod.MO
         Surface(color = Color.White.copy(.12f), shape = RoundedCornerShape(18.dp), border = BorderStroke(1.dp, Color.White.copy(.16f))) { Column(Modifier.fillMaxWidth().padding(18.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(7.dp)) { Text(currentState.activity.emoji, fontSize = 39.sp); Text(currentState.activity.title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 17.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center); Text(currentState.activity.description, color = Color.White.copy(.78f), fontSize = 13.sp, lineHeight = 18.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center) } }
         Button(onClick = { react(); onStart() }, modifier = Modifier.fillMaxWidth().height(50.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFF7F5FF), contentColor = AppColors.PurpleUi), shape = RoundedCornerShape(14.dp)) { Text("Empezar actividad", fontWeight = FontWeight.Bold) }
         TextButton(onClick = { react(); scope.launch { refreshRotation.snapTo(0f); refreshRotation.animateTo(360f, tween(320, easing = FastOutSlowInEasing)); refreshRotation.snapTo(0f) }; onAnotherIdea() }, modifier = Modifier.align(Alignment.CenterHorizontally)) { Text("🔄", Modifier.graphicsLayer { rotationZ = refreshRotation.value }, color = Color(0xFFFFE08A)); Spacer(Modifier.width(7.dp)); Text("Otra idea", color = Color(0xFFFFE08A), fontWeight = FontWeight.Bold) }
+        if (selectionRegistrationFailed) SelectionRetry(onRetrySelection)
     }
     is ActivityState.Running -> Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) { Text(avatar, Modifier.graphicsLayer { scaleX = avatarScale.value; scaleY = avatarScale.value }, fontSize = 28.sp); Spacer(Modifier.width(8.dp)); Text("Actividad en curso", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp) }
@@ -108,8 +109,16 @@ private fun periodPresentation(period: DayPeriod) = when (period) { DayPeriod.MO
         Text(currentState.activity.title, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
         Text(currentState.activity.description, color = Color.White.copy(.72f), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
         Button(onClick = { react(); finishReaction = true; scope.launch { celebrationProgress.snapTo(0f); celebrationProgress.animateTo(1f, tween(1300, easing = FastOutSlowInEasing)); finishReaction = false }; onFinish() }, modifier = Modifier.fillMaxWidth().height(50.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFF7F5FF), contentColor = AppColors.PurpleUi), shape = RoundedCornerShape(14.dp)) { Text("Finalizar actividad", fontWeight = FontWeight.Bold) }
+        if (selectionRegistrationFailed) SelectionRetry(onRetrySelection)
     }
 } }; if (finishReaction) CelebrationOverlay(celebrationProgress.value) } } }
+
+@Composable private fun SelectionRetry(onRetry: () -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text("No pudimos guardar tu elección.", Modifier.weight(1f), color = Color.White.copy(.68f), fontSize = 12.sp)
+        TextButton(onClick = onRetry) { Text("Reintentar", color = Color(0xFFFFE08A), fontSize = 12.sp) }
+    }
+}
 
 private data class CelebrationParticle(val xFraction: Float, val size: Dp, val travel: Dp, val color: Color, val rotation: Float)
 private val celebrationParticles = listOf(

@@ -1,6 +1,8 @@
 package com.juan.habitos.data.remote
 
 import com.juan.habitos.domain.model.ActivitySuggestion
+import com.juan.habitos.domain.model.ActivitySuggestionOffer
+import com.juan.habitos.domain.model.ActivitySelection
 import com.juan.habitos.domain.repository.ActivitySuggestionRepository
 import com.juan.habitos.domain.repository.ProfileLocalStore
 import kotlinx.coroutines.flow.first
@@ -16,17 +18,37 @@ class RemoteActivitySuggestionRepository(
         }
     }
 
-    override suspend fun suggestions(): List<ActivitySuggestion> {
-        val profileId = requireNotNull(profileStore.profile.first()?.id) {
-            "The current profile does not have a backend id"
-        }
-        return authorization.execute { header ->
+    override suspend fun suggestions(): ActivitySuggestionOffer {
+        val response = authorization.execute { header ->
             api.getActivitySuggestions(
-                profileId = profileId,
+                profileId = currentProfileId(),
                 authorization = header,
                 request = ActivitySuggestionsRequest(context = VOLUNTARY_CONTEXT),
             )
-        }.activities.take(MAX_SUGGESTIONS).map { it.toDomain() }
+        }
+        return ActivitySuggestionOffer(
+            offerId = response.offerId,
+            activities = response.activities.take(MAX_SUGGESTIONS).map { it.toDomain() },
+        )
+    }
+
+    override suspend fun registerSelection(selection: ActivitySelection) {
+        authorization.execute { header ->
+            api.createActivitySelection(
+                profileId = currentProfileId(),
+                authorization = header,
+                request = ActivitySelectionRequest(
+                    selectionId = selection.selectionId,
+                    offerId = selection.offerId,
+                    activityId = selection.activityId,
+                    selectedAtEpochMillis = selection.selectedAtEpochMillis,
+                ),
+            )
+        }
+    }
+
+    private suspend fun currentProfileId() = requireNotNull(profileStore.profile.first()?.id) {
+        "The current profile does not have a backend id"
     }
 
     private fun ActivitySuggestionDto.toDomain() = ActivitySuggestion(

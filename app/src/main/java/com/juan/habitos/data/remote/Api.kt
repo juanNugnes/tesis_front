@@ -77,8 +77,23 @@ data class ActivitySuggestionDto(
 )
 
 data class ActivitySuggestionsResponseDto(
+    @SerializedName("offer_id") val offerId: String? = null,
     val context: String,
     val activities: List<ActivitySuggestionDto>,
+)
+
+data class ActivitySelectionRequest(
+    @SerializedName("selection_id") val selectionId: String,
+    @SerializedName("offer_id") val offerId: String,
+    @SerializedName("activity_id") val activityId: String,
+    @SerializedName("selected_at_epoch_millis") val selectedAtEpochMillis: Long,
+)
+
+data class ActivitySelectionResponseDto(
+    @SerializedName("selection_id") val selectionId: String? = null,
+    @SerializedName("offer_id") val offerId: String? = null,
+    @SerializedName("activity_id") val activityId: String? = null,
+    @SerializedName("selected_at_epoch_millis") val selectedAtEpochMillis: Long? = null,
 )
 
 data class ProfileContextRequest(
@@ -279,6 +294,12 @@ interface HabitsApi {
         @Header("Authorization") authorization: String,
         @Body request: ActivitySuggestionsRequest,
     ): ActivitySuggestionsResponseDto = error("Not implemented")
+    @POST("api/v1/profiles/{profileId}/activity-selections")
+    suspend fun createActivitySelection(
+        @Path("profileId") profileId: String,
+        @Header("Authorization") authorization: String,
+        @Body request: ActivitySelectionRequest,
+    ): ActivitySelectionResponseDto = error("Not implemented")
     @POST("api/v1/profiles/{profileId}/contexts") suspend fun createProfileContext(@Path("profileId") profileId: String, @Header("Authorization") authorization: String, @Body request: ProfileContextRequest): ProfileContextDto
     @GET("api/v1/profiles/{profileId}/contexts") suspend fun getProfileContexts(@Path("profileId") profileId: String, @Header("Authorization") authorization: String): List<ProfileContextDto>
     @GET("api/v1/profiles/{profileId}/contexts/active") suspend fun getActiveProfileContexts(@Path("profileId") profileId: String, @Header("Authorization") authorization: String): List<ProfileContextDto>

@@ -30,6 +30,16 @@ data class ActivitySuggestion(
     val requiresOtherPerson: Boolean,
     val mayRequireDeviceInteraction: Boolean,
 )
+data class ActivitySuggestionOffer(
+    val offerId: String?,
+    val activities: List<ActivitySuggestion>,
+)
+data class ActivitySelection(
+    val selectionId: String,
+    val offerId: String,
+    val activityId: String,
+    val selectedAtEpochMillis: Long,
+)
 data class Alert(
     val id: String,
     val type: String,

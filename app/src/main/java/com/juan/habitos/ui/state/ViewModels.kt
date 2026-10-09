@@ -10,6 +10,7 @@ import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.Duration
 import java.time.Instant
+import java.util.UUID
 
 data class ProfileUiState(
     val name: String = "",
@@ -396,14 +397,20 @@ data class ChildHomeUiState(
     val apps: List<AppUsage> = emptyList(),
     val activityState: ActivityState = ActivityState.Loading,
     val chosenActivities: Int = 2,
+    val selectionRegistrationFailed: Boolean = false,
 )
 class ChildViewModel(
     profileRepo: ProfileRepository,
     private val usageRepo: UsageRepository,
     private val activitySuggestionRepository: ActivitySuggestionRepository,
+    private val selectionId: () -> String = { UUID.randomUUID().toString() },
+    private val nowEpochMillis: () -> Long = System::currentTimeMillis,
 ) : ViewModel() {
     private val _state = MutableStateFlow(ChildHomeUiState()); val state = _state.asStateFlow()
     private var suggestedActivities: List<SuggestedActivityUiModel> = emptyList()
+    private var currentOfferId: String? = null
+    private var pendingSelection: ActivitySelection? = null
+    private var selectionRegistrationInFlight = false
     init {
         viewModelScope.launch { profileRepo.profile.filterNotNull().collect { profile -> _state.update { it.copy(profile = profile) } } }
         viewModelScope.launch { _state.update { it.copy(usage = usageRepo.daily(), apps = usageRepo.apps()) } }
@@ -412,7 +419,9 @@ class ChildViewModel(
     fun loadActivitySuggestions() = viewModelScope.launch {
         _state.update { it.copy(activityState = ActivityState.Loading) }
         try {
-            suggestedActivities = activitySuggestionRepository.suggestions().map { it.toUiModel() }
+            val offer = activitySuggestionRepository.suggestions()
+            currentOfferId = offer.offerId
+            suggestedActivities = offer.activities.map { it.toUiModel() }
             _state.update {
                 it.copy(
                     activityState = suggestedActivities.firstOrNull()
@@ -423,6 +432,7 @@ class ChildViewModel(
         } catch (exception: CancellationException) {
             throw exception
         } catch (_: Exception) {
+            currentOfferId = null
             suggestedActivities = emptyList()
             _state.update {
                 it.copy(activityState = ActivityState.Error("No pudimos cargar una sugerencia. Intentá nuevamente."))
@@ -437,11 +447,50 @@ class ChildViewModel(
     }
     fun startActivity() {
         val activity = (state.value.activityState as? ActivityState.Suggested)?.activity ?: return
-        _state.update { it.copy(activityState = ActivityState.Running(activity), chosenActivities = it.chosenActivities + 1) }
+        pendingSelection = currentOfferId?.let { offerId ->
+            ActivitySelection(
+                selectionId = selectionId(),
+                offerId = offerId,
+                activityId = activity.activityId,
+                selectedAtEpochMillis = nowEpochMillis(),
+            )
+        }
+        _state.update {
+            it.copy(
+                activityState = ActivityState.Running(activity),
+                chosenActivities = it.chosenActivities + 1,
+                selectionRegistrationFailed = false,
+            )
+        }
+        sendPendingSelection()
     }
     fun finishActivity() {
         val activity = (state.value.activityState as? ActivityState.Running)?.activity ?: return
         _state.update { it.copy(activityState = ActivityState.Suggested(activity)) }
+    }
+    fun retryActivitySelection() = sendPendingSelection()
+
+    private fun sendPendingSelection() {
+        val selection = pendingSelection ?: return
+        if (selectionRegistrationInFlight) return
+        selectionRegistrationInFlight = true
+        viewModelScope.launch {
+            try {
+                activitySuggestionRepository.registerSelection(selection)
+                if (pendingSelection == selection) {
+                    pendingSelection = null
+                    _state.update { it.copy(selectionRegistrationFailed = false) }
+                }
+            } catch (exception: CancellationException) {
+                throw exception
+            } catch (_: Exception) {
+                if (pendingSelection == selection) {
+                    _state.update { it.copy(selectionRegistrationFailed = true) }
+                }
+            } finally {
+                selectionRegistrationInFlight = false
+            }
+        }
     }
 
     private fun ActivitySuggestion.toUiModel() = SuggestedActivityUiModel(
