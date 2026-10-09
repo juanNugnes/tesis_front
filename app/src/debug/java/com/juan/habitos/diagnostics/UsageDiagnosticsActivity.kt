@@ -173,7 +173,7 @@ class UsageDiagnosticsActivity : ComponentActivity() {
             SummaryLine("Minutos", observation.interactiveScreenMinutes?.toString() ?: "No disponible")
             SummaryLine("Milisegundos exactos", observation.interactiveScreenMillis?.toString() ?: "No disponible")
             SummaryLine("Estado", observation.status.name)
-            SummaryLine("Motivo incompleto", observation.incompleteReason?.name ?: "—")
+            SummaryLine("Motivo faltante", observation.missingReason?.name ?: "—")
             SummaryLine("Versión", observation.calculationVersion)
             SummaryLine("Runs considerados", observation.qualityEvidence.collectorRuns.size.toString())
             SummaryLine("Runs exitosos", observation.qualityEvidence.collectorRuns.count { it.status == CollectorRunQualityStatus.SUCCESS }.toString())

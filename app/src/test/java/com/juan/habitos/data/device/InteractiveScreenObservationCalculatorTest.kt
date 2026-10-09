@@ -26,10 +26,10 @@ class InteractiveScreenObservationCalculatorTest {
 
         val result = calculate(initial = "SCREEN_NON_INTERACTIVE", dayRuns = listOf(run))
 
-        assertEquals(37L, result.interactiveScreenMinutes)
+        assertEquals(37.0, result.interactiveScreenMinutes!!, 0.0)
         assertEquals(37 * minute, result.interactiveScreenMillis)
         assertEquals(InteractiveScreenObservationStatus.OBSERVED, result.status)
-        assertEquals(4, result.qualityEvidence.screenEventCount)
+        assertEquals(5, result.qualityEvidence.screenEventCount)
     }
 
     @Test fun `known interactive initial state begins interval exactly at day start`() {
@@ -37,7 +37,7 @@ class InteractiveScreenObservationCalculatorTest {
 
         val result = calculate(initial = "SCREEN_INTERACTIVE", dayRuns = listOf(run))
 
-        assertEquals(25L, result.interactiveScreenMinutes)
+        assertEquals(25.0, result.interactiveScreenMinutes!!, 0.0)
         assertEquals(25 * minute, result.interactiveScreenMillis)
     }
 
@@ -46,8 +46,8 @@ class InteractiveScreenObservationCalculatorTest {
 
         val result = calculate(initial = null, dayRuns = listOf(run))
 
-        assertEquals(InteractiveScreenObservationStatus.INCOMPLETE, result.status)
-        assertEquals(InteractiveScreenIncompleteReason.INITIAL_STATE_UNKNOWN, result.incompleteReason)
+        assertEquals(InteractiveScreenObservationStatus.MISSING, result.status)
+        assertEquals(InteractiveScreenMissingReason.INITIAL_STATE_UNKNOWN, result.missingReason)
         assertNull(result.interactiveScreenMinutes)
         assertNull(result.interactiveScreenMillis)
     }
@@ -57,7 +57,7 @@ class InteractiveScreenObservationCalculatorTest {
 
         val result = calculate(initial = "SCREEN_NON_INTERACTIVE", dayRuns = listOf(run))
 
-        assertEquals(10L, result.interactiveScreenMinutes)
+        assertEquals(10.0, result.interactiveScreenMinutes!!, 0.0)
         assertEquals(10 * minute, result.interactiveScreenMillis)
     }
 
@@ -68,7 +68,7 @@ class InteractiveScreenObservationCalculatorTest {
         )
 
         assertEquals(InteractiveScreenObservationStatus.OBSERVED_ZERO, result.status)
-        assertEquals(0L, result.interactiveScreenMinutes)
+        assertEquals(0.0, result.interactiveScreenMinutes!!, 0.0)
         assertEquals(0L, result.interactiveScreenMillis)
         assertTrue(result.qualityEvidence.coverageComplete)
     }
@@ -81,13 +81,13 @@ class InteractiveScreenObservationCalculatorTest {
 
         val result = calculate(initial = "SCREEN_NON_INTERACTIVE", dayRuns = runs)
 
-        assertEquals(InteractiveScreenObservationStatus.INCOMPLETE, result.status)
-        assertEquals(InteractiveScreenIncompleteReason.COVERAGE_GAP, result.incompleteReason)
+        assertEquals(InteractiveScreenObservationStatus.MISSING, result.status)
+        assertEquals(InteractiveScreenMissingReason.INCOMPLETE_QUERY_COVERAGE, result.missingReason)
         assertNull(result.interactiveScreenMinutes)
         assertEquals(listOf(CoverageGap(defaultStart + 10 * hour, defaultStart + 11 * hour)), result.qualityEvidence.coverageGaps)
     }
 
-    @Test fun `requested future after collection time is not treated as covered`() {
+    @Test fun `successful requested window defines F12 coverage independently of collection time`() {
         val collectedAt = defaultStart + 12 * hour
         val run = UsageCollectorRunFactory.success(
             collectorRunId = "current-day",
@@ -101,9 +101,9 @@ class InteractiveScreenObservationCalculatorTest {
 
         val result = calculate(initial = "SCREEN_NON_INTERACTIVE", dayRuns = listOf(run))
 
-        assertEquals(InteractiveScreenObservationStatus.INCOMPLETE, result.status)
-        assertEquals(InteractiveScreenIncompleteReason.COVERAGE_GAP, result.incompleteReason)
-        assertEquals(listOf(CoverageGap(collectedAt, defaultEnd)), result.qualityEvidence.coverageGaps)
+        assertEquals(InteractiveScreenObservationStatus.OBSERVED_ZERO, result.status)
+        assertEquals(0.0, result.interactiveScreenMinutes!!, 0.0)
+        assertTrue(result.qualityEvidence.coverageGaps.isEmpty())
     }
 
     @Test fun `failed query does not invalidate another successful run covering same interval`() {
@@ -128,15 +128,16 @@ class InteractiveScreenObservationCalculatorTest {
 
         val result = calculate(initial = "SCREEN_NON_INTERACTIVE", dayRuns = listOf(a, b))
 
-        assertEquals(30L, result.interactiveScreenMinutes)
+        assertEquals(30.0, result.interactiveScreenMinutes!!, 0.0)
         assertEquals(
             listOf(
+                CanonicalCoverageSegment("previous-$defaultStart", defaultStart - 1, defaultStart),
                 CanonicalCoverageSegment("a", defaultStart, defaultStart + 12 * hour),
                 CanonicalCoverageSegment("b", defaultStart + 12 * hour, defaultEnd),
             ),
             result.qualityEvidence.canonicalSegments,
         )
-        assertEquals(2, result.qualityEvidence.screenEventCount)
+        assertEquals(3, result.qualityEvidence.screenEventCount)
     }
 
     @Test fun `events sharing timestamp remain ordered by query ordinal and are not deduplicated`() {
@@ -152,20 +153,19 @@ class InteractiveScreenObservationCalculatorTest {
         assertEquals(InteractiveScreenObservationStatus.OBSERVED_ZERO, first.status)
         assertEquals(0L, first.interactiveScreenMillis)
         assertEquals(defaultEnd - timestamp, second.interactiveScreenMillis)
-        assertEquals(2, first.qualityEvidence.screenEventCount)
-        assertEquals(2, second.qualityEvidence.screenEventCount)
+        assertEquals(3, first.qualityEvidence.screenEventCount)
+        assertEquals(3, second.qualityEvidence.screenEventCount)
     }
 
     @Test fun `events outside half open day do not affect result`() {
-        val run = run("day", defaultStart, defaultEnd,
-            event(defaultStart - minute, "SCREEN_INTERACTIVE"),
+        val run = run("day", defaultStart, defaultEnd + 2 * minute,
             event(defaultEnd, "SCREEN_INTERACTIVE"),
             event(defaultEnd + minute, "SCREEN_NON_INTERACTIVE"))
 
         val result = calculate(initial = "SCREEN_NON_INTERACTIVE", dayRuns = listOf(run))
 
         assertEquals(InteractiveScreenObservationStatus.OBSERVED_ZERO, result.status)
-        assertEquals(0, result.qualityEvidence.screenEventCount)
+        assertEquals(1, result.qualityEvidence.screenEventCount)
     }
 
     @Test fun `interval crossing midnight is allocated independently to each day`() {
@@ -182,8 +182,8 @@ class InteractiveScreenObservationCalculatorTest {
             previousTimestamp = midnight - 10 * minute,
         )
 
-        assertEquals(10L, dayOne.interactiveScreenMinutes)
-        assertEquals(10L, dayTwo.interactiveScreenMinutes)
+        assertEquals(10.0, dayOne.interactiveScreenMinutes!!, 0.0)
+        assertEquals(10.0, dayTwo.interactiveScreenMinutes!!, 0.0)
     }
 
     @Test fun `non twenty four hour day uses supplied real epoch bounds`() {
@@ -199,7 +199,7 @@ class InteractiveScreenObservationCalculatorTest {
             dayEnd = window.dayEndEpochMillis,
         )
 
-        assertEquals(23 * 60L, result.interactiveScreenMinutes)
+        assertEquals(23 * 60.0, result.interactiveScreenMinutes!!, 0.0)
         assertEquals(window.dayEndEpochMillis - window.dayStartEpochMillis, result.interactiveScreenMillis)
         assertEquals(result.qualityEvidence.expectedCoverageMillis, result.qualityEvidence.coveredMillis)
     }
@@ -213,7 +213,7 @@ class InteractiveScreenObservationCalculatorTest {
 
         val result = calculate(initial = "SCREEN_NON_INTERACTIVE", dayRuns = listOf(run))
 
-        assertEquals(2 * 60L, result.interactiveScreenMinutes)
+        assertEquals(2 * 60.0, result.interactiveScreenMinutes!!, 0.0)
         assertEquals(2 * hour, result.interactiveScreenMillis)
     }
 
@@ -223,19 +223,19 @@ class InteractiveScreenObservationCalculatorTest {
 
         val result = calculate(initial = "SCREEN_NON_INTERACTIVE", dayRuns = listOf(run))
 
-        assertEquals(10L, result.interactiveScreenMinutes)
+        assertEquals(10.0, result.interactiveScreenMinutes!!, 0.0)
     }
 
     @Test fun `event exactly at day end is excluded`() {
-        val run = run("day", defaultStart, defaultEnd, event(defaultEnd, "SCREEN_INTERACTIVE"))
+        val run = run("day", defaultStart, defaultEnd + minute, event(defaultEnd, "SCREEN_INTERACTIVE"))
 
         val result = calculate(initial = "SCREEN_NON_INTERACTIVE", dayRuns = listOf(run))
 
         assertEquals(InteractiveScreenObservationStatus.OBSERVED_ZERO, result.status)
-        assertEquals(0, result.qualityEvidence.screenEventCount)
+        assertEquals(1, result.qualityEvidence.screenEventCount)
     }
 
-    @Test fun `millis are summed before explicit floor conversion to minutes`() {
+    @Test fun `millis are summed before exact conversion to fractional minutes`() {
         val duration = 90_001L
         val run = run("day", defaultStart, defaultEnd,
             event(defaultStart + minute, "SCREEN_INTERACTIVE"),
@@ -244,9 +244,9 @@ class InteractiveScreenObservationCalculatorTest {
         val result = calculate(initial = "SCREEN_NON_INTERACTIVE", dayRuns = listOf(run))
 
         assertEquals(duration, result.interactiveScreenMillis)
-        assertEquals(1L, result.interactiveScreenMinutes)
-        assertEquals("FLOOR_AFTER_TOTAL_MILLIS", result.minuteConversion)
-        assertEquals("android-interactive-screen-v1", result.calculationVersion)
+        assertEquals(duration / 60_000.0, result.interactiveScreenMinutes!!, 0.0)
+        assertEquals("TOTAL_MILLIS_DIVIDED_BY_60000", result.minuteConversion)
+        assertEquals("interactive-screen-reference-v3-draft", result.calculationVersion)
     }
 
     @Test fun `positive sub minute duration is observed and not observed zero`() {
@@ -257,7 +257,7 @@ class InteractiveScreenObservationCalculatorTest {
         val result = calculate(initial = "SCREEN_NON_INTERACTIVE", dayRuns = listOf(run))
 
         assertEquals(1L, result.interactiveScreenMillis)
-        assertEquals(0L, result.interactiveScreenMinutes)
+        assertEquals(1.0 / 60_000.0, result.interactiveScreenMinutes!!, 0.0)
         assertEquals(InteractiveScreenObservationStatus.OBSERVED, result.status)
     }
 
