@@ -11,6 +11,8 @@ import com.juan.habitos.data.remote.RemoteDeviceRepository
 import com.juan.habitos.data.remote.RemoteAdultAuthRepository
 import com.juan.habitos.data.remote.RemoteLinkRepository
 import com.juan.habitos.data.remote.AdultRequestAuthorization
+import com.juan.habitos.data.remote.DeviceRequestAuthorization
+import com.juan.habitos.data.remote.RemoteActivitySuggestionRepository
 import com.juan.habitos.data.remote.RemoteMonitoringConsentRepository
 import com.juan.habitos.domain.model.*
 import kotlinx.coroutines.flow.first
@@ -21,6 +23,7 @@ class HabitosApplication : Application() {
     private val localProfileContextStore by lazy { DataStoreProfileContextStore(this) }
     private val localDeviceIdentityStore by lazy { DataStoreDeviceIdentityStore(this) }
     private val adultRequestAuthorization by lazy { AdultRequestAuthorization(deviceSessionRepository) }
+    private val deviceRequestAuthorization by lazy { DeviceRequestAuthorization(localDeviceIdentityStore) }
     val habitsApi by lazy { HabitsApiClient.api }
     val profileRepository by lazy { CachedProfileRepository(localProfileStore, habitsApi, localDeviceIdentityStore) }
     val adultProfileRepository by lazy { CachedProfileRepository(localProfileStore, habitsApi, adultRequestAuthorization) }
@@ -28,6 +31,10 @@ class HabitosApplication : Application() {
     val adultPreferencesRepository by lazy { CachedChildPreferencesRepository(localChildPreferencesStore, localProfileStore, habitsApi, adultRequestAuthorization) }
     val profileContextRepository by lazy { CachedProfileContextRepository(localProfileContextStore, localProfileStore, habitsApi, remoteEnabled = !BuildConfig.DEMO_MODE, authorization = adultRequestAuthorization) }
     val monitoringConsentRepository by lazy { RemoteMonitoringConsentRepository(habitsApi, adultRequestAuthorization) }
+    val activitySuggestionRepository by lazy {
+        if (BuildConfig.DEMO_MODE) PreviewActivitySuggestionRepository()
+        else RemoteActivitySuggestionRepository(localProfileStore, habitsApi, deviceRequestAuthorization)
+    }
     val deviceSessionRepository by lazy { DataStoreDeviceSessionRepository(this) }
     val deviceRepository by lazy { RemoteDeviceRepository(localDeviceIdentityStore, localProfileStore, habitsApi) }
     val authRepository by lazy { if (BuildConfig.DEMO_MODE) MockAuthRepository() else RemoteAdultAuthRepository(habitsApi, deviceSessionRepository) }

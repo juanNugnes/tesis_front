@@ -34,6 +34,7 @@ interface ProfileContextRepository {
     suspend fun delete(contextId: String)
 }
 interface UsageRepository { suspend fun daily(period: DashboardPeriod = DashboardPeriod.TODAY): DailyUsage; suspend fun apps(): List<AppUsage>; suspend fun recommendation(): Recommendation }
+interface ActivitySuggestionRepository { suspend fun suggestions(): List<ActivitySuggestion> }
 interface AlertRepository { suspend fun alerts(): List<Alert> }
 interface PinStore { suspend fun save(pin: String); suspend fun verify(pin: String): Boolean }
 interface DeviceUsageDataSource { suspend fun getDailyUsage(): DailyUsage; suspend fun getApplicationUsage(): List<AppUsage> }

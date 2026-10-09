@@ -24,7 +24,7 @@ import kotlinx.coroutines.launch
 private val ChildCardColor = Color.White.copy(alpha = .11f)
 private val ChildBorderColor = Color.White.copy(alpha = .20f)
 
-@Composable fun ChildHomeScreen(state: ChildHomeUiState, onLock: () -> Unit, onAnotherActivity: () -> Unit, onStartActivity: () -> Unit, onFinishActivity: () -> Unit) {
+@Composable fun ChildHomeScreen(state: ChildHomeUiState, onLock: () -> Unit, onAnotherActivity: () -> Unit, onStartActivity: () -> Unit, onFinishActivity: () -> Unit, onRetryActivity: () -> Unit) {
     val gradient = Brush.verticalGradient(listOf(Color(0xFF5B21B6), Color(0xFF4F46E5), Color(0xFF2563EB)))
     LazyColumn(
         modifier = Modifier.fillMaxSize().background(gradient).statusBarsPadding(),
@@ -34,7 +34,7 @@ private val ChildBorderColor = Color.White.copy(alpha = .20f)
         item { ChildHeader(state, onLock) }
         item { DaySceneCard(state.profile.avatar, state.chosenActivities) }
         item { DayUsageSummary(state.usage.currentMinutes, state.habitualUsageMinutes) }
-        item { ActivitySuggestionCard(state.profile.avatar, state.activityState, onAnotherActivity, onStartActivity, onFinishActivity) }
+        item { ActivitySuggestionCard(state.profile.avatar, state.activityState, onAnotherActivity, onStartActivity, onFinishActivity, onRetryActivity) }
         item { DayPeriodUsageCard(state.periodUsage) }
         item { ActivityHistory(state.chosenActivities) }
         item { Spacer(Modifier.navigationBarsPadding()) }
@@ -78,7 +78,7 @@ private val ChildBorderColor = Color.White.copy(alpha = .20f)
 }
 private fun periodPresentation(period: DayPeriod) = when (period) { DayPeriod.MORNING -> "🌅" to "Mañana"; DayPeriod.AFTERNOON -> "☀️" to "Tarde"; DayPeriod.NIGHT -> "🌙" to "Noche" }
 
-@Composable fun ActivitySuggestionCard(avatar: String, activityState: ActivityState, onAnotherIdea: () -> Unit, onStart: () -> Unit, onFinish: () -> Unit) {
+@Composable fun ActivitySuggestionCard(avatar: String, activityState: ActivityState, onAnotherIdea: () -> Unit, onStart: () -> Unit, onFinish: () -> Unit, onRetry: () -> Unit) {
     val scope = rememberCoroutineScope()
     val avatarScale = remember { Animatable(1f) }
     val refreshRotation = remember { Animatable(0f) }
@@ -86,18 +86,27 @@ private fun periodPresentation(period: DayPeriod) = when (period) { DayPeriod.MO
     var finishReaction by remember { mutableStateOf(false) }
     fun react() { scope.launch { avatarScale.snapTo(1f); avatarScale.animateTo(1.07f, tween(110)); avatarScale.animateTo(1f, tween(180, easing = FastOutSlowInEasing)) } }
     ChildCard(containerColor = Color(0xFF312E81).copy(.88f), borderColor = Color(0xFFFFE08A).copy(.55f)) { Box { AnimatedContent(targetState = activityState, transitionSpec = { (slideInHorizontally(tween(300, easing = FastOutSlowInEasing)) { it / 3 } + fadeIn(tween(260))) togetherWith (slideOutHorizontally(tween(260)) { -it / 3 } + fadeOut(tween(180))) }, label = "activity") { currentState -> when (currentState) {
+    ActivityState.Loading -> Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        CircularProgressIndicator(color = Color(0xFFFFE08A))
+        Text("Buscando una idea para vos…", color = Color.White.copy(.82f))
+    }
+    ActivityState.Empty -> Text("No tenemos una sugerencia para mostrar ahora.", Modifier.fillMaxWidth().padding(vertical = 12.dp), color = Color.White, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+    is ActivityState.Error -> Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text(currentState.message, color = Color.White, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+        Button(onClick = onRetry, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFF7F5FF), contentColor = AppColors.PurpleUi)) { Text("Reintentar", fontWeight = FontWeight.Bold) }
+    }
     is ActivityState.Suggested -> Column(verticalArrangement = Arrangement.spacedBy(13.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) { Text(avatar, Modifier.graphicsLayer { scaleX = avatarScale.value; scaleY = avatarScale.value }, fontSize = 25.sp); Spacer(Modifier.width(8.dp)); Text("Tengo una idea para vos", color = Color(0xFFFFE08A), fontWeight = FontWeight.Bold, fontSize = 15.sp) }
         Text("¿Querés hacer algo diferente?", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
-        Surface(color = Color.White.copy(.12f), shape = RoundedCornerShape(18.dp), border = BorderStroke(1.dp, Color.White.copy(.16f))) { Column(Modifier.fillMaxWidth().padding(18.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(7.dp)) { Text(currentState.activity.emoji, fontSize = 39.sp); Text(currentState.activity.text, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 17.sp); currentState.activity.suggestedDurationMinutes?.let { Text("Duración sugerida: $it min", color = Color.White.copy(.75f), fontSize = 12.sp) } } }
+        Surface(color = Color.White.copy(.12f), shape = RoundedCornerShape(18.dp), border = BorderStroke(1.dp, Color.White.copy(.16f))) { Column(Modifier.fillMaxWidth().padding(18.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(7.dp)) { Text(currentState.activity.emoji, fontSize = 39.sp); Text(currentState.activity.title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 17.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center); Text(currentState.activity.description, color = Color.White.copy(.78f), fontSize = 13.sp, lineHeight = 18.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center) } }
         Button(onClick = { react(); onStart() }, modifier = Modifier.fillMaxWidth().height(50.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFF7F5FF), contentColor = AppColors.PurpleUi), shape = RoundedCornerShape(14.dp)) { Text("Empezar actividad", fontWeight = FontWeight.Bold) }
         TextButton(onClick = { react(); scope.launch { refreshRotation.snapTo(0f); refreshRotation.animateTo(360f, tween(320, easing = FastOutSlowInEasing)); refreshRotation.snapTo(0f) }; onAnotherIdea() }, modifier = Modifier.align(Alignment.CenterHorizontally)) { Text("🔄", Modifier.graphicsLayer { rotationZ = refreshRotation.value }, color = Color(0xFFFFE08A)); Spacer(Modifier.width(7.dp)); Text("Otra idea", color = Color(0xFFFFE08A), fontWeight = FontWeight.Bold) }
     }
     is ActivityState.Running -> Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) { Text(avatar, Modifier.graphicsLayer { scaleX = avatarScale.value; scaleY = avatarScale.value }, fontSize = 28.sp); Spacer(Modifier.width(8.dp)); Text("Actividad en curso", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp) }
         Text(currentState.activity.emoji, fontSize = 42.sp)
-        Text(currentState.activity.text, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-        currentState.activity.suggestedDurationMinutes?.let { Text("Duración sugerida: $it min", color = Color.White.copy(.72f)) }
+        Text(currentState.activity.title, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+        Text(currentState.activity.description, color = Color.White.copy(.72f), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
         Button(onClick = { react(); finishReaction = true; scope.launch { celebrationProgress.snapTo(0f); celebrationProgress.animateTo(1f, tween(1300, easing = FastOutSlowInEasing)); finishReaction = false }; onFinish() }, modifier = Modifier.fillMaxWidth().height(50.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFF7F5FF), contentColor = AppColors.PurpleUi), shape = RoundedCornerShape(14.dp)) { Text("Finalizar actividad", fontWeight = FontWeight.Bold) }
     }
 } }; if (finishReaction) CelebrationOverlay(celebrationProgress.value) } } }

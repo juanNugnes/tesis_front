@@ -371,30 +371,19 @@ class ChildPreferencesViewModel(
 
 enum class DayPeriod { MORNING, AFTERNOON, NIGHT }
 data class DayPeriodUsageUiModel(val period: DayPeriod, val minutes: Int)
-data class SuggestedActivityUiModel(val emoji: String, val text: String, val suggestedDurationMinutes: Int? = null)
+data class SuggestedActivityUiModel(
+    val activityId: String,
+    val emoji: String,
+    val title: String,
+    val description: String,
+)
 sealed interface ActivityState {
+    data object Loading : ActivityState
+    data object Empty : ActivityState
+    data class Error(val message: String) : ActivityState
     data class Suggested(val activity: SuggestedActivityUiModel) : ActivityState
     data class Running(val activity: SuggestedActivityUiModel) : ActivityState
 }
-
-private val suggestedActivities = listOf(
-    SuggestedActivityUiModel("🎵", "Bailá una canción"),
-    SuggestedActivityUiModel("🤸", "Armá una secuencia de movimientos"),
-    SuggestedActivityUiModel("⚽", "Jugá con una pelota"),
-    SuggestedActivityUiModel("🎭", "Inventá un personaje"),
-    SuggestedActivityUiModel("🦄", "Creá un animal imaginario"),
-    SuggestedActivityUiModel("🎨", "Dibujá algo que te guste"),
-    SuggestedActivityUiModel("✍️", "Inventá una historia"),
-    SuggestedActivityUiModel("📖", "Elegí algo para leer"),
-    SuggestedActivityUiModel("📚", "Volvé a una historia que te guste"),
-    SuggestedActivityUiModel("🧩", "Jugá con algo que tengas cerca"),
-    SuggestedActivityUiModel("🧱", "Construí algo"),
-    SuggestedActivityUiModel("🧸", "Creá una historia con tus juguetes"),
-    SuggestedActivityUiModel("👫", "Jugá con alguien"),
-    SuggestedActivityUiModel("💬", "Contá algo de tu día"),
-    SuggestedActivityUiModel("🤝", "Ayudá con algo"),
-    SuggestedActivityUiModel("🎧", "Escuchá una historia"),
-)
 data class ChildHomeUiState(
     val profile: Profile = Profile("", "🦊", 9),
     val usage: DailyUsage = DailyUsage(0, 180, 0),
@@ -405,14 +394,44 @@ data class ChildHomeUiState(
         DayPeriodUsageUiModel(DayPeriod.NIGHT, 30),
     ),
     val apps: List<AppUsage> = emptyList(),
-    val activityState: ActivityState = ActivityState.Suggested(suggestedActivities[5]),
+    val activityState: ActivityState = ActivityState.Loading,
     val chosenActivities: Int = 2,
 )
-class ChildViewModel(profileRepo: ProfileRepository, private val usageRepo: UsageRepository) : ViewModel() {
+class ChildViewModel(
+    profileRepo: ProfileRepository,
+    private val usageRepo: UsageRepository,
+    private val activitySuggestionRepository: ActivitySuggestionRepository,
+) : ViewModel() {
     private val _state = MutableStateFlow(ChildHomeUiState()); val state = _state.asStateFlow()
-    init { viewModelScope.launch { profileRepo.profile.filterNotNull().collect { profile -> _state.update { it.copy(profile = profile) } } }; viewModelScope.launch { _state.update { it.copy(usage = usageRepo.daily(), apps = usageRepo.apps()) } } }
+    private var suggestedActivities: List<SuggestedActivityUiModel> = emptyList()
+    init {
+        viewModelScope.launch { profileRepo.profile.filterNotNull().collect { profile -> _state.update { it.copy(profile = profile) } } }
+        viewModelScope.launch { _state.update { it.copy(usage = usageRepo.daily(), apps = usageRepo.apps()) } }
+        loadActivitySuggestions()
+    }
+    fun loadActivitySuggestions() = viewModelScope.launch {
+        _state.update { it.copy(activityState = ActivityState.Loading) }
+        try {
+            suggestedActivities = activitySuggestionRepository.suggestions().map { it.toUiModel() }
+            _state.update {
+                it.copy(
+                    activityState = suggestedActivities.firstOrNull()
+                        ?.let(ActivityState::Suggested)
+                        ?: ActivityState.Empty
+                )
+            }
+        } catch (exception: CancellationException) {
+            throw exception
+        } catch (_: Exception) {
+            suggestedActivities = emptyList()
+            _state.update {
+                it.copy(activityState = ActivityState.Error("No pudimos cargar una sugerencia. Intentá nuevamente."))
+            }
+        }
+    }
     fun showAnotherActivity() {
         val current = (state.value.activityState as? ActivityState.Suggested)?.activity ?: return
+        if (suggestedActivities.isEmpty()) return
         val nextIndex = (suggestedActivities.indexOf(current) + 1).mod(suggestedActivities.size)
         _state.update { it.copy(activityState = ActivityState.Suggested(suggestedActivities[nextIndex])) }
     }
@@ -424,6 +443,13 @@ class ChildViewModel(profileRepo: ProfileRepository, private val usageRepo: Usag
         val activity = (state.value.activityState as? ActivityState.Running)?.activity ?: return
         _state.update { it.copy(activityState = ActivityState.Suggested(activity)) }
     }
+
+    private fun ActivitySuggestion.toUiModel() = SuggestedActivityUiModel(
+        activityId = id,
+        emoji = "✨",
+        title = title,
+        description = description,
+    )
 }
 
 data class AdultAppUsageUiModel(val name: String, val icon: String, val minutes: Int)

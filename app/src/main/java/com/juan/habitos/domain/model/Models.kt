@@ -20,6 +20,16 @@ data class Profile(
 data class AppUsage(val name: String, val packageName: String, val minutes: Int, val category: String, val icon: String)
 data class DailyUsage(val currentMinutes: Int, val expectedMinutes: Int, val sessionCount: Int)
 data class Recommendation(val title: String, val description: String, val activity: String)
+data class ActivitySuggestion(
+    val id: String,
+    val title: String,
+    val description: String,
+    val category: String,
+    val activityLevel: String,
+    val bedtimeSuitable: Boolean,
+    val requiresOtherPerson: Boolean,
+    val mayRequireDeviceInteraction: Boolean,
+)
 data class Alert(
     val id: String,
     val type: String,

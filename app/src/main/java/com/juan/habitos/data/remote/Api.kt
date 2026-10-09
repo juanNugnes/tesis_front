@@ -61,6 +61,26 @@ data class ActivityPreferencesDto(
     @SerializedName("updated_at") val updatedAt: String? = null,
 )
 
+data class ActivitySuggestionsRequest(
+    val context: String,
+)
+
+data class ActivitySuggestionDto(
+    @SerializedName("activity_id") val activityId: String,
+    val title: String,
+    val description: String,
+    val category: String,
+    @SerializedName("activity_level") val activityLevel: String,
+    @SerializedName("bedtime_suitable") val bedtimeSuitable: Boolean,
+    @SerializedName("requires_other_person") val requiresOtherPerson: Boolean,
+    @SerializedName("may_require_device_interaction") val mayRequireDeviceInteraction: Boolean,
+)
+
+data class ActivitySuggestionsResponseDto(
+    val context: String,
+    val activities: List<ActivitySuggestionDto>,
+)
+
 data class ProfileContextRequest(
     val type: String,
     @SerializedName("start_date") val startDate: String,
@@ -253,6 +273,12 @@ interface HabitsApi {
     @PUT("api/v1/profiles/{profileId}/settings") suspend fun updateProfileSettings(@Path("profileId") id: String, @Header("Authorization") authorization: String, @Body request: ProfileSettingsRequest): ProfileSettingsDto
     @GET("api/v1/profiles/{profileId}/activity-preferences") suspend fun getActivityPreferences(@Path("profileId") id: String, @Header("Authorization") authorization: String): ActivityPreferencesDto
     @PUT("api/v1/profiles/{profileId}/activity-preferences") suspend fun updateActivityPreferences(@Path("profileId") id: String, @Header("Authorization") authorization: String, @Body request: ActivityPreferencesRequest): ActivityPreferencesDto
+    @POST("api/v1/profiles/{profileId}/activity-suggestions")
+    suspend fun getActivitySuggestions(
+        @Path("profileId") profileId: String,
+        @Header("Authorization") authorization: String,
+        @Body request: ActivitySuggestionsRequest,
+    ): ActivitySuggestionsResponseDto = error("Not implemented")
     @POST("api/v1/profiles/{profileId}/contexts") suspend fun createProfileContext(@Path("profileId") profileId: String, @Header("Authorization") authorization: String, @Body request: ProfileContextRequest): ProfileContextDto
     @GET("api/v1/profiles/{profileId}/contexts") suspend fun getProfileContexts(@Path("profileId") profileId: String, @Header("Authorization") authorization: String): List<ProfileContextDto>
     @GET("api/v1/profiles/{profileId}/contexts/active") suspend fun getActiveProfileContexts(@Path("profileId") profileId: String, @Header("Authorization") authorization: String): List<ProfileContextDto>
