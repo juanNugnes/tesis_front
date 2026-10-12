@@ -10,6 +10,7 @@ import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.Duration
 import java.time.Instant
+import java.time.ZoneId
 import java.util.UUID
 
 data class ProfileUiState(
@@ -284,6 +285,7 @@ class AdultProfileLinkCodeViewModel(
 data class ChildPreferencesUiState(
     val childName: String = "",
     val preferences: ChildPreferences = ChildPreferences(),
+    val today: LocalDate = LocalDate.now(),
     val loaded: Boolean = false,
     val saved: Boolean = false,
     val refreshing: Boolean = false,
@@ -292,13 +294,19 @@ data class ChildPreferencesUiState(
     val dirty: Boolean = false,
     val deviceAuthenticationRequired: Boolean = false,
     val adultAuthenticationRequired: Boolean = false,
-)
+) {
+    val valid: Boolean get() = preferences.considerations.values.all { preference ->
+        preference.durationType != ConsiderationDuration.TEMPORARY ||
+            preference.validUntil?.let { !it.isBefore(today) } == true
+    }
+}
 class ChildPreferencesViewModel(
     private val repository: ChildPreferencesRepository,
     profileRepository: ProfileRepository,
     private val demoMode: Boolean,
+    private val currentDate: () -> LocalDate = LocalDate::now,
 ) : ViewModel() {
-    private val _state = MutableStateFlow(ChildPreferencesUiState()); val state = _state.asStateFlow()
+    private val _state = MutableStateFlow(ChildPreferencesUiState(today = currentDate())); val state = _state.asStateFlow()
     init {
         viewModelScope.launch { profileRepository.profile.filterNotNull().collect { profile -> _state.update { it.copy(childName = profile.name) } } }
         viewModelScope.launch {
@@ -323,8 +331,26 @@ class ChildPreferencesViewModel(
         }
     }
     fun toggleInterest(value: ChildInterest) = update { copy(interests = interests.toggle(value)) }
-    fun adaptationType(value: AdaptationType) = update { copy(adaptationType = value, validUntil = if (value == AdaptationType.TEMPORARY) validUntil else null) }
-    fun toggleConsideration(value: ChildConsideration) = update { copy(considerations = considerations.toggle(value)) }
+    fun omitConsiderations() = update { copy(considerationsAnswered = false, considerations = emptyMap()) }
+    fun selectNoConsiderations() = update { copy(considerationsAnswered = true, considerations = emptyMap()) }
+    fun toggleConsideration(value: ChildConsideration) = update {
+        copy(
+            considerationsAnswered = true,
+            considerations = if (value in considerations) considerations - value
+            else considerations + (value to ConsiderationPreference()),
+        )
+    }
+    fun considerationDuration(value: ChildConsideration, duration: ConsiderationDuration) = update {
+        val current = considerations[value] ?: return@update this
+        copy(considerations = considerations + (value to current.copy(
+            durationType = duration,
+            validUntil = current.validUntil.takeIf { duration == ConsiderationDuration.TEMPORARY },
+        )))
+    }
+    fun considerationValidUntil(value: ChildConsideration, date: LocalDate) = update {
+        val current = considerations[value] ?: return@update this
+        copy(considerations = considerations + (value to current.copy(validUntil = date)))
+    }
     fun toggleRestriction(value: ActivityRestriction) = update {
         val selected = if (value == ActivityRestriction.NONE) {
             setOf(value)
@@ -337,10 +363,9 @@ class ChildPreferencesViewModel(
         val limit = if (additionalNotes.orEmpty().length > 240) 500 else 240
         copy(additionalNotes = value.take(limit))
     }
-    fun validUntil(date: LocalDate?) = update { copy(validUntil = date) }
     fun save(onSaved: () -> Unit = {}) {
         val current = state.value
-        if (!current.loaded || current.submitting || current.refreshing) return
+        if (!current.loaded || !current.valid || current.submitting || current.refreshing) return
         _state.update { it.copy(submitting = true, saved = false, errorMessage = null) }
         viewModelScope.launch {
             try {
@@ -396,7 +421,7 @@ data class ChildHomeUiState(
     ),
     val apps: List<AppUsage> = emptyList(),
     val activityState: ActivityState = ActivityState.Loading,
-    val chosenActivities: Int = 2,
+    val chosenActivities: Int? = null,
     val selectionRegistrationFailed: Boolean = false,
 )
 class ChildViewModel(
@@ -405,12 +430,15 @@ class ChildViewModel(
     private val activitySuggestionRepository: ActivitySuggestionRepository,
     private val selectionId: () -> String = { UUID.randomUUID().toString() },
     private val nowEpochMillis: () -> Long = System::currentTimeMillis,
+    private val currentDate: () -> LocalDate = LocalDate::now,
+    private val zoneId: () -> ZoneId = ZoneId::systemDefault,
 ) : ViewModel() {
     private val _state = MutableStateFlow(ChildHomeUiState()); val state = _state.asStateFlow()
     private var suggestedActivities: List<SuggestedActivityUiModel> = emptyList()
     private var currentOfferId: String? = null
     private var pendingSelection: ActivitySelection? = null
     private var selectionRegistrationInFlight = false
+    private var selectionCountRequestId = 0
     init {
         viewModelScope.launch { profileRepo.profile.filterNotNull().collect { profile -> _state.update { it.copy(profile = profile) } } }
         viewModelScope.launch { _state.update { it.copy(usage = usageRepo.daily(), apps = usageRepo.apps()) } }
@@ -458,7 +486,6 @@ class ChildViewModel(
         _state.update {
             it.copy(
                 activityState = ActivityState.Running(activity),
-                chosenActivities = it.chosenActivities + 1,
                 selectionRegistrationFailed = false,
             )
         }
@@ -480,6 +507,7 @@ class ChildViewModel(
                 if (pendingSelection == selection) {
                     pendingSelection = null
                     _state.update { it.copy(selectionRegistrationFailed = false) }
+                    refreshActivitySelectionCount()
                 }
             } catch (exception: CancellationException) {
                 throw exception
@@ -490,6 +518,24 @@ class ChildViewModel(
             } finally {
                 selectionRegistrationInFlight = false
             }
+        }
+    }
+
+    fun refreshActivitySelectionCount() = viewModelScope.launch {
+        val requestId = ++selectionCountRequestId
+        val today = currentDate()
+        val zone = zoneId()
+        val dayStartEpochMillis = today.atStartOfDay(zone).toInstant().toEpochMilli()
+        val dayEndEpochMillis = today.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli()
+        try {
+            val count = activitySuggestionRepository.selectionCount(dayStartEpochMillis, dayEndEpochMillis)
+            if (requestId == selectionCountRequestId) {
+                _state.update { it.copy(chosenActivities = count) }
+            }
+        } catch (exception: CancellationException) {
+            throw exception
+        } catch (_: Exception) {
+            // Keep the last backend-confirmed value, or null when none has been loaded yet.
         }
     }
 

@@ -41,20 +41,24 @@ data class ProfileSettingsDto(
 
 data class ActivityPreferencesRequest(
     val interests: List<String>,
-    @SerializedName("adaptation_type") val adaptationType: String,
-    val considerations: List<String>,
+    @SerializedName("considerations_answered") val considerationsAnswered: Boolean,
+    val considerations: List<ActivityConsiderationDto>,
     @SerializedName("activities_to_avoid") val activitiesToAvoid: List<String>,
     @SerializedName("additional_notes") val additionalNotes: String?,
+)
+
+data class ActivityConsiderationDto(
+    val type: String,
+    @SerializedName("duration_type") val durationType: String,
     @SerializedName("valid_until") val validUntil: String?,
 )
 
 data class ActivityPreferencesDto(
     val interests: List<String> = emptyList(),
-    @SerializedName("adaptation_type") val adaptationType: String = "NONE",
-    val considerations: List<String> = emptyList(),
+    @SerializedName("considerations_answered") val considerationsAnswered: Boolean = false,
+    val considerations: List<ActivityConsiderationDto> = emptyList(),
     @SerializedName("activities_to_avoid") val activitiesToAvoid: List<String> = emptyList(),
     @SerializedName("additional_notes") val additionalNotes: String? = null,
-    @SerializedName("valid_until") val validUntil: String? = null,
     val id: String? = null,
     @SerializedName("profile_id") val profileId: String? = null,
     @SerializedName("created_at") val createdAt: String? = null,
@@ -95,6 +99,8 @@ data class ActivitySelectionResponseDto(
     @SerializedName("activity_id") val activityId: String? = null,
     @SerializedName("selected_at_epoch_millis") val selectedAtEpochMillis: Long? = null,
 )
+
+data class ActivitySelectionCountDto(val count: Int)
 
 data class ProfileContextRequest(
     val type: String,
@@ -300,6 +306,13 @@ interface HabitsApi {
         @Header("Authorization") authorization: String,
         @Body request: ActivitySelectionRequest,
     ): ActivitySelectionResponseDto = error("Not implemented")
+    @GET("api/v1/profiles/{profileId}/activity-selections/count")
+    suspend fun getActivitySelectionCount(
+        @Path("profileId") profileId: String,
+        @Header("Authorization") authorization: String,
+        @Query("start_epoch_millis") startEpochMillis: Long,
+        @Query("end_epoch_millis") endEpochMillis: Long,
+    ): ActivitySelectionCountDto = error("Not implemented")
     @POST("api/v1/profiles/{profileId}/contexts") suspend fun createProfileContext(@Path("profileId") profileId: String, @Header("Authorization") authorization: String, @Body request: ProfileContextRequest): ProfileContextDto
     @GET("api/v1/profiles/{profileId}/contexts") suspend fun getProfileContexts(@Path("profileId") profileId: String, @Header("Authorization") authorization: String): List<ProfileContextDto>
     @GET("api/v1/profiles/{profileId}/contexts/active") suspend fun getActiveProfileContexts(@Path("profileId") profileId: String, @Header("Authorization") authorization: String): List<ProfileContextDto>

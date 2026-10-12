@@ -26,11 +26,11 @@ private val interestLabels = linkedMapOf(
     ChildInterest.IMAGINE_ACT to "Imaginar o representar historias",
 )
 private val considerationLabels = linkedMapOf(
-    ChildConsideration.MOVEMENT to "Movilidad o movimiento", ChildConsideration.VISION to "Visión",
-    ChildConsideration.HEARING to "Audición", ChildConsideration.ATTENTION to "Atención o concentración",
-    ChildConsideration.ARMS_HANDS to "Uso de brazos o manos", ChildConsideration.LEGS to "Uso de piernas",
-    ChildConsideration.COMMUNICATION to "Comunicación", ChildConsideration.SENSORY to "Sensibilidad a sonidos, luces o estímulos",
-    ChildConsideration.TEMPORARY_DISCOMFORT to "Lesión o molestia física temporal", ChildConsideration.OTHER to "Otro",
+    ChildConsideration.UPPER_BODY_MOBILITY to "Brazos/manos",
+    ChildConsideration.LOWER_BODY_MOBILITY to "Piernas",
+    ChildConsideration.VISUAL to "Visual",
+    ChildConsideration.AUDITORY to "Auditiva",
+    ChildConsideration.SOUND_SENSITIVITY to "Sensibilidad a sonidos",
 )
 private val restrictionLabels = linkedMapOf(
     ActivityRestriction.RUN_JUMP to "Correr o saltar", ActivityRestriction.STANDING to "Actividades de pie",
@@ -102,13 +102,15 @@ private fun formatProfileTime(value: String?): String? {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable fun ChildPreferencesScreen(
     state: ChildPreferencesUiState,
-    onInterest: (ChildInterest) -> Unit, onAdaptation: (AdaptationType) -> Unit,
-    onConsideration: (ChildConsideration) -> Unit, onRestriction: (ActivityRestriction) -> Unit,
-    onNotes: (String) -> Unit, onValidUntil: (LocalDate?) -> Unit, onSave: () -> Unit, onBack: () -> Unit,
+    onInterest: (ChildInterest) -> Unit, onOmitConsiderations: () -> Unit, onNoConsiderations: () -> Unit,
+    onConsideration: (ChildConsideration) -> Unit,
+    onConsiderationDuration: (ChildConsideration, ConsiderationDuration) -> Unit,
+    onConsiderationValidUntil: (ChildConsideration, LocalDate) -> Unit,
+    onRestriction: (ActivityRestriction) -> Unit, onNotes: (String) -> Unit, onSave: () -> Unit, onBack: () -> Unit,
 ) {
     val preferences = state.preferences
     val snackbar = remember { SnackbarHostState() }
-    var showDatePicker by remember { mutableStateOf(false) }
+    var datePickerFor by remember { mutableStateOf<ChildConsideration?>(null) }
     LaunchedEffect(state.saved) { if (state.saved) snackbar.showSnackbar("Preferencias actualizadas") }
     LaunchedEffect(state.errorMessage) { state.errorMessage?.let { snackbar.showSnackbar(it) } }
     Scaffold(snackbarHost = { SnackbarHost(snackbar) }, containerColor = AppColors.Surface) { padding ->
@@ -117,18 +119,31 @@ private fun formatProfileTime(value: String?): String? {
             if (state.refreshing) item { LinearProgressIndicator(Modifier.fillMaxWidth()) }
             item { Text("Esta información es opcional y podés cambiarla cuando quieras.", color = Color(0xFF94A3B8), fontSize = 13.sp) }
             item { FormSection("¿Qué cosas disfruta hacer ${state.childName}?", "Podés elegir más de una.") { SelectableOptions(interestLabels, preferences.interests, onInterest) } }
-            item { FormSection("¿Hay algo que debamos tener en cuenta al sugerir actividades?") { SingleChoice("No", preferences.adaptationType == AdaptationType.NONE) { onAdaptation(AdaptationType.NONE) }; SingleChoice("Sí, temporalmente", preferences.adaptationType == AdaptationType.TEMPORARY) { onAdaptation(AdaptationType.TEMPORARY) }; SingleChoice("Sí, de forma permanente", preferences.adaptationType == AdaptationType.PERMANENT) { onAdaptation(AdaptationType.PERMANENT) } } }
-            if (preferences.adaptationType != AdaptationType.NONE) {
-                item { FormSection("¿Qué aspectos deberíamos tener en cuenta?") { SelectableOptions(considerationLabels, preferences.considerations, onConsideration) } }
+            item { FormSection("¿Hay alguna consideración que debamos tener en cuenta al sugerir actividades?", "Podés seleccionar más de una opción.") {
+                SelectableOptions(considerationLabels, preferences.considerations.keys, onConsideration)
+                SingleChoice("Ninguna", preferences.considerationsAnswered && preferences.considerations.isEmpty(), onNoConsiderations)
+                TextButton(onOmitConsiderations) { Text(if (preferences.considerationsAnswered) "Omitir esta pregunta" else "Pregunta omitida", color = Color(0xFFCBD5E1)) }
+            } }
+            considerationLabels.forEach { (type, label) -> preferences.considerations[type]?.let { preference ->
+                item { FormSection(label) {
+                    SingleChoice("Permanente", preference.durationType == ConsiderationDuration.PERMANENT) { onConsiderationDuration(type, ConsiderationDuration.PERMANENT) }
+                    SingleChoice("Temporal", preference.durationType == ConsiderationDuration.TEMPORARY) { onConsiderationDuration(type, ConsiderationDuration.TEMPORARY) }
+                    if (preference.durationType == ConsiderationDuration.TEMPORARY) {
+                        OutlinedButton(onClick = { datePickerFor = type }, modifier = Modifier.fillMaxWidth()) { Text(preference.validUntil?.let { "Hasta cuándo: $it" } ?: "Hasta cuándo") }
+                        if (preference.validUntil == null) Text("Seleccioná una fecha.", color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
+                        else if (preference.validUntil.isBefore(state.today)) Text("La fecha no puede ser anterior a hoy.", color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
+                    }
+                } }
+            } }
+            if (preferences.considerations.isNotEmpty()) {
                 item { FormSection("¿Hay algún tipo de actividad que convenga evitar?") { val noteLimit = if (preferences.additionalNotes.orEmpty().length > 240) 500 else 240; SelectableOptions(restrictionLabels, preferences.activitiesToAvoid, onRestriction); OutlinedTextField(preferences.additionalNotes.orEmpty(), onNotes, Modifier.fillMaxWidth(), label = { Text("Otro aspecto a tener en cuenta (opcional)") }, supportingText = { Text("${preferences.additionalNotes.orEmpty().length}/$noteLimit") }, minLines = 2, maxLines = 4, colors = darkTextFieldColors()) } }
             }
-            if (preferences.adaptationType == AdaptationType.TEMPORARY) item { FormSection("¿Hasta cuándo deberíamos tenerlo en cuenta?") { val today = LocalDate.now(); SingleChoice("Una semana", preferences.validUntil == today.plusWeeks(1)) { onValidUntil(today.plusWeeks(1)) }; SingleChoice("Dos semanas", preferences.validUntil == today.plusWeeks(2)) { onValidUntil(today.plusWeeks(2)) }; SingleChoice("Un mes", preferences.validUntil == today.plusMonths(1)) { onValidUntil(today.plusMonths(1)) }; SingleChoice("Elegir fecha", preferences.validUntil != null && preferences.validUntil !in setOf(today.plusWeeks(1), today.plusWeeks(2), today.plusMonths(1))) { showDatePicker = true }; SingleChoice("Hasta que lo cambie manualmente", preferences.validUntil == null) { onValidUntil(null) } } }
             item { Surface(color = AppColors.Purple.copy(.12f), shape = RoundedCornerShape(14.dp)) { Text("🔒  Esta información se utiliza únicamente para adaptar las actividades sugeridas.", Modifier.padding(14.dp), color = Color(0xFFCBD5E1), fontSize = 13.sp, lineHeight = 18.sp) } }
-            item { Button(onSave, Modifier.fillMaxWidth().height(54.dp), enabled = state.loaded && !state.submitting && !state.refreshing, colors = ButtonDefaults.buttonColors(containerColor = AppColors.Purple), shape = RoundedCornerShape(14.dp)) { Text(if (state.submitting) "Guardando…" else "Guardar cambios", fontWeight = FontWeight.Bold) } }
+            item { Button(onSave, Modifier.fillMaxWidth().height(54.dp), enabled = state.loaded && state.valid && !state.submitting && !state.refreshing, colors = ButtonDefaults.buttonColors(containerColor = AppColors.Purple), shape = RoundedCornerShape(14.dp)) { Text(if (state.submitting) "Guardando…" else "Guardar cambios", fontWeight = FontWeight.Bold) } }
             item { Spacer(Modifier.navigationBarsPadding()) }
         }
     }
-    if (showDatePicker) { val picker = rememberDatePickerState(initialSelectedDateMillis = preferences.validUntil?.toEpochDay()?.times(86_400_000)); DatePickerDialog(onDismissRequest = { showDatePicker = false }, confirmButton = { TextButton({ picker.selectedDateMillis?.let { onValidUntil(LocalDate.ofEpochDay(it / 86_400_000)) }; showDatePicker = false }) { Text("Aceptar") } }, dismissButton = { TextButton({ showDatePicker = false }) { Text("Cancelar") } }) { DatePicker(picker) } }
+    datePickerFor?.let { type -> val picker = rememberDatePickerState(initialSelectedDateMillis = (preferences.considerations[type]?.validUntil ?: state.today).toEpochDay().times(86_400_000)); DatePickerDialog(onDismissRequest = { datePickerFor = null }, confirmButton = { TextButton({ picker.selectedDateMillis?.let { onConsiderationValidUntil(type, LocalDate.ofEpochDay(it / 86_400_000)) }; datePickerFor = null }) { Text("Aceptar") } }, dismissButton = { TextButton({ datePickerFor = null }) { Text("Cancelar") } }) { DatePicker(picker) } }
 }
 
 @Composable private fun FormSection(title: String, subtitle: String? = null, content: @Composable ColumnScope.() -> Unit) { Card(colors = CardDefaults.cardColors(containerColor = AppColors.Card), border = BorderStroke(1.dp, AppColors.Divider), shape = RoundedCornerShape(18.dp)) { Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) { Text(title, color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.Bold); subtitle?.let { Text(it, color = Color(0xFF94A3B8), fontSize = 13.sp) }; content() } } }

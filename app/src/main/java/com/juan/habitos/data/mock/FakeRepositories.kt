@@ -26,6 +26,7 @@ class PreviewActivitySuggestionRepository : ActivitySuggestionRepository {
         ),
     )
     override suspend fun registerSelection(selection: ActivitySelection) = Unit
+    override suspend fun selectionCount(startEpochMillis: Long, endEpochMillis: Long) = 0
 }
 class FakeAlertRepository : AlertRepository {
     override suspend fun alerts() = listOf(

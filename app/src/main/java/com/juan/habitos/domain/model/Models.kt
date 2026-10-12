@@ -52,16 +52,19 @@ data class Alert(
 enum class DashboardPeriod { TODAY, WEEK }
 
 enum class ChildInterest { DRAW_CREATE, STORIES, MUSIC, GAMES_CHALLENGES, OUTDOORS, MOVEMENT, BUILD, WRITE, IMAGINE_ACT }
-enum class AdaptationType { NONE, TEMPORARY, PERMANENT }
-enum class ChildConsideration { MOVEMENT, VISION, HEARING, ATTENTION, ARMS_HANDS, LEGS, COMMUNICATION, SENSORY, TEMPORARY_DISCOMFORT, OTHER }
+enum class ChildConsideration { UPPER_BODY_MOBILITY, LOWER_BODY_MOBILITY, VISUAL, AUDITORY, SOUND_SENSITIVITY }
+enum class ConsiderationDuration { TEMPORARY, PERMANENT }
+data class ConsiderationPreference(
+    val durationType: ConsiderationDuration = ConsiderationDuration.PERMANENT,
+    val validUntil: LocalDate? = null,
+)
 enum class ActivityRestriction { RUN_JUMP, STANDING, ARMS_HANDS, VISUAL_PRECISION, SOUNDS, MANY_STIMULI, HIGH_CONCENTRATION, NONE }
 data class ChildPreferences(
     val interests: Set<ChildInterest> = emptySet(),
-    val adaptationType: AdaptationType = AdaptationType.NONE,
-    val considerations: Set<ChildConsideration> = emptySet(),
+    val considerationsAnswered: Boolean = false,
+    val considerations: Map<ChildConsideration, ConsiderationPreference> = emptyMap(),
     val activitiesToAvoid: Set<ActivityRestriction> = emptySet(),
     val additionalNotes: String? = null,
-    val validUntil: LocalDate? = null,
 )
 
 enum class ProfileContextType { VACATION, ILLNESS, SCHOOL_ACTIVITY, ROUTINE_CHANGE, OTHER }

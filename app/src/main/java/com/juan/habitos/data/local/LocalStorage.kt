@@ -76,31 +76,39 @@ class DataStoreProfileRepository(private val context: Context) : ProfileLocalSto
 class DataStoreChildPreferencesRepository(private val context: Context) : ChildPreferencesLocalStore {
     private object Keys {
         val interests = stringSetPreferencesKey("child_preferences_interests")
-        val adaptationType = stringPreferencesKey("child_preferences_adaptation_type")
+        val considerationsAnswered = booleanPreferencesKey("child_preferences_considerations_answered")
         val considerations = stringSetPreferencesKey("child_preferences_considerations")
         val restrictions = stringSetPreferencesKey("child_preferences_restrictions")
         val notes = stringPreferencesKey("child_preferences_notes")
-        val validUntil = longPreferencesKey("child_preferences_valid_until")
     }
     override val preferences = context.dataStore.data.map { values ->
         val restrictions = values[Keys.restrictions].orEmpty().mapNotNull { name -> ActivityRestriction.entries.find { it.name == name } }.toSet()
         ChildPreferences(
             interests = values[Keys.interests].orEmpty().mapNotNull { name -> ChildInterest.entries.find { it.name == name } }.toSet(),
-            adaptationType = values[Keys.adaptationType]?.let { name -> AdaptationType.entries.find { it.name == name } } ?: AdaptationType.NONE,
-            considerations = values[Keys.considerations].orEmpty().mapNotNull { name -> ChildConsideration.entries.find { it.name == name } }.toSet(),
+            considerationsAnswered = values[Keys.considerationsAnswered] ?: false,
+            considerations = values[Keys.considerations].orEmpty().mapNotNull(::decodeConsiderationPreference).toMap(),
             activitiesToAvoid = restrictions.ifEmpty { setOf(ActivityRestriction.NONE) },
             additionalNotes = values[Keys.notes],
-            validUntil = values[Keys.validUntil]?.let(LocalDate::ofEpochDay),
         )
     }
     override suspend fun save(preferences: ChildPreferences) { context.dataStore.edit { values ->
         values[Keys.interests] = preferences.interests.map { it.name }.toSet()
-        values[Keys.adaptationType] = preferences.adaptationType.name
-        values[Keys.considerations] = preferences.considerations.map { it.name }.toSet()
+        values[Keys.considerationsAnswered] = preferences.considerationsAnswered
+        values[Keys.considerations] = preferences.considerations.map { (type, preference) ->
+            listOf(type.name, preference.durationType.name, preference.validUntil?.toString().orEmpty()).joinToString("|")
+        }.toSet()
         values[Keys.restrictions] = preferences.activitiesToAvoid.map { it.name }.toSet()
         preferences.additionalNotes?.takeIf { it.isNotBlank() }?.let { values[Keys.notes] = it } ?: values.remove(Keys.notes)
-        preferences.validUntil?.toEpochDay()?.let { values[Keys.validUntil] = it } ?: values.remove(Keys.validUntil)
     } }
+
+    private fun decodeConsiderationPreference(value: String): Pair<ChildConsideration, ConsiderationPreference>? {
+        val parts = value.split('|')
+        if (parts.size != 3) return null
+        val type = ChildConsideration.entries.find { it.name == parts[0] } ?: return null
+        val duration = ConsiderationDuration.entries.find { it.name == parts[1] } ?: return null
+        val validUntil = parts[2].takeIf(String::isNotEmpty)?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+        return type to ConsiderationPreference(duration, validUntil)
+    }
 }
 
 class DataStoreProfileContextStore(private val context: Context) : ProfileContextLocalStore {

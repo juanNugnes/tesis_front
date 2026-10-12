@@ -47,6 +47,16 @@ class RemoteActivitySuggestionRepository(
         }
     }
 
+    override suspend fun selectionCount(startEpochMillis: Long, endEpochMillis: Long): Int =
+        authorization.execute { header ->
+            api.getActivitySelectionCount(
+                profileId = currentProfileId(),
+                authorization = header,
+                startEpochMillis = startEpochMillis,
+                endEpochMillis = endEpochMillis,
+            )
+        }.count
+
     private suspend fun currentProfileId() = requireNotNull(profileStore.profile.first()?.id) {
         "The current profile does not have a backend id"
     }

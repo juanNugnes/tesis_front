@@ -32,7 +32,7 @@ private val ChildBorderColor = Color.White.copy(alpha = .20f)
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         item { ChildHeader(state, onLock) }
-        item { DaySceneCard(state.profile.avatar, state.chosenActivities) }
+        item { DaySceneCard(state.profile.avatar, state.chosenActivities ?: 0) }
         item { DayUsageSummary(state.usage.currentMinutes, state.habitualUsageMinutes) }
         item { ActivitySuggestionCard(state.profile.avatar, state.activityState, state.selectionRegistrationFailed, onAnotherActivity, onStartActivity, onFinishActivity, onRetryActivity, onRetrySelection) }
         item { DayPeriodUsageCard(state.periodUsage) }
@@ -146,7 +146,14 @@ private val celebrationParticles = listOf(
     }
 }
 
-@Composable fun ActivityHistory(chosenActivities: Int) { Surface(color = Color(0xFFDAF5E3).copy(.96f), shape = RoundedCornerShape(22.dp), border = BorderStroke(1.dp, Color.White.copy(.5f))) { Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) { Text("🌱", fontSize = 25.sp); Spacer(Modifier.width(12.dp)); Text("Hoy elegiste $chosenActivities ${if (chosenActivities == 1) "actividad" else "actividades"}", color = Color(0xFF24543A), fontWeight = FontWeight.Bold) } } }
+fun activityHistoryMessage(chosenActivities: Int?): String = when (chosenActivities) {
+    null -> "Tus actividades de hoy aparecerán acá"
+    0 -> "Hoy todavía no elegiste actividades"
+    1 -> "Hoy elegiste 1 actividad"
+    else -> "Hoy elegiste $chosenActivities actividades"
+}
+
+@Composable fun ActivityHistory(chosenActivities: Int?) { Surface(color = Color(0xFFDAF5E3).copy(.96f), shape = RoundedCornerShape(22.dp), border = BorderStroke(1.dp, Color.White.copy(.5f))) { Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) { Text("🌱", fontSize = 25.sp); Spacer(Modifier.width(12.dp)); Text(activityHistoryMessage(chosenActivities), color = Color(0xFF24543A), fontWeight = FontWeight.Bold) } } }
 
 @Composable private fun ChildCard(containerColor: Color = ChildCardColor, borderColor: Color = ChildBorderColor, content: @Composable () -> Unit) { Card(colors = CardDefaults.cardColors(containerColor = containerColor), border = BorderStroke(1.dp, borderColor), shape = RoundedCornerShape(24.dp)) { Box(Modifier.fillMaxWidth().padding(18.dp)) { content() } } }
 private fun formatMinutes(minutes: Int): String = if (minutes >= 60) "${minutes / 60}h ${minutes % 60}m" else "${minutes}m"

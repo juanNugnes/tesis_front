@@ -27,7 +27,9 @@ private class SuggestionProfileStore : ProfileLocalStore {
 private class SuggestionApiHandler : InvocationHandler {
     var response = ActivitySuggestionsResponseDto(context = "voluntary", activities = emptyList())
     var selectionResponse = ActivitySelectionResponseDto()
+    var countResponse = ActivitySelectionCountDto(0)
     var failure: Exception? = null
+    var countFailure: Exception? = null
     val calls = mutableListOf<Pair<String, List<Any?>>>()
 
     override fun invoke(proxy: Any, method: Method, args: Array<out Any?>?): Any? {
@@ -41,6 +43,11 @@ private class SuggestionApiHandler : InvocationHandler {
                 calls += method.name to args.orEmpty().toList().dropLast(1)
                 failure?.let { throw it }
                 selectionResponse
+            }
+            "getActivitySelectionCount" -> {
+                calls += method.name to args.orEmpty().toList().dropLast(1)
+                countFailure?.let { throw it }
+                countResponse
             }
             "toString" -> "SuggestionApi"
             "hashCode" -> System.identityHashCode(proxy)
@@ -139,6 +146,32 @@ class ActivitySuggestionRepositoryTest {
             ActivitySelectionRequest("selection-1", "offer-1", "activity-2", 1_234_567_890L),
             args[2],
         )
+    }
+
+    @Test fun `selection count uses current profile Device bearer and exact day bounds`() = runTest {
+        val handler = SuggestionApiHandler().apply { countResponse = ActivitySelectionCountDto(4) }
+
+        val result = repository(handler).selectionCount(1_700_000_000_000L, 1_700_082_800_000L)
+
+        assertEquals(4, result)
+        val args = handler.calls.single().second
+        assertEquals("profile-1", args[0])
+        assertEquals("Bearer device-jwt", args[1])
+        assertEquals(1_700_000_000_000L, args[2])
+        assertEquals(1_700_082_800_000L, args[3])
+    }
+
+    @Test fun `selection count HTTP error is propagated`() = runTest {
+        val handler = SuggestionApiHandler().apply { countFailure = suggestionHttpException(503) }
+        var status: Int? = null
+
+        try {
+            repository(handler).selectionCount(10L, 20L)
+        } catch (exception: HttpException) {
+            status = exception.code()
+        }
+
+        assertEquals(503, status)
     }
 
     private fun repository(handler: SuggestionApiHandler) = RemoteActivitySuggestionRepository(

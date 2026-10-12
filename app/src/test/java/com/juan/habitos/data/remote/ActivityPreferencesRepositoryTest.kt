@@ -2,10 +2,11 @@ package com.juan.habitos.data.remote
 
 import com.google.gson.Gson
 import com.juan.habitos.domain.model.ActivityRestriction
-import com.juan.habitos.domain.model.AdaptationType
 import com.juan.habitos.domain.model.ChildConsideration
 import com.juan.habitos.domain.model.ChildInterest
 import com.juan.habitos.domain.model.ChildPreferences
+import com.juan.habitos.domain.model.ConsiderationDuration
+import com.juan.habitos.domain.model.ConsiderationPreference
 import com.juan.habitos.domain.model.Profile
 import com.juan.habitos.domain.repository.ChildPreferencesLocalStore
 import com.juan.habitos.domain.repository.ProfileLocalStore
@@ -103,13 +104,19 @@ class ActivityPreferencesRepositoryTest {
 
     @Test fun `all considerations use explicit backend names and round trip`() {
         val expected = setOf(
-            "MOBILITY", "VISION", "HEARING", "ATTENTION_CONCENTRATION", "ARMS_HANDS", "LEGS",
-            "COMMUNICATION", "SENSORY_SENSITIVITY", "TEMPORARY_PHYSICAL_DISCOMFORT", "OTHER",
+            "UPPER_BODY_MOBILITY", "LOWER_BODY_MOBILITY", "VISUAL", "AUDITORY", "SOUND_SENSITIVITY",
         )
-        val request = ChildPreferences(considerations = ChildConsideration.entries.toSet()).toActivityPreferencesRequest()
-        assertEquals(expected, request.considerations.toSet())
-        val restored = ActivityPreferencesDto(considerations = expected.toList()).toDomainPreferences()
-        assertEquals(ChildConsideration.entries.toSet(), restored.considerations)
+        val preferences = ChildPreferences(
+            considerationsAnswered = true,
+            considerations = ChildConsideration.entries.associateWith { ConsiderationPreference() },
+        )
+        val request = preferences.toActivityPreferencesRequest()
+        assertEquals(expected, request.considerations.map { it.type }.toSet())
+        val restored = ActivityPreferencesDto(
+            considerationsAnswered = true,
+            considerations = expected.map { ActivityConsiderationDto(it, "PERMANENT", null) },
+        ).toDomainPreferences()
+        assertEquals(ChildConsideration.entries.toSet(), restored.considerations.keys)
     }
 
     @Test fun `restrictions map run jump none and every direct value`() {
@@ -135,22 +142,59 @@ class ActivityPreferencesRepositoryTest {
         }
     }
 
-    @Test fun `adaptation controls ISO valid until without clearing other fields`() {
-        val date = LocalDate.of(2026, 10, 20)
-        val base = ChildPreferences(
-            interests = setOf(ChildInterest.MUSIC),
-            considerations = setOf(ChildConsideration.HEARING),
-            activitiesToAvoid = setOf(ActivityRestriction.SOUNDS),
-            additionalNotes = "Texto",
-            validUntil = date,
+    @Test fun `omitted question sends answered false and empty considerations`() {
+        val request = ChildPreferences().toActivityPreferencesRequest()
+        assertFalse(request.considerationsAnswered)
+        assertTrue(request.considerations.isEmpty())
+    }
+
+    @Test fun `explicit none sends answered true and empty considerations`() {
+        val request = ChildPreferences(considerationsAnswered = true).toActivityPreferencesRequest()
+        assertTrue(request.considerationsAnswered)
+        assertTrue(request.considerations.isEmpty())
+    }
+
+    @Test fun `permanent consideration sends null valid until`() {
+        val request = ChildPreferences(
+            considerationsAnswered = true,
+            considerations = mapOf(ChildConsideration.VISUAL to ConsiderationPreference(ConsiderationDuration.PERMANENT)),
+        ).toActivityPreferencesRequest()
+        assertEquals(ActivityConsiderationDto("VISUAL", "PERMANENT", null), request.considerations.single())
+    }
+
+    @Test fun `temporary consideration sends its ISO date`() {
+        val request = ChildPreferences(
+            considerationsAnswered = true,
+            considerations = mapOf(
+                ChildConsideration.LOWER_BODY_MOBILITY to ConsiderationPreference(
+                    ConsiderationDuration.TEMPORARY,
+                    LocalDate.of(2026, 11, 20),
+                )
+            ),
+        ).toActivityPreferencesRequest()
+        assertEquals(
+            ActivityConsiderationDto("LOWER_BODY_MOBILITY", "TEMPORARY", "2026-11-20"),
+            request.considerations.single(),
         )
-        assertEquals("2026-10-20", base.copy(adaptationType = AdaptationType.TEMPORARY).toActivityPreferencesRequest().validUntil)
-        assertNull(base.copy(adaptationType = AdaptationType.NONE).toActivityPreferencesRequest().validUntil)
-        assertNull(base.copy(adaptationType = AdaptationType.PERMANENT).toActivityPreferencesRequest().validUntil)
-        val restored = ActivityPreferencesDto(adaptationType = "TEMPORARY", validUntil = "2026-10-20").toDomainPreferences()
-        assertEquals(date, restored.validUntil)
-        assertNull(ActivityPreferencesDto(adaptationType = "NONE", validUntil = "2026-10-20").toDomainPreferences().validUntil)
-        assertNull(ActivityPreferencesDto(adaptationType = "PERMANENT", validUntil = "2026-10-20").toDomainPreferences().validUntil)
+    }
+
+    @Test fun `multiple considerations including both mobility areas remain independent`() {
+        val preferences = ChildPreferences(
+            considerationsAnswered = true,
+            considerations = mapOf(
+                ChildConsideration.UPPER_BODY_MOBILITY to ConsiderationPreference(),
+                ChildConsideration.LOWER_BODY_MOBILITY to ConsiderationPreference(ConsiderationDuration.TEMPORARY, LocalDate.of(2026, 11, 20)),
+                ChildConsideration.AUDITORY to ConsiderationPreference(),
+            ),
+        )
+        val request = preferences.toActivityPreferencesRequest()
+        val restored = ActivityPreferencesDto(
+            considerationsAnswered = true,
+            considerations = request.considerations,
+        ).toDomainPreferences()
+        assertEquals(preferences.considerations, restored.considerations)
+        assertTrue(ChildConsideration.UPPER_BODY_MOBILITY in restored.considerations)
+        assertTrue(ChildConsideration.LOWER_BODY_MOBILITY in restored.considerations)
     }
 
     @Test fun `remote notes longer than ui limit are not silently truncated`() {
@@ -162,17 +206,21 @@ class ActivityPreferencesRepositoryTest {
 
     @Test fun `request serializes backend snake case contract`() {
         val request = ChildPreferences(
-            adaptationType = AdaptationType.TEMPORARY,
+            considerationsAnswered = true,
+            considerations = mapOf(
+                ChildConsideration.VISUAL to ConsiderationPreference(ConsiderationDuration.TEMPORARY, LocalDate.of(2026, 10, 20))
+            ),
             activitiesToAvoid = setOf(ActivityRestriction.SOUNDS),
             additionalNotes = "Texto",
-            validUntil = LocalDate.of(2026, 10, 20),
         ).toActivityPreferencesRequest()
         val json = Gson().toJson(request)
-        assertTrue(json.contains("\"adaptation_type\":\"TEMPORARY\""))
+        assertTrue(json.contains("\"considerations_answered\":true"))
+        assertTrue(json.contains("\"type\":\"VISUAL\""))
+        assertTrue(json.contains("\"duration_type\":\"TEMPORARY\""))
         assertTrue(json.contains("\"activities_to_avoid\":[\"LOUD_SOUNDS\"]"))
         assertTrue(json.contains("\"additional_notes\":\"Texto\""))
         assertTrue(json.contains("\"valid_until\":\"2026-10-20\""))
-        assertFalse(json.contains("adaptationType"))
+        assertFalse(json.contains("adaptation_type"))
     }
 
     @Test fun `refresh with profile id updates cache and accepts neutral response`() = runTest {
@@ -189,7 +237,8 @@ class ActivityPreferencesRepositoryTest {
         assertEquals("profile-123", api.requestedId)
         assertEquals("Bearer device-token", api.authorization)
         assertTrue(refreshed.interests.isEmpty())
-        assertEquals(AdaptationType.NONE, refreshed.adaptationType)
+        assertFalse(refreshed.considerationsAnswered)
+        assertTrue(refreshed.considerations.isEmpty())
         assertEquals(setOf(ActivityRestriction.NONE), refreshed.activitiesToAvoid)
         assertEquals(refreshed, local.preferences.value)
         assertEquals(profile, profileStore.profile.value)
@@ -214,11 +263,15 @@ class ActivityPreferencesRepositoryTest {
         val previous = ChildPreferences(interests = setOf(ChildInterest.STORIES), activitiesToAvoid = setOf(ActivityRestriction.NONE))
         val edited = ChildPreferences(
             interests = setOf(ChildInterest.DRAW_CREATE, ChildInterest.BUILD),
-            adaptationType = AdaptationType.TEMPORARY,
-            considerations = setOf(ChildConsideration.ATTENTION),
+            considerationsAnswered = true,
+            considerations = mapOf(
+                ChildConsideration.SOUND_SENSITIVITY to ConsiderationPreference(
+                    ConsiderationDuration.TEMPORARY,
+                    LocalDate.of(2026, 10, 20),
+                )
+            ),
             activitiesToAvoid = setOf(ActivityRestriction.RUN_JUMP),
             additionalNotes = "Temporal",
-            validUntil = LocalDate.of(2026, 10, 20),
         )
         val local = FakeChildPreferencesStore(previous)
         val profile = Profile("Sofía", "🦋", 8, id = "profile-123")
@@ -226,11 +279,10 @@ class ActivityPreferencesRepositoryTest {
         val api = FakeActivityPreferencesApi().apply {
             response = ActivityPreferencesDto(
                 interests = listOf("DRAWING_CREATING", "BUILDING"),
-                adaptationType = "TEMPORARY",
-                considerations = listOf("ATTENTION_CONCENTRATION"),
+                considerationsAnswered = true,
+                considerations = listOf(ActivityConsiderationDto("SOUND_SENSITIVITY", "TEMPORARY", "2026-10-20")),
                 activitiesToAvoid = listOf("RUNNING", "JUMPING"),
                 additionalNotes = "Temporal",
-                validUntil = "2026-10-20",
             )
         }
         val repository = repository(local, profileStore, api)
@@ -241,8 +293,9 @@ class ActivityPreferencesRepositoryTest {
         assertEquals("profile-123", api.requestedId)
         assertEquals("Bearer device-token", api.authorization)
         assertEquals(setOf("DRAWING_CREATING", "BUILDING"), api.request!!.interests.toSet())
+        assertTrue(api.request!!.considerationsAnswered)
+        assertEquals(ActivityConsiderationDto("SOUND_SENSITIVITY", "TEMPORARY", "2026-10-20"), api.request!!.considerations.single())
         assertEquals(setOf("RUNNING", "JUMPING"), api.request!!.activitiesToAvoid.toSet())
-        assertEquals("2026-10-20", api.request!!.validUntil)
         assertEquals(edited, updated)
         assertEquals(edited, local.preferences.value)
         assertEquals(profile, profileStore.profile.value)

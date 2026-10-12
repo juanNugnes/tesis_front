@@ -37,6 +37,7 @@ interface UsageRepository { suspend fun daily(period: DashboardPeriod = Dashboar
 interface ActivitySuggestionRepository {
     suspend fun suggestions(): ActivitySuggestionOffer
     suspend fun registerSelection(selection: ActivitySelection)
+    suspend fun selectionCount(startEpochMillis: Long, endEpochMillis: Long): Int
 }
 interface AlertRepository { suspend fun alerts(): List<Alert> }
 interface PinStore { suspend fun save(pin: String); suspend fun verify(pin: String): Boolean }

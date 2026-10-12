@@ -9,6 +9,7 @@ import kotlinx.coroutines.test.*
 import org.junit.*
 import org.junit.Assert.*
 import java.time.LocalDate
+import java.time.ZoneId
 import com.juan.habitos.ui.adult.profileScheduleSummary
 
 private class TestProfileRepo : ProfileRepository {
@@ -72,7 +73,10 @@ private class TestActivitySuggestions(
     var offerId: String? = "offer-1"
     var failure: Exception? = null
     var registerFailure: Exception? = null
+    var countFailure: Exception? = null
+    var selectionCountValue = 2
     val selections = mutableListOf<ActivitySelection>()
+    val countRequests = mutableListOf<Pair<Long, Long>>()
     override suspend fun suggestions(): ActivitySuggestionOffer {
         failure?.let { throw it }
         return ActivitySuggestionOffer(offerId, values)
@@ -80,6 +84,12 @@ private class TestActivitySuggestions(
     override suspend fun registerSelection(selection: ActivitySelection) {
         selections += selection
         registerFailure?.let { throw it }
+        selectionCountValue++
+    }
+    override suspend fun selectionCount(startEpochMillis: Long, endEpochMillis: Long): Int {
+        countRequests += startEpochMillis to endEpochMillis
+        countFailure?.let { throw it }
+        return selectionCountValue
     }
 }
 private class TestPreferencesRepo(initial: ChildPreferences = ChildPreferences()) : ChildPreferencesRepository {
@@ -89,6 +99,7 @@ private class TestPreferencesRepo(initial: ChildPreferences = ChildPreferences()
     var failure: Exception? = null
     var refreshCalls = 0
     var updateCalls = 0
+    var lastUpdateRequest: ChildPreferences? = null
     override suspend fun save(preferences: ChildPreferences) { this.preferences.value = preferences }
     override suspend fun refresh(): ChildPreferences {
         refreshCalls++
@@ -97,6 +108,7 @@ private class TestPreferencesRepo(initial: ChildPreferences = ChildPreferences()
     }
     override suspend fun update(preferences: ChildPreferences): ChildPreferences {
         updateCalls++
+        lastUpdateRequest = preferences
         failure?.let { throw it }
         return (updatedPreferences ?: preferences).also { this.preferences.value = it }
     }
@@ -148,7 +160,42 @@ class ViewModelsTest {
     @Test fun `incorrect pin clears and shows error`() = runTest(dispatcher) { val store = TestPinStore().apply { pin = "1234" }; val vm = PinViewModel(store); repeat(4) { vm.digit(9,false) {} }; advanceUntilIdle(); assertEquals("", vm.state.value.digits); assertTrue(vm.state.value.error) }
     @Test fun `correct pin invokes completion`() = runTest(dispatcher) { val store = TestPinStore().apply { pin = "1234" }; val vm = PinViewModel(store); var done = false; (1..4).forEach { vm.digit(it,false) { done = true } }; advanceUntilIdle(); assertTrue(done) }
     @Test fun `dashboard changes period`() = runTest(dispatcher) { val vm = AdultViewModel(TestProfileRepo(), TestUsage(), TestAlerts()); vm.period(DashboardPeriod.WEEK); advanceUntilIdle(); assertEquals(DashboardPeriod.WEEK, vm.state.value.period); assertEquals(900, vm.state.value.usage.currentMinutes) }
-    @Test fun `child state provides comparison periods and activity history`() = runTest(dispatcher) { val vm = ChildViewModel(TestProfileRepo(), TestUsage(), TestActivitySuggestions()); advanceUntilIdle(); val state = vm.state.value; assertEquals(150, state.habitualUsageMinutes); assertEquals(listOf(35, 100, 30), state.periodUsage.map { it.minutes }); assertEquals(2, state.chosenActivities) }
+    @Test fun `child state loads confirmed count for exact local day boundaries`() = runTest(dispatcher) {
+        val repo = TestActivitySuggestions().apply { selectionCountValue = 4 }
+        val date = LocalDate.of(2026, 10, 10)
+        val zone = ZoneId.of("America/Argentina/Buenos_Aires")
+        val vm = ChildViewModel(TestProfileRepo(), TestUsage(), repo, currentDate = { date }, zoneId = { zone })
+
+        vm.refreshActivitySelectionCount()
+        advanceUntilIdle()
+
+        assertEquals(4, vm.state.value.chosenActivities)
+        assertEquals(
+            date.atStartOfDay(zone).toInstant().toEpochMilli() to date.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli(),
+            repo.countRequests.single(),
+        )
+    }
+    @Test fun `count failure keeps neutral state when no value was confirmed`() = runTest(dispatcher) {
+        val repo = TestActivitySuggestions().apply { countFailure = java.io.IOException("offline") }
+        val vm = ChildViewModel(TestProfileRepo(), TestUsage(), repo)
+
+        vm.refreshActivitySelectionCount()
+        advanceUntilIdle()
+
+        assertNull(vm.state.value.chosenActivities)
+    }
+    @Test fun `count refresh failure keeps last confirmed value`() = runTest(dispatcher) {
+        val repo = TestActivitySuggestions().apply { selectionCountValue = 5 }
+        val vm = ChildViewModel(TestProfileRepo(), TestUsage(), repo)
+        vm.refreshActivitySelectionCount()
+        advanceUntilIdle()
+        repo.countFailure = java.io.IOException("offline")
+
+        vm.refreshActivitySelectionCount()
+        advanceUntilIdle()
+
+        assertEquals(5, vm.state.value.chosenActivities)
+    }
     @Test fun `another idea rotates through backend activities and wraps to first`() = runTest(dispatcher) { val vm = ChildViewModel(TestProfileRepo(), TestUsage(), TestActivitySuggestions()); advanceUntilIdle(); val first = (vm.state.value.activityState as ActivityState.Suggested).activity; vm.showAnotherActivity(); assertEquals("activity-2", (vm.state.value.activityState as ActivityState.Suggested).activity.activityId); vm.showAnotherActivity(); assertEquals("activity-3", (vm.state.value.activityState as ActivityState.Suggested).activity.activityId); vm.showAnotherActivity(); assertEquals(first, (vm.state.value.activityState as ActivityState.Suggested).activity) }
     @Test fun `single backend activity remains selected when asking for another idea`() = runTest(dispatcher) { val repo = TestActivitySuggestions().apply { values = values.take(1) }; val vm = ChildViewModel(TestProfileRepo(), TestUsage(), repo); advanceUntilIdle(); val first = (vm.state.value.activityState as ActivityState.Suggested).activity; vm.showAnotherActivity(); assertEquals(first, (vm.state.value.activityState as ActivityState.Suggested).activity) }
     @Test fun `empty backend response shows neutral empty state`() = runTest(dispatcher) { val vm = ChildViewModel(TestProfileRepo(), TestUsage(), TestActivitySuggestions(emptyList())); advanceUntilIdle(); assertEquals(ActivityState.Empty, vm.state.value.activityState) }
@@ -174,11 +221,13 @@ class ViewModelsTest {
         val repo = TestActivitySuggestions().apply { registerFailure = java.io.IOException("offline") }
         var generatedIds = 0
         val vm = ChildViewModel(TestProfileRepo(), TestUsage(), repo, selectionId = { generatedIds++; "selection-fixed" }, nowEpochMillis = { 77L })
+        vm.refreshActivitySelectionCount()
         advanceUntilIdle()
 
         vm.startActivity()
         advanceUntilIdle()
         assertTrue(vm.state.value.selectionRegistrationFailed)
+        assertEquals(2, vm.state.value.chosenActivities)
         val original = repo.selections.single()
         repo.registerFailure = null
         vm.retryActivitySelection()
@@ -201,13 +250,22 @@ class ViewModelsTest {
         assertEquals(0, generatedIds)
         assertTrue(repo.selections.isEmpty())
     }
-    @Test fun `starting keeps selected activity and updates history`() = runTest(dispatcher) { val vm = ChildViewModel(TestProfileRepo(), TestUsage(), TestActivitySuggestions()); advanceUntilIdle(); val selected = (vm.state.value.activityState as ActivityState.Suggested).activity; vm.startActivity(); assertEquals(selected, (vm.state.value.activityState as ActivityState.Running).activity); assertEquals(3, vm.state.value.chosenActivities) }
-    @Test fun `finishing activity returns to suggestions without duplicating history`() = runTest(dispatcher) { val vm = ChildViewModel(TestProfileRepo(), TestUsage(), TestActivitySuggestions()); advanceUntilIdle(); vm.startActivity(); vm.finishActivity(); assertTrue(vm.state.value.activityState is ActivityState.Suggested); assertEquals(3, vm.state.value.chosenActivities) }
+    @Test fun `successful selection refreshes confirmed count from backend`() = runTest(dispatcher) { val vm = ChildViewModel(TestProfileRepo(), TestUsage(), TestActivitySuggestions()); vm.refreshActivitySelectionCount(); advanceUntilIdle(); val selected = (vm.state.value.activityState as ActivityState.Suggested).activity; vm.startActivity(); assertEquals(selected, (vm.state.value.activityState as ActivityState.Running).activity); assertEquals(2, vm.state.value.chosenActivities); advanceUntilIdle(); assertEquals(3, vm.state.value.chosenActivities) }
+    @Test fun `unconfirmed selection does not increment count`() = runTest(dispatcher) { val repo = TestActivitySuggestions().apply { registerFailure = java.io.IOException("offline") }; val vm = ChildViewModel(TestProfileRepo(), TestUsage(), repo); vm.refreshActivitySelectionCount(); advanceUntilIdle(); assertEquals(2, vm.state.value.chosenActivities); vm.startActivity(); advanceUntilIdle(); assertEquals(2, vm.state.value.chosenActivities); assertTrue(vm.state.value.selectionRegistrationFailed); assertEquals(1, repo.countRequests.size) }
+    @Test fun `finishing activity returns to suggestions without duplicating history`() = runTest(dispatcher) { val vm = ChildViewModel(TestProfileRepo(), TestUsage(), TestActivitySuggestions()); vm.refreshActivitySelectionCount(); advanceUntilIdle(); vm.startActivity(); advanceUntilIdle(); vm.finishActivity(); assertTrue(vm.state.value.activityState is ActivityState.Suggested); assertEquals(3, vm.state.value.chosenActivities) }
     @Test fun `preferences support multiple interests and demo persists locally`() = runTest(dispatcher) { val profile = TestProfileRepo().apply { this.profile.value = Profile("Sofía", "🦋", 8) }; val repo = TestPreferencesRepo(); val vm = ChildPreferencesViewModel(repo, profile, demoMode = true); advanceUntilIdle(); vm.toggleInterest(ChildInterest.MUSIC); vm.toggleInterest(ChildInterest.STORIES); vm.save(); advanceUntilIdle(); assertEquals(setOf(ChildInterest.MUSIC, ChildInterest.STORIES), repo.preferences.value.interests); assertEquals(0, repo.refreshCalls); assertEquals(0, repo.updateCalls); assertTrue(vm.state.value.saved) }
-    @Test fun `none preserves contextual fields and clears only temporary end date`() = runTest(dispatcher) { val profile = TestProfileRepo(); val vm = ChildPreferencesViewModel(TestPreferencesRepo(), profile, demoMode = true); advanceUntilIdle(); vm.adaptationType(AdaptationType.TEMPORARY); vm.toggleConsideration(ChildConsideration.MOVEMENT); vm.toggleRestriction(ActivityRestriction.RUN_JUMP); vm.notes("Molestia temporal"); vm.validUntil(LocalDate.now().plusWeeks(1)); vm.adaptationType(AdaptationType.NONE); val value = vm.state.value.preferences; assertEquals(setOf(ChildConsideration.MOVEMENT), value.considerations); assertEquals(setOf(ActivityRestriction.RUN_JUMP), value.activitiesToAvoid); assertEquals("Molestia temporal", value.additionalNotes); assertNull(value.validUntil) }
-    @Test fun `permanent preference removes temporary end date`() = runTest(dispatcher) { val vm = ChildPreferencesViewModel(TestPreferencesRepo(), TestProfileRepo(), demoMode = true); advanceUntilIdle(); vm.adaptationType(AdaptationType.TEMPORARY); vm.validUntil(LocalDate.now().plusWeeks(1)); vm.adaptationType(AdaptationType.PERMANENT); assertNull(vm.state.value.preferences.validUntil) }
+    @Test fun `explicit none clears selected considerations and remains answered`() = runTest(dispatcher) { val vm = ChildPreferencesViewModel(TestPreferencesRepo(), TestProfileRepo(), demoMode = true); advanceUntilIdle(); vm.toggleConsideration(ChildConsideration.VISUAL); vm.selectNoConsiderations(); assertTrue(vm.state.value.preferences.considerationsAnswered); assertTrue(vm.state.value.preferences.considerations.isEmpty()) }
+    @Test fun `marking a consideration after none replaces none`() = runTest(dispatcher) { val vm = ChildPreferencesViewModel(TestPreferencesRepo(), TestProfileRepo(), demoMode = true); advanceUntilIdle(); vm.selectNoConsiderations(); vm.toggleConsideration(ChildConsideration.AUDITORY); assertTrue(vm.state.value.preferences.considerationsAnswered); assertEquals(setOf(ChildConsideration.AUDITORY), vm.state.value.preferences.considerations.keys) }
+    @Test fun `omitting considerations differs from explicit none`() = runTest(dispatcher) { val vm = ChildPreferencesViewModel(TestPreferencesRepo(), TestProfileRepo(), demoMode = true); advanceUntilIdle(); vm.selectNoConsiderations(); vm.omitConsiderations(); assertFalse(vm.state.value.preferences.considerationsAnswered); assertTrue(vm.state.value.preferences.considerations.isEmpty()) }
+    @Test fun `temporary consideration without date cannot save`() = runTest(dispatcher) { val repo = TestPreferencesRepo(); val vm = ChildPreferencesViewModel(repo, TestProfileRepo(), demoMode = false, currentDate = { LocalDate.of(2026, 10, 11) }); advanceUntilIdle(); vm.toggleConsideration(ChildConsideration.VISUAL); vm.considerationDuration(ChildConsideration.VISUAL, ConsiderationDuration.TEMPORARY); assertFalse(vm.state.value.valid); vm.save(); advanceUntilIdle(); assertEquals(0, repo.updateCalls) }
+    @Test fun `temporary consideration with expired date cannot save`() = runTest(dispatcher) { val repo = TestPreferencesRepo(); val vm = ChildPreferencesViewModel(repo, TestProfileRepo(), demoMode = false, currentDate = { LocalDate.of(2026, 10, 11) }); advanceUntilIdle(); vm.toggleConsideration(ChildConsideration.VISUAL); vm.considerationDuration(ChildConsideration.VISUAL, ConsiderationDuration.TEMPORARY); vm.considerationValidUntil(ChildConsideration.VISUAL, LocalDate.of(2026, 10, 10)); assertFalse(vm.state.value.valid); vm.save(); advanceUntilIdle(); assertEquals(0, repo.updateCalls) }
+    @Test fun `changing temporary consideration to permanent clears its date`() = runTest(dispatcher) { val vm = ChildPreferencesViewModel(TestPreferencesRepo(), TestProfileRepo(), demoMode = true); advanceUntilIdle(); vm.toggleConsideration(ChildConsideration.LOWER_BODY_MOBILITY); vm.considerationDuration(ChildConsideration.LOWER_BODY_MOBILITY, ConsiderationDuration.TEMPORARY); vm.considerationValidUntil(ChildConsideration.LOWER_BODY_MOBILITY, LocalDate.of(2026, 11, 20)); vm.considerationDuration(ChildConsideration.LOWER_BODY_MOBILITY, ConsiderationDuration.PERMANENT); assertNull(vm.state.value.preferences.considerations.getValue(ChildConsideration.LOWER_BODY_MOBILITY).validUntil) }
+    @Test fun `unselecting consideration removes its duration and date state`() = runTest(dispatcher) { val vm = ChildPreferencesViewModel(TestPreferencesRepo(), TestProfileRepo(), demoMode = true); advanceUntilIdle(); vm.toggleConsideration(ChildConsideration.LOWER_BODY_MOBILITY); vm.considerationDuration(ChildConsideration.LOWER_BODY_MOBILITY, ConsiderationDuration.TEMPORARY); vm.considerationValidUntil(ChildConsideration.LOWER_BODY_MOBILITY, LocalDate.of(2026, 11, 20)); vm.toggleConsideration(ChildConsideration.LOWER_BODY_MOBILITY); assertFalse(ChildConsideration.LOWER_BODY_MOBILITY in vm.state.value.preferences.considerations) }
+    @Test fun `upper and lower body considerations can be selected together`() = runTest(dispatcher) { val vm = ChildPreferencesViewModel(TestPreferencesRepo(), TestProfileRepo(), demoMode = true); advanceUntilIdle(); vm.toggleConsideration(ChildConsideration.UPPER_BODY_MOBILITY); vm.toggleConsideration(ChildConsideration.LOWER_BODY_MOBILITY); assertEquals(setOf(ChildConsideration.UPPER_BODY_MOBILITY, ChildConsideration.LOWER_BODY_MOBILITY), vm.state.value.preferences.considerations.keys) }
     @Test fun `restriction none never coexists with concrete restrictions`() = runTest(dispatcher) { val vm = ChildPreferencesViewModel(TestPreferencesRepo(ChildPreferences(activitiesToAvoid = setOf(ActivityRestriction.NONE))), TestProfileRepo(), demoMode = true); advanceUntilIdle(); vm.toggleRestriction(ActivityRestriction.SOUNDS); assertEquals(setOf(ActivityRestriction.SOUNDS), vm.state.value.preferences.activitiesToAvoid); vm.toggleRestriction(ActivityRestriction.SOUNDS); assertEquals(setOf(ActivityRestriction.NONE), vm.state.value.preferences.activitiesToAvoid); vm.toggleRestriction(ActivityRestriction.RUN_JUMP); vm.toggleRestriction(ActivityRestriction.NONE); assertEquals(setOf(ActivityRestriction.NONE), vm.state.value.preferences.activitiesToAvoid) }
     @Test fun `remote preferences load cache then refresh once`() = runTest(dispatcher) { val cached = ChildPreferences(interests = setOf(ChildInterest.STORIES)); val remote = ChildPreferences(interests = setOf(ChildInterest.MUSIC), activitiesToAvoid = setOf(ActivityRestriction.NONE)); val repo = TestPreferencesRepo(cached).apply { refreshedPreferences = remote }; val vm = ChildPreferencesViewModel(repo, TestProfileRepo(), demoMode = false); advanceUntilIdle(); assertEquals(1, repo.refreshCalls); assertEquals(remote, vm.state.value.preferences); assertTrue(vm.state.value.loaded); assertFalse(vm.state.value.refreshing) }
+    @Test fun `remote considerations restore exact durations and dates`() = runTest(dispatcher) { val date = LocalDate.of(2026, 11, 20); val remote = ChildPreferences(considerationsAnswered = true, considerations = mapOf(ChildConsideration.VISUAL to ConsiderationPreference(), ChildConsideration.LOWER_BODY_MOBILITY to ConsiderationPreference(ConsiderationDuration.TEMPORARY, date))); val repo = TestPreferencesRepo().apply { refreshedPreferences = remote }; val vm = ChildPreferencesViewModel(repo, TestProfileRepo(), demoMode = false); advanceUntilIdle(); assertEquals(remote.considerations, vm.state.value.preferences.considerations); assertTrue(vm.state.value.preferences.considerationsAnswered) }
+    @Test fun `edited considerations are sent with exact structured state`() = runTest(dispatcher) { val repo = TestPreferencesRepo(ChildPreferences(interests = setOf(ChildInterest.MUSIC))); val vm = ChildPreferencesViewModel(repo, TestProfileRepo(), demoMode = false, currentDate = { LocalDate.of(2026, 10, 11) }); advanceUntilIdle(); vm.toggleConsideration(ChildConsideration.UPPER_BODY_MOBILITY); vm.toggleConsideration(ChildConsideration.SOUND_SENSITIVITY); vm.considerationDuration(ChildConsideration.SOUND_SENSITIVITY, ConsiderationDuration.TEMPORARY); vm.considerationValidUntil(ChildConsideration.SOUND_SENSITIVITY, LocalDate.of(2026, 11, 20)); vm.save(); advanceUntilIdle(); val sent = repo.lastUpdateRequest!!; assertEquals(setOf(ChildInterest.MUSIC), sent.interests); assertEquals(ConsiderationPreference(), sent.considerations[ChildConsideration.UPPER_BODY_MOBILITY]); assertEquals(ConsiderationPreference(ConsiderationDuration.TEMPORARY, LocalDate.of(2026, 11, 20)), sent.considerations[ChildConsideration.SOUND_SENSITIVITY]) }
     @Test fun `remote preferences refresh failure keeps cache and exposes error`() = runTest(dispatcher) { val cached = ChildPreferences(interests = setOf(ChildInterest.STORIES)); val repo = TestPreferencesRepo(cached).apply { failure = java.io.IOException("offline") }; val vm = ChildPreferencesViewModel(repo, TestProfileRepo(), demoMode = false); advanceUntilIdle(); assertEquals(cached, vm.state.value.preferences); assertNotNull(vm.state.value.errorMessage); assertFalse(vm.state.value.refreshing) }
     @Test fun `remote preferences save succeeds through update`() = runTest(dispatcher) { val cached = ChildPreferences(interests = setOf(ChildInterest.STORIES)); val repo = TestPreferencesRepo(cached); val vm = ChildPreferencesViewModel(repo, TestProfileRepo(), demoMode = false); advanceUntilIdle(); vm.toggleInterest(ChildInterest.MUSIC); vm.save(); advanceUntilIdle(); assertEquals(1, repo.updateCalls); assertTrue(ChildInterest.MUSIC in repo.preferences.value.interests); assertTrue(vm.state.value.saved); assertFalse(vm.state.value.submitting); assertNull(vm.state.value.errorMessage) }
     @Test fun `remote preferences save failure keeps cache and edits for retry`() = runTest(dispatcher) { val cached = ChildPreferences(interests = setOf(ChildInterest.STORIES)); val repo = TestPreferencesRepo(cached); val vm = ChildPreferencesViewModel(repo, TestProfileRepo(), demoMode = false); advanceUntilIdle(); repo.failure = java.io.IOException("offline"); vm.toggleInterest(ChildInterest.MUSIC); vm.save(); advanceUntilIdle(); assertEquals(cached, repo.preferences.value); assertTrue(ChildInterest.MUSIC in vm.state.value.preferences.interests); assertFalse(vm.state.value.saved); assertFalse(vm.state.value.submitting); assertEquals("No pudimos guardar las preferencias. Intentá nuevamente.", vm.state.value.errorMessage) }

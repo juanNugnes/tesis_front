@@ -1,10 +1,11 @@
 package com.juan.habitos.data.remote
 
 import com.juan.habitos.domain.model.ActivityRestriction
-import com.juan.habitos.domain.model.AdaptationType
 import com.juan.habitos.domain.model.ChildConsideration
 import com.juan.habitos.domain.model.ChildInterest
 import com.juan.habitos.domain.model.ChildPreferences
+import com.juan.habitos.domain.model.ConsiderationDuration
+import com.juan.habitos.domain.model.ConsiderationPreference
 import com.juan.habitos.domain.repository.ChildPreferencesLocalStore
 import com.juan.habitos.domain.repository.ChildPreferencesRepository
 import com.juan.habitos.domain.repository.ProfileLocalStore
@@ -53,27 +54,51 @@ internal class IncompatibleActivityPreferencesException(message: String) : Illeg
 
 internal fun ChildPreferences.toActivityPreferencesRequest(): ActivityPreferencesRequest {
     require(additionalNotes == null || additionalNotes.length <= 500) { "additionalNotes exceeds backend limit" }
+    require(considerationsAnswered || considerations.isEmpty()) { "Unanswered considerations must be empty" }
     return ActivityPreferencesRequest(
         interests = interests.flatMap(::interestToBackend).sorted(),
-        adaptationType = adaptationType.toBackend(),
-        considerations = considerations.flatMap(::considerationToBackend).sorted(),
+        considerationsAnswered = considerationsAnswered,
+        considerations = considerations.entries.sortedBy { it.key.name }.map { (type, preference) ->
+            require(preference.durationType != ConsiderationDuration.TEMPORARY || preference.validUntil != null) {
+                "Temporary consideration requires validUntil"
+            }
+            ActivityConsiderationDto(
+                type = type.toBackend(),
+                durationType = preference.durationType.name,
+                validUntil = preference.validUntil
+                    .takeIf { preference.durationType == ConsiderationDuration.TEMPORARY }
+                    ?.toString(),
+            )
+        },
         activitiesToAvoid = activitiesToAvoid.flatMap(::restrictionToBackend).distinct().sorted(),
         additionalNotes = additionalNotes?.takeIf { it.isNotBlank() },
-        validUntil = validUntil.takeIf { adaptationType == AdaptationType.TEMPORARY }?.toString(),
     )
 }
 
 internal fun ActivityPreferencesDto.toDomainPreferences(): ChildPreferences {
     val restrictions = activitiesToAvoid.toDomainRestrictions()
-    val adaptation = adaptationType.toDomainAdaptation()
-    val endDate = if (adaptation == AdaptationType.TEMPORARY) validUntil?.let(LocalDate::parse) else null
+    if (!considerationsAnswered && considerations.isNotEmpty()) {
+        throw IncompatibleActivityPreferencesException("Unanswered considerations must be empty")
+    }
+    val mappedConsiderations = considerations.associate { dto ->
+        val type = dto.type.toDomainConsideration()
+        val duration = dto.durationType.toDomainDuration()
+        val validUntil = when (duration) {
+            ConsiderationDuration.TEMPORARY -> dto.validUntil?.let(LocalDate::parse)
+                ?: throw IncompatibleActivityPreferencesException("Temporary consideration requires valid_until")
+            ConsiderationDuration.PERMANENT -> null
+        }
+        type to ConsiderationPreference(duration, validUntil)
+    }
+    if (mappedConsiderations.size != considerations.size) {
+        throw IncompatibleActivityPreferencesException("Duplicate consideration type")
+    }
     return ChildPreferences(
         interests = interests.mapTo(mutableSetOf(), String::toDomainInterest),
-        adaptationType = adaptation,
-        considerations = considerations.mapTo(mutableSetOf(), String::toDomainConsideration),
+        considerationsAnswered = considerationsAnswered,
+        considerations = mappedConsiderations,
         activitiesToAvoid = restrictions,
         additionalNotes = additionalNotes,
-        validUntil = endDate,
     )
 }
 
@@ -102,44 +127,27 @@ private fun String.toDomainInterest(): ChildInterest = when (this) {
     else -> throw IncompatibleActivityPreferencesException("Unknown interest: $this")
 }
 
-private fun considerationToBackend(value: ChildConsideration): List<String> = listOf(when (value) {
-    ChildConsideration.MOVEMENT -> "MOBILITY"
-    ChildConsideration.VISION -> "VISION"
-    ChildConsideration.HEARING -> "HEARING"
-    ChildConsideration.ATTENTION -> "ATTENTION_CONCENTRATION"
-    ChildConsideration.ARMS_HANDS -> "ARMS_HANDS"
-    ChildConsideration.LEGS -> "LEGS"
-    ChildConsideration.COMMUNICATION -> "COMMUNICATION"
-    ChildConsideration.SENSORY -> "SENSORY_SENSITIVITY"
-    ChildConsideration.TEMPORARY_DISCOMFORT -> "TEMPORARY_PHYSICAL_DISCOMFORT"
-    ChildConsideration.OTHER -> "OTHER"
-})
+private fun ChildConsideration.toBackend(): String = when (this) {
+    ChildConsideration.UPPER_BODY_MOBILITY -> "UPPER_BODY_MOBILITY"
+    ChildConsideration.LOWER_BODY_MOBILITY -> "LOWER_BODY_MOBILITY"
+    ChildConsideration.VISUAL -> "VISUAL"
+    ChildConsideration.AUDITORY -> "AUDITORY"
+    ChildConsideration.SOUND_SENSITIVITY -> "SOUND_SENSITIVITY"
+}
 
 private fun String.toDomainConsideration(): ChildConsideration = when (this) {
-    "MOBILITY" -> ChildConsideration.MOVEMENT
-    "VISION" -> ChildConsideration.VISION
-    "HEARING" -> ChildConsideration.HEARING
-    "ATTENTION_CONCENTRATION" -> ChildConsideration.ATTENTION
-    "ARMS_HANDS" -> ChildConsideration.ARMS_HANDS
-    "LEGS" -> ChildConsideration.LEGS
-    "COMMUNICATION" -> ChildConsideration.COMMUNICATION
-    "SENSORY_SENSITIVITY" -> ChildConsideration.SENSORY
-    "TEMPORARY_PHYSICAL_DISCOMFORT" -> ChildConsideration.TEMPORARY_DISCOMFORT
-    "OTHER" -> ChildConsideration.OTHER
+    "UPPER_BODY_MOBILITY" -> ChildConsideration.UPPER_BODY_MOBILITY
+    "LOWER_BODY_MOBILITY" -> ChildConsideration.LOWER_BODY_MOBILITY
+    "VISUAL" -> ChildConsideration.VISUAL
+    "AUDITORY" -> ChildConsideration.AUDITORY
+    "SOUND_SENSITIVITY" -> ChildConsideration.SOUND_SENSITIVITY
     else -> throw IncompatibleActivityPreferencesException("Unknown consideration: $this")
 }
 
-private fun AdaptationType.toBackend(): String = when (this) {
-    AdaptationType.NONE -> "NONE"
-    AdaptationType.TEMPORARY -> "TEMPORARY"
-    AdaptationType.PERMANENT -> "PERMANENT"
-}
-
-private fun String.toDomainAdaptation(): AdaptationType = when (this) {
-    "NONE" -> AdaptationType.NONE
-    "TEMPORARY" -> AdaptationType.TEMPORARY
-    "PERMANENT" -> AdaptationType.PERMANENT
-    else -> throw IncompatibleActivityPreferencesException("Unknown adaptation type: $this")
+private fun String.toDomainDuration(): ConsiderationDuration = when (this) {
+    "TEMPORARY" -> ConsiderationDuration.TEMPORARY
+    "PERMANENT" -> ConsiderationDuration.PERMANENT
+    else -> throw IncompatibleActivityPreferencesException("Unknown consideration duration: $this")
 }
 
 private fun restrictionToBackend(value: ActivityRestriction): List<String> = when (value) {
