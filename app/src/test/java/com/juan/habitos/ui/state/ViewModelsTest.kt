@@ -76,9 +76,11 @@ private class TestActivitySuggestions(
     var registerFailure: Exception? = null
     var countFailure: Exception? = null
     var selectionCountValue = 2
+    var suggestionCalls = 0
     val selections = mutableListOf<ActivitySelection>()
     val countRequests = mutableListOf<Pair<Long, Long>>()
     override suspend fun suggestions(): ActivitySuggestionOffer {
+        suggestionCalls++
         failure?.let { throw it }
         return ActivitySuggestionOffer(offerId, values, reason)
     }
@@ -203,6 +205,65 @@ class ViewModelsTest {
     @Test fun `no eligible activities maps to neutral unavailable state`() = runTest(dispatcher) { val repo = TestActivitySuggestions(emptyList()).apply { reason = "no_eligible_activities" }; val vm = ChildViewModel(TestProfileRepo(), TestUsage(), repo); advanceUntilIdle(); assertEquals(ActivityState.NoEligibleActivities, vm.state.value.activityState) }
     @Test fun `empty response without explicit reason is technical error`() = runTest(dispatcher) { val vm = ChildViewModel(TestProfileRepo(), TestUsage(), TestActivitySuggestions(emptyList())); advanceUntilIdle(); val error = vm.state.value.activityState as ActivityState.Error; assertEquals("No pudimos cargar una actividad en este momento. Intentá nuevamente.", error.message) }
     @Test fun `suggestion error shows retry state and retry can recover`() = runTest(dispatcher) { val repo = TestActivitySuggestions().apply { failure = java.io.IOException("offline") }; val vm = ChildViewModel(TestProfileRepo(), TestUsage(), repo); advanceUntilIdle(); val error = vm.state.value.activityState as ActivityState.Error; assertEquals("No pudimos cargar una actividad en este momento. Intentá nuevamente.", error.message); repo.failure = null; vm.loadActivitySuggestions(); advanceUntilIdle(); assertTrue(vm.state.value.activityState is ActivityState.Suggested) }
+    @Test fun `successful preferences save event requests suggestions again`() = runTest(dispatcher) {
+        val activityRepo = TestActivitySuggestions(emptyList()).apply { reason = "eligibility_unknown" }
+        val childVm = ChildViewModel(TestProfileRepo(), TestUsage(), activityRepo)
+        val preferencesVm = ChildPreferencesViewModel(TestPreferencesRepo(), TestProfileRepo(), demoMode = false)
+        advanceUntilIdle()
+        assertEquals(ActivityState.PreferencesRequired, childVm.state.value.activityState)
+
+        var returnedToChild = false
+        preferencesVm.save {
+            returnedToChild = true
+            childVm.onPreferencesUpdated()
+        }
+        advanceUntilIdle()
+
+        assertTrue(returnedToChild)
+        assertEquals(2, activityRepo.suggestionCalls)
+    }
+    @Test fun `preferences update replaces eligibility unknown with new backend activity`() = runTest(dispatcher) {
+        val activityRepo = TestActivitySuggestions(emptyList()).apply { reason = "eligibility_unknown" }
+        val childVm = ChildViewModel(TestProfileRepo(), TestUsage(), activityRepo)
+        advanceUntilIdle()
+        activityRepo.values = listOf(ActivitySuggestion("new-activity", "Nueva actividad", "Descripción", "CREATIVE", "LOW", false, false, false))
+
+        childVm.onPreferencesUpdated()
+        advanceUntilIdle()
+
+        val suggested = childVm.state.value.activityState as ActivityState.Suggested
+        assertEquals("new-activity", suggested.activity.activityId)
+        assertEquals(2, activityRepo.suggestionCalls)
+    }
+    @Test fun `failed preferences save does not emit refresh event`() = runTest(dispatcher) {
+        val activityRepo = TestActivitySuggestions(emptyList()).apply { reason = "eligibility_unknown" }
+        val childVm = ChildViewModel(TestProfileRepo(), TestUsage(), activityRepo)
+        val preferencesRepo = TestPreferencesRepo().apply { failure = java.io.IOException("offline") }
+        val preferencesVm = ChildPreferencesViewModel(preferencesRepo, TestProfileRepo(), demoMode = false)
+        advanceUntilIdle()
+
+        var returnedToChild = false
+        preferencesVm.save {
+            returnedToChild = true
+            childVm.onPreferencesUpdated()
+        }
+        advanceUntilIdle()
+
+        assertFalse(returnedToChild)
+        assertEquals(1, activityRepo.suggestionCalls)
+        assertEquals(ActivityState.PreferencesRequired, childVm.state.value.activityState)
+    }
+    @Test fun `normal state observation does not duplicate suggestion requests`() = runTest(dispatcher) {
+        val repo = TestActivitySuggestions()
+        val vm = ChildViewModel(TestProfileRepo(), TestUsage(), repo)
+        advanceUntilIdle()
+
+        repeat(5) { vm.state.value }
+        advanceUntilIdle()
+
+        assertEquals(1, repo.suggestionCalls)
+        assertTrue(vm.state.value.activityState is ActivityState.Suggested)
+    }
     @Test fun `another idea does not register and start records currently visible activity with UUID and tap timestamp`() = runTest(dispatcher) {
         val repo = TestActivitySuggestions()
         val vm = ChildViewModel(TestProfileRepo(), TestUsage(), repo, nowEpochMillis = { 1_234_567_890L })

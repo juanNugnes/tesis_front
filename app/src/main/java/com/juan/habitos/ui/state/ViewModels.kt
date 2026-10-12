@@ -471,6 +471,7 @@ class ChildViewModel(
             }
         }
     }
+    fun onPreferencesUpdated() { loadActivitySuggestions() }
     fun showAnotherActivity() {
         val current = (state.value.activityState as? ActivityState.Suggested)?.activity ?: return
         if (suggestedActivities.isEmpty()) return
