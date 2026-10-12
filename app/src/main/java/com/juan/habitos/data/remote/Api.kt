@@ -84,6 +84,7 @@ data class ActivitySuggestionsResponseDto(
     @SerializedName("offer_id") val offerId: String? = null,
     val context: String,
     val activities: List<ActivitySuggestionDto>,
+    val reason: String? = null,
 )
 
 data class ActivitySelectionRequest(

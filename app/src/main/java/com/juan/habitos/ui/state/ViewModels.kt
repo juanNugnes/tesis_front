@@ -405,7 +405,8 @@ data class SuggestedActivityUiModel(
 )
 sealed interface ActivityState {
     data object Loading : ActivityState
-    data object Empty : ActivityState
+    data object PreferencesRequired : ActivityState
+    data object NoEligibleActivities : ActivityState
     data class Error(val message: String) : ActivityState
     data class Suggested(val activity: SuggestedActivityUiModel) : ActivityState
     data class Running(val activity: SuggestedActivityUiModel) : ActivityState
@@ -452,9 +453,12 @@ class ChildViewModel(
             suggestedActivities = offer.activities.map { it.toUiModel() }
             _state.update {
                 it.copy(
-                    activityState = suggestedActivities.firstOrNull()
-                        ?.let(ActivityState::Suggested)
-                        ?: ActivityState.Empty
+                    activityState = suggestedActivities.firstOrNull()?.let(ActivityState::Suggested)
+                        ?: when (offer.reason) {
+                            ELIGIBILITY_UNKNOWN -> ActivityState.PreferencesRequired
+                            NO_ELIGIBLE_ACTIVITIES -> ActivityState.NoEligibleActivities
+                            else -> ActivityState.Error(TECHNICAL_ACTIVITY_MESSAGE)
+                        }
                 )
             }
         } catch (exception: CancellationException) {
@@ -463,7 +467,7 @@ class ChildViewModel(
             currentOfferId = null
             suggestedActivities = emptyList()
             _state.update {
-                it.copy(activityState = ActivityState.Error("No pudimos cargar una sugerencia. Intentá nuevamente."))
+                it.copy(activityState = ActivityState.Error(TECHNICAL_ACTIVITY_MESSAGE))
             }
         }
     }
@@ -545,6 +549,12 @@ class ChildViewModel(
         title = title,
         description = description,
     )
+
+    private companion object {
+        const val ELIGIBILITY_UNKNOWN = "eligibility_unknown"
+        const val NO_ELIGIBLE_ACTIVITIES = "no_eligible_activities"
+        const val TECHNICAL_ACTIVITY_MESSAGE = "No pudimos cargar una actividad en este momento. Intentá nuevamente."
+    }
 }
 
 data class AdultAppUsageUiModel(val name: String, val icon: String, val minutes: Int)

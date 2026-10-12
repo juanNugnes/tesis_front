@@ -29,6 +29,7 @@ class RemoteActivitySuggestionRepository(
         return ActivitySuggestionOffer(
             offerId = response.offerId,
             activities = response.activities.take(MAX_SUGGESTIONS).map { it.toDomain() },
+            reason = response.reason,
         )
     }
 

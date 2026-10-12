@@ -24,7 +24,7 @@ import kotlinx.coroutines.launch
 private val ChildCardColor = Color.White.copy(alpha = .11f)
 private val ChildBorderColor = Color.White.copy(alpha = .20f)
 
-@Composable fun ChildHomeScreen(state: ChildHomeUiState, onLock: () -> Unit, onAnotherActivity: () -> Unit, onStartActivity: () -> Unit, onFinishActivity: () -> Unit, onRetryActivity: () -> Unit, onRetrySelection: () -> Unit) {
+@Composable fun ChildHomeScreen(state: ChildHomeUiState, onLock: () -> Unit, onAnotherActivity: () -> Unit, onStartActivity: () -> Unit, onFinishActivity: () -> Unit, onRetryActivity: () -> Unit, onRetrySelection: () -> Unit, onCompletePreferences: (() -> Unit)? = null) {
     val gradient = Brush.verticalGradient(listOf(Color(0xFF5B21B6), Color(0xFF4F46E5), Color(0xFF2563EB)))
     LazyColumn(
         modifier = Modifier.fillMaxSize().background(gradient).statusBarsPadding(),
@@ -34,7 +34,7 @@ private val ChildBorderColor = Color.White.copy(alpha = .20f)
         item { ChildHeader(state, onLock) }
         item { DaySceneCard(state.profile.avatar, state.chosenActivities ?: 0) }
         item { DayUsageSummary(state.usage.currentMinutes, state.habitualUsageMinutes) }
-        item { ActivitySuggestionCard(state.profile.avatar, state.activityState, state.selectionRegistrationFailed, onAnotherActivity, onStartActivity, onFinishActivity, onRetryActivity, onRetrySelection) }
+        item { ActivitySuggestionCard(state.profile.avatar, state.activityState, state.selectionRegistrationFailed, onAnotherActivity, onStartActivity, onFinishActivity, onRetryActivity, onRetrySelection, onCompletePreferences) }
         item { DayPeriodUsageCard(state.periodUsage) }
         item { ActivityHistory(state.chosenActivities) }
         item { Spacer(Modifier.navigationBarsPadding()) }
@@ -78,7 +78,19 @@ private val ChildBorderColor = Color.White.copy(alpha = .20f)
 }
 private fun periodPresentation(period: DayPeriod) = when (period) { DayPeriod.MORNING -> "🌅" to "Mañana"; DayPeriod.AFTERNOON -> "☀️" to "Tarde"; DayPeriod.NIGHT -> "🌙" to "Noche" }
 
-@Composable fun ActivitySuggestionCard(avatar: String, activityState: ActivityState, selectionRegistrationFailed: Boolean, onAnotherIdea: () -> Unit, onStart: () -> Unit, onFinish: () -> Unit, onRetry: () -> Unit, onRetrySelection: () -> Unit) {
+data class ActivityUnavailablePresentation(val message: String, val actionLabel: String? = null)
+
+fun activityUnavailablePresentation(state: ActivityState, navigationAvailable: Boolean): ActivityUnavailablePresentation? = when (state) {
+    ActivityState.PreferencesRequired -> ActivityUnavailablePresentation(
+        "Antes de mostrarte actividades, un adulto tiene que completar tus preferencias.",
+        "Completar preferencias".takeIf { navigationAvailable },
+    )
+    ActivityState.NoEligibleActivities -> ActivityUnavailablePresentation("Por ahora no encontramos una actividad para mostrarte.")
+    is ActivityState.Error -> ActivityUnavailablePresentation(state.message)
+    else -> null
+}
+
+@Composable fun ActivitySuggestionCard(avatar: String, activityState: ActivityState, selectionRegistrationFailed: Boolean, onAnotherIdea: () -> Unit, onStart: () -> Unit, onFinish: () -> Unit, onRetry: () -> Unit, onRetrySelection: () -> Unit, onCompletePreferences: (() -> Unit)? = null) {
     val scope = rememberCoroutineScope()
     val avatarScale = remember { Animatable(1f) }
     val refreshRotation = remember { Animatable(0f) }
@@ -90,7 +102,11 @@ private fun periodPresentation(period: DayPeriod) = when (period) { DayPeriod.MO
         CircularProgressIndicator(color = Color(0xFFFFE08A))
         Text("Buscando una idea para vos…", color = Color.White.copy(.82f))
     }
-    ActivityState.Empty -> Text("No tenemos una sugerencia para mostrar ahora.", Modifier.fillMaxWidth().padding(vertical = 12.dp), color = Color.White, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+    ActivityState.PreferencesRequired -> Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text(activityUnavailablePresentation(currentState, onCompletePreferences != null)!!.message, color = Color.White, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+        onCompletePreferences?.let { action -> Button(onClick = action, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFF7F5FF), contentColor = AppColors.PurpleUi)) { Text("Completar preferencias", fontWeight = FontWeight.Bold) } }
+    }
+    ActivityState.NoEligibleActivities -> Text(activityUnavailablePresentation(currentState, false)!!.message, Modifier.fillMaxWidth().padding(vertical = 12.dp), color = Color.White, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
     is ActivityState.Error -> Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(currentState.message, color = Color.White, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
         Button(onClick = onRetry, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFF7F5FF), contentColor = AppColors.PurpleUi)) { Text("Reintentar", fontWeight = FontWeight.Bold) }

@@ -115,6 +115,20 @@ class ActivitySuggestionRepositoryTest {
         assertTrue(result.activities.isEmpty())
     }
 
+    @Test fun `response reason is preserved for UI mapping`() = runTest {
+        val handler = SuggestionApiHandler().apply {
+            response = ActivitySuggestionsResponseDto(
+                context = "voluntary",
+                activities = emptyList(),
+                reason = "eligibility_unknown",
+            )
+        }
+
+        val result = repository(handler).suggestions()
+
+        assertEquals("eligibility_unknown", result.reason)
+    }
+
     @Test fun `HTTP error is propagated instead of returning hardcoded activities`() = runTest {
         val handler = SuggestionApiHandler().apply { failure = suggestionHttpException(503) }
         var status: Int? = null

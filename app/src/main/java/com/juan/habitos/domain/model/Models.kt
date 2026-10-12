@@ -33,6 +33,7 @@ data class ActivitySuggestion(
 data class ActivitySuggestionOffer(
     val offerId: String?,
     val activities: List<ActivitySuggestion>,
+    val reason: String? = null,
 )
 data class ActivitySelection(
     val selectionId: String,
