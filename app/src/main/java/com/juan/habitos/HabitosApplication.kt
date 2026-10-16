@@ -3,6 +3,8 @@ package com.juan.habitos
 import android.app.Application
 import com.juan.habitos.data.local.*
 import com.juan.habitos.data.mock.*
+import com.juan.habitos.data.device.AndroidAggregatedUsageCollector
+import com.juan.habitos.data.device.AndroidDeviceUsageDataSource
 import com.juan.habitos.data.remote.CachedProfileRepository
 import com.juan.habitos.data.remote.CachedChildPreferencesRepository
 import com.juan.habitos.data.remote.CachedProfileContextRepository
@@ -14,6 +16,8 @@ import com.juan.habitos.data.remote.AdultRequestAuthorization
 import com.juan.habitos.data.remote.DeviceRequestAuthorization
 import com.juan.habitos.data.remote.RemoteActivitySuggestionRepository
 import com.juan.habitos.data.remote.RemoteMonitoringConsentRepository
+import com.juan.habitos.data.remote.AdultUsageRepository
+import com.juan.habitos.data.remote.DeviceUsageRepository
 import com.juan.habitos.domain.model.*
 import kotlinx.coroutines.flow.first
 
@@ -25,6 +29,7 @@ class HabitosApplication : Application() {
     private val adultRequestAuthorization by lazy { AdultRequestAuthorization(deviceSessionRepository) }
     private val deviceRequestAuthorization by lazy { DeviceRequestAuthorization(localDeviceIdentityStore) }
     val habitsApi by lazy { HabitsApiClient.api }
+    private val usageApi by lazy { HabitsApiClient.usageApi }
     val profileRepository by lazy { CachedProfileRepository(localProfileStore, habitsApi, localDeviceIdentityStore) }
     val adultProfileRepository by lazy { CachedProfileRepository(localProfileStore, habitsApi, adultRequestAuthorization) }
     val childPreferencesRepository by lazy { CachedChildPreferencesRepository(localChildPreferencesStore, localProfileStore, habitsApi, localDeviceIdentityStore) }
@@ -40,7 +45,16 @@ class HabitosApplication : Application() {
     val authRepository by lazy { if (BuildConfig.DEMO_MODE) MockAuthRepository() else RemoteAdultAuthRepository(habitsApi, deviceSessionRepository) }
     val linkRepository by lazy { if (BuildConfig.DEMO_MODE) MockLinkRepository(profileRepository, deviceSessionRepository) else RemoteLinkRepository(habitsApi, deviceSessionRepository, localProfileStore) }
     val pinStore by lazy { HashedPinStore(this) }
-    val usageRepository by lazy { FakeUsageRepository() }
+    private val pendingUsageSnapshotStore by lazy { EncryptedUsageSnapshotStore(this) }
+    private val usageCollector by lazy { AndroidAggregatedUsageCollector(AndroidDeviceUsageDataSource(this)) }
+    val usageRepository by lazy {
+        if (BuildConfig.DEMO_MODE) FakeUsageRepository()
+        else DeviceUsageRepository(localProfileStore, usageCollector, usageApi, deviceRequestAuthorization, pendingUsageSnapshotStore)
+    }
+    val adultUsageRepository by lazy {
+        if (BuildConfig.DEMO_MODE) FakeUsageRepository()
+        else AdultUsageRepository(localProfileStore, usageApi, adultRequestAuthorization)
+    }
     val alertRepository by lazy { FakeAlertRepository() }
 
     suspend fun initializeDemoIfNeeded() {

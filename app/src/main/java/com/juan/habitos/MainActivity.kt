@@ -93,7 +93,8 @@ private inline fun <reified T : ViewModel> factory(crossinline create: () -> T) 
             val session by app.deviceSessionRepository.session.collectAsStateWithLifecycle(initialValue = DeviceSession())
             val mode = session.mode ?: return@composable
             val profileRepository = if (mode == DeviceMode.ADULT) app.adultProfileRepository else app.profileRepository
-            val vm: AdultViewModel = viewModel(key = "adult-dashboard-$mode", factory = factory { AdultViewModel(profileRepository, app.usageRepository, app.alertRepository) })
+            val usageRepository = if (mode == DeviceMode.ADULT) app.adultUsageRepository else app.usageRepository
+            val vm: AdultViewModel = viewModel(key = "adult-dashboard-$mode", factory = factory { AdultViewModel(profileRepository, usageRepository, app.alertRepository) })
             val state by vm.state.collectAsStateWithLifecycle()
             AdultDashboardScreen(state, vm::period, { nav.navigate("adultProfile") }) { if (session.mode == DeviceMode.CHILD) nav.navigate("child") { popUpTo("child") { inclusive = true } } }
         }

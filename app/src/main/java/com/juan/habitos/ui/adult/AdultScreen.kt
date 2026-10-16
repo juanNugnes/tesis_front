@@ -27,7 +27,7 @@ private val tabs = listOf("📊\nRESUMEN", "📱\nAPPS", "🌙\nNOCTURNO", "🧠
         Row(Modifier.padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onExit) { Text("←", color = Color.White, fontSize = 24.sp) }
             Column(Modifier.weight(1f).clickable(onClick = onProfile)) {
-                Text("PANEL LOCAL", color = Color(0xFF94A3B8), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                Text("PANEL DEL ADULTO", color = Color(0xFF94A3B8), fontSize = 11.sp, fontWeight = FontWeight.Bold)
                 Text("${state.profile.avatar} ${state.profile.name} · ${state.profile.age} años", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 19.sp)
             }
             Text("›", Modifier.clickable(onClick = onProfile).padding(8.dp), color = AppColors.PurpleSoft, fontSize = 28.sp)
@@ -64,29 +64,28 @@ private val tabs = listOf("📊\nRESUMEN", "📱\nAPPS", "🌙\nNOCTURNO", "🧠
         Spacer(Modifier.height(20.dp))
         val usage = state.usage
         Row(Modifier.fillMaxWidth(), Arrangement.spacedBy(12.dp)) {
-            Box(Modifier.weight(1f)) { MetricCard("Tiempo total", "${usage.currentMinutes / 60}h ${usage.currentMinutes % 60}m", "Uso registrado en el período") }
-            Box(Modifier.weight(1f)) { MetricCard("Sesiones", "${usage.sessionCount}", "Duración típica: 20 min") }
+            Box(Modifier.weight(1f)) { MetricCard("Tiempo total", usage.currentMinutes?.let(::formatMinutes) ?: "Sin datos", usage.informationMessage ?: "Uso registrado en el período") }
+            Box(Modifier.weight(1f)) { MetricCard("Sesiones", usage.sessionCount?.toString() ?: "Sin datos", usage.maxSessionMinutes?.let { "Máxima: ${formatMinutes(it)}" } ?: "Sin duración máxima disponible") }
         }
-        Spacer(Modifier.height(12.dp))
-        MetricCard("Categoría principal", "Entretenimiento", "42 %", AppColors.PurpleSoft)
+        usage.informationMessage?.let { message -> Spacer(Modifier.height(12.dp)); Text(message, color = Color(0xFFCBD5E1), fontSize = 13.sp) }
     }
 }
 
 @Composable private fun AppsScreen(state: AdultAppsTabUiState) {
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        item { AdultContentHeader("Aplicaciones", "Distribución del uso de hoy") }
+        item { AdultContentHeader("Aplicaciones", "Distribución del uso de ${state.periodLabel}") }
         item {
-            AdultSectionCard("Aplicaciones más utilizadas hoy") {
-                val max = state.applications.maxOfOrNull { it.minutes } ?: 1
-                state.applications.forEach { app -> UsageDistributionRow(app.icon, app.name, formatMinutes(app.minutes), app.minutes.toFloat() / max) }
+            AdultSectionCard("Aplicaciones más utilizadas durante ${state.periodLabel}") {
+                if (state.applications.isEmpty()) Text(state.informationMessage ?: "No se registraron aplicaciones en el período.", color = Color(0xFFCBD5E1))
+                else { val max = state.applications.maxOfOrNull { it.minutes } ?: 1; state.applications.forEach { app -> UsageDistributionRow(app.icon, app.name, formatMinutes(app.minutes), app.minutes.toFloat() / max) } }
             }
         }
-        item {
+        if (state.categories.isNotEmpty()) item {
             AdultSectionCard("Distribución por categorías") {
                 state.categories.forEach { category -> UsageDistributionRow("", category.name, "${category.percentage} %", category.percentage / 100f) }
             }
         }
-        item {
+        if (state.comparisonApp != null && state.comparisonTodayMinutes != null && state.comparisonHabitualMinutes != null) item {
             AdultSectionCard("Comparación · ${state.comparisonApp}") {
                 ComparisonBar("Hoy", state.comparisonTodayMinutes, maxOf(state.comparisonTodayMinutes, state.comparisonHabitualMinutes))
                 ComparisonBar("Habitual", state.comparisonHabitualMinutes, maxOf(state.comparisonTodayMinutes, state.comparisonHabitualMinutes))
@@ -98,16 +97,17 @@ private val tabs = listOf("📊\nRESUMEN", "📱\nAPPS", "🌙\nNOCTURNO", "🧠
 
 @Composable private fun NightScreen(state: AdultNightTabUiState) {
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        item { AdultContentHeader("Uso nocturno", "Actividad posterior al horario habitual de acostarse") }
-        item { AdultSectionCard("Horario habitual de acostarse") { Text("🌙  ${state.bedtime}", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold) } }
+        item { AdultContentHeader("Uso nocturno", "Actividad durante el horario de descanso configurado") }
+        item { AdultSectionCard("Horario habitual de acostarse") { Text(state.bedtime?.let { "🌙  $it" } ?: "Sin horario disponible", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold) } }
         item {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Box(Modifier.weight(1f)) { NightMetricCard("Uso posterior al horario de acostarse", formatMinutes(state.usageAfterBedtimeMinutes)) }
-                Box(Modifier.weight(1f)) { NightMetricCard("Última actividad", state.lastActivity) }
+                Box(Modifier.weight(1f)) { NightMetricCard("Uso durante el horario de descanso", state.usageAfterBedtimeMinutes?.let(::formatMinutes) ?: "Sin datos") }
+                Box(Modifier.weight(1f)) { NightMetricCard("Última actividad", state.lastActivity ?: "Sin datos") }
             }
         }
-        item { NightMetricCard("Noches con actividad en los últimos 7 días", state.activeNightsThisWeek.toString()) }
-        item {
+        state.informationMessage?.let { message -> item { Text(message, color = Color(0xFFCBD5E1), fontSize = 13.sp) } }
+        state.activeNightsThisWeek?.let { value -> item { NightMetricCard("Noches con actividad en los últimos 7 días", value.toString()) } }
+        if (state.recentDays.isNotEmpty()) item {
             AdultSectionCard("Últimos días") {
                 val max = state.recentDays.maxOfOrNull { it.minutes }?.coerceAtLeast(1) ?: 1
                 state.recentDays.forEach { day -> UsageDistributionRow("", day.label, formatMinutes(day.minutes), day.minutes.toFloat() / max) }

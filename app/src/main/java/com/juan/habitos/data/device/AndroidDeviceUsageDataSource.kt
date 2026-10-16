@@ -9,8 +9,10 @@ import android.os.Process
 import android.util.Log
 import com.juan.habitos.domain.model.AppUsage
 import com.juan.habitos.domain.model.DailyUsage
+import com.juan.habitos.domain.model.UsageMetricStatus
 import com.juan.habitos.domain.repository.DeviceUsageDataSource
 import java.time.LocalDate
+import java.time.Instant
 import java.time.ZoneId
 import java.util.UUID
 
@@ -46,6 +48,44 @@ class AndroidDeviceUsageDataSource(private val context: Context) : DeviceUsageDa
         }.sortedBy { it.timestamp }
         val sessionAnalysis = UsageDiagnosticsCalculator.analyzeSessions(events)
         return UsageDiagnosticSnapshot(fromMillis, toMillis, apps, events, sessionAnalysis.completed, sessionAnalysis.incomplete, UsageDiagnosticsCalculator.unlockTimestamps(events), UsageDiagnosticsCalculator.reconstructAppUsage(events, toMillis), UsageDiagnosticsCalculator.summary(apps, events, toMillis))
+    }
+
+    fun queryAggregates(
+        start: Instant,
+        end: Instant,
+        nightIntervals: List<Pair<Instant, Instant>>,
+    ): AndroidAggregateEvidence {
+        val permission = try {
+            hasUsageAccess()
+        } catch (_: Exception) {
+            return AndroidAggregateEvidence(null, null, null, UsageMetricStatus.CAPTURE_ERROR)
+        }
+        if (!permission) return AndroidAggregateEvidence(null, null, null, UsageMetricStatus.PERMISSION_DENIED)
+        return try {
+            val applications = manager.readApplicationAggregates(context.packageManager, start.toEpochMilli(), end.toEpochMilli())
+            val eventStream = manager.queryEvents(start.toEpochMilli(), end.toEpochMilli())
+            val events = eventStream?.let { stream ->
+                buildList {
+                    val event = UsageEvents.Event()
+                    while (stream.hasNextEvent()) {
+                        stream.getNextEvent(event)
+                        add(RawUsageEvent(event.timeStamp, event.packageName?.takeIf(String::isNotBlank), event.eventType, eventName(event.eventType)))
+                    }
+                }.sortedBy(RawUsageEvent::timestamp)
+            }
+            var nightFailure: UsageMetricStatus? = null
+            val nightMillis = if (nightIntervals.isEmpty()) null else nightIntervals.sumOf { (nightStart, nightEnd) ->
+                val values = manager.readApplicationAggregates(context.packageManager, nightStart.toEpochMilli(), nightEnd.toEpochMilli())
+                if (values == null) {
+                    nightFailure = UsageMetricStatus.CAPTURE_ERROR
+                    0L
+                } else values.sumOf(AndroidAppAggregate::foregroundMillis)
+            }.takeIf { nightFailure == null }
+            AndroidAggregateEvidence(applications, events, nightMillis, nightFailureStatus = nightFailure)
+        } catch (exception: Exception) {
+            Log.e(TAG, "Unable to capture Android usage aggregates", exception)
+            AndroidAggregateEvidence(null, null, null, UsageMetricStatus.CAPTURE_ERROR)
+        }
     }
 
     override fun collectRun(requestedStartEpochMillis: Long, requestedEndEpochMillis: Long): UsageCollectorRun {

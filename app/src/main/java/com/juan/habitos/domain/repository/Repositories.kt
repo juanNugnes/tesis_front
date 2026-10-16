@@ -33,7 +33,20 @@ interface ProfileContextRepository {
     suspend fun update(context: ProfileContext): ProfileContext
     suspend fun delete(contextId: String)
 }
-interface UsageRepository { suspend fun daily(period: DashboardPeriod = DashboardPeriod.TODAY): DailyUsage; suspend fun apps(): List<AppUsage>; suspend fun recommendation(): Recommendation }
+interface UsageRepository {
+    suspend fun daily(period: DashboardPeriod = DashboardPeriod.TODAY): DailyUsage
+    suspend fun apps(): List<AppUsage>
+    suspend fun recommendation(): Recommendation
+    suspend fun overview(period: DashboardPeriod = DashboardPeriod.TODAY): UsageOverview {
+        val daily = daily(period)
+        val applications = apps()
+        return UsageOverview(
+            usage = daily,
+            applications = applications,
+            applicationsStatus = if (applications.isEmpty()) UsageMetricStatus.UNAVAILABLE else UsageMetricStatus.MEASURED,
+        )
+    }
+}
 interface ActivitySuggestionRepository {
     suspend fun suggestions(): ActivitySuggestionOffer
     suspend fun registerSelection(selection: ActivitySelection)

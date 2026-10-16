@@ -17,8 +17,55 @@ data class Profile(
     val id: String? = null,
     val active: Boolean = true,
 )
-data class AppUsage(val name: String, val packageName: String, val minutes: Int, val category: String, val icon: String)
-data class DailyUsage(val currentMinutes: Int, val expectedMinutes: Int, val sessionCount: Int)
+enum class UsageMetricStatus { MEASURED, UNAVAILABLE, PERMISSION_DENIED, CAPTURE_ERROR, INCOMPLETE }
+enum class UsageCoverageStatus { UNKNOWN, PARTIAL }
+
+data class UsageMetricStatuses(
+    val totalUsageMinutes: UsageMetricStatus,
+    val sessionCount: UsageMetricStatus,
+    val nightUsageMinutes: UsageMetricStatus,
+    val maxSessionMinutes: UsageMetricStatus,
+    val unlockCount: UsageMetricStatus,
+    val applications: UsageMetricStatus,
+)
+
+data class AppUsage(
+    val name: String,
+    val packageName: String,
+    val minutes: Int,
+    val category: String? = null,
+    val icon: String = "📱",
+)
+
+data class DailyUsage(
+    val currentMinutes: Int?,
+    val expectedMinutes: Int? = null,
+    val sessionCount: Int?,
+    val nightUsageMinutes: Int? = null,
+    val maxSessionMinutes: Int? = null,
+    val unlockCount: Int? = null,
+    val metricStatuses: UsageMetricStatuses = UsageMetricStatuses(
+        totalUsageMinutes = if (currentMinutes == null) UsageMetricStatus.UNAVAILABLE else UsageMetricStatus.MEASURED,
+        sessionCount = if (sessionCount == null) UsageMetricStatus.UNAVAILABLE else UsageMetricStatus.MEASURED,
+        nightUsageMinutes = if (nightUsageMinutes == null) UsageMetricStatus.UNAVAILABLE else UsageMetricStatus.MEASURED,
+        maxSessionMinutes = if (maxSessionMinutes == null) UsageMetricStatus.UNAVAILABLE else UsageMetricStatus.MEASURED,
+        unlockCount = if (unlockCount == null) UsageMetricStatus.UNAVAILABLE else UsageMetricStatus.MEASURED,
+        applications = UsageMetricStatus.UNAVAILABLE,
+    ),
+    val coverageStatus: UsageCoverageStatus = UsageCoverageStatus.UNKNOWN,
+    val periodsUniform: Boolean = true,
+    val sourceCount: Int = 1,
+    val informationMessage: String? = null,
+)
+
+data class UsageOverview(
+    val usage: DailyUsage,
+    val applications: List<AppUsage>?,
+    val applicationsStatus: UsageMetricStatus,
+    val nightWindowStart: String? = null,
+    val nightWindowEnd: String? = null,
+    val recordCount: Int = 1,
+)
 data class Recommendation(val title: String, val description: String, val activity: String)
 data class ActivitySuggestion(
     val id: String,

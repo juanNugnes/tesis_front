@@ -1,6 +1,7 @@
 package com.juan.habitos.data.remote
 
 import com.google.gson.annotations.SerializedName
+import com.google.gson.GsonBuilder
 import com.juan.habitos.BuildConfig
 import retrofit2.Retrofit
 import retrofit2.Response
@@ -324,6 +325,25 @@ interface HabitsApi {
     @POST("api/v1/device-links/claim") suspend fun claimDeviceLink(@Body request: DeviceLinkClaimRequest): Response<DeviceLinkClaimResponse>
     @POST("api/v1/profiles/{profileId}/usage") suspend fun postUsage(@Path("profileId") id: String, @Body usage: UsageDto): UsageDto
     @GET("api/v1/profiles/{profileId}/usage") suspend fun getUsage(@Path("profileId") id: String): UsageDto
+    @POST("api/v1/profiles/{profileId}/usage")
+    suspend fun postUsageSnapshot(
+        @Path("profileId") profileId: String,
+        @Header("Authorization") authorization: String,
+        @Body usage: UsageSnapshotRequest,
+    ): UsageWriteResultDto = error("Not implemented")
+    @GET("api/v1/profiles/{profileId}/usage")
+    suspend fun getUsageRange(
+        @Path("profileId") profileId: String,
+        @Header("Authorization") authorization: String,
+        @Query("date_from") dateFrom: String,
+        @Query("date_to") dateTo: String,
+    ): List<DailyUsageReadDto> = error("Not implemented")
+    @GET("api/v1/profiles/{profileId}/usage/{date}")
+    suspend fun getUsageDay(
+        @Path("profileId") profileId: String,
+        @Path("date") date: String,
+        @Header("Authorization") authorization: String,
+    ): DailyUsageReadDto = error("Not implemented")
     @POST("api/v1/profiles/{profileId}/analysis") suspend fun postAnalysis(@Path("profileId") id: String): AnalysisDto
     @GET("api/v1/profiles/{profileId}/analysis/latest") suspend fun latestAnalysis(@Path("profileId") id: String): AnalysisDto
 }
@@ -333,6 +353,14 @@ object HabitsApiClient {
         Retrofit.Builder()
             .baseUrl(BuildConfig.API_BASE_URL)
             .addConverterFactory(GsonConverterFactory.create())
+            .build()
+            .create(HabitsApi::class.java)
+    }
+    /** Usage snapshots must preserve explicit JSON nulls to distinguish unavailable metrics from measured zero. */
+    val usageApi: HabitsApi by lazy {
+        Retrofit.Builder()
+            .baseUrl(BuildConfig.API_BASE_URL)
+            .addConverterFactory(GsonConverterFactory.create(GsonBuilder().serializeNulls().create()))
             .build()
             .create(HabitsApi::class.java)
     }

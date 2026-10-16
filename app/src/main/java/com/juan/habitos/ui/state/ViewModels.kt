@@ -413,14 +413,11 @@ sealed interface ActivityState {
 }
 data class ChildHomeUiState(
     val profile: Profile = Profile("", "🦊", 9),
-    val usage: DailyUsage = DailyUsage(0, 180, 0),
-    val habitualUsageMinutes: Int = 150,
-    val periodUsage: List<DayPeriodUsageUiModel> = listOf(
-        DayPeriodUsageUiModel(DayPeriod.MORNING, 35),
-        DayPeriodUsageUiModel(DayPeriod.AFTERNOON, 100),
-        DayPeriodUsageUiModel(DayPeriod.NIGHT, 30),
-    ),
-    val apps: List<AppUsage> = emptyList(),
+    val usage: DailyUsage = DailyUsage(null, null, null),
+    val habitualUsageMinutes: Int? = null,
+    val periodUsage: List<DayPeriodUsageUiModel> = emptyList(),
+    val apps: List<AppUsage>? = null,
+    val applicationsStatus: UsageMetricStatus = UsageMetricStatus.UNAVAILABLE,
     val activityState: ActivityState = ActivityState.Loading,
     val chosenActivities: Int? = null,
     val selectionRegistrationFailed: Boolean = false,
@@ -442,7 +439,13 @@ class ChildViewModel(
     private var selectionCountRequestId = 0
     init {
         viewModelScope.launch { profileRepo.profile.filterNotNull().collect { profile -> _state.update { it.copy(profile = profile) } } }
-        viewModelScope.launch { _state.update { it.copy(usage = usageRepo.daily(), apps = usageRepo.apps()) } }
+        viewModelScope.launch {
+            runCatching { usageRepo.overview() }.onSuccess { overview ->
+                _state.update { it.copy(usage = overview.usage, apps = overview.applications, applicationsStatus = overview.applicationsStatus) }
+            }.onFailure {
+                _state.update { state -> state.copy(usage = DailyUsage(null, null, null, informationMessage = "No pudimos obtener las métricas del dispositivo."), apps = null) }
+            }
+        }
         loadActivitySuggestions()
     }
     fun loadActivitySuggestions() = viewModelScope.launch {
@@ -561,34 +564,22 @@ class ChildViewModel(
 data class AdultAppUsageUiModel(val name: String, val icon: String, val minutes: Int)
 data class CategoryUsageUiModel(val name: String, val percentage: Int)
 data class AdultAppsTabUiState(
-    val applications: List<AdultAppUsageUiModel> = listOf(
-        AdultAppUsageUiModel("YouTube", "▶️", 80),
-        AdultAppUsageUiModel("Roblox", "🎮", 46),
-        AdultAppUsageUiModel("Khan Academy", "📚", 31),
-        AdultAppUsageUiModel("WhatsApp", "💬", 22),
-    ),
-    val categories: List<CategoryUsageUiModel> = listOf(
-        CategoryUsageUiModel("Entretenimiento", 42),
-        CategoryUsageUiModel("Juegos", 28),
-        CategoryUsageUiModel("Social", 17),
-        CategoryUsageUiModel("Educación", 13),
-    ),
-    val comparisonApp: String = "YouTube",
-    val comparisonTodayMinutes: Int = 80,
-    val comparisonHabitualMinutes: Int = 45,
+    val applications: List<AdultAppUsageUiModel> = emptyList(),
+    val categories: List<CategoryUsageUiModel> = emptyList(),
+    val comparisonApp: String? = null,
+    val comparisonTodayMinutes: Int? = null,
+    val comparisonHabitualMinutes: Int? = null,
+    val informationMessage: String? = "Todavía no hay información de aplicaciones.",
+    val periodLabel: String = "hoy",
 )
 data class NightUsageDayUiModel(val label: String, val minutes: Int)
 data class AdultNightTabUiState(
-    val bedtime: String = "22:00",
-    val usageAfterBedtimeMinutes: Int = 38,
-    val lastActivity: String = "23:42",
-    val activeNightsThisWeek: Int = 3,
-    val recentDays: List<NightUsageDayUiModel> = listOf(
-        NightUsageDayUiModel("Hoy", 38),
-        NightUsageDayUiModel("Ayer", 12),
-        NightUsageDayUiModel("Lunes", 0),
-        NightUsageDayUiModel("Domingo", 44),
-    ),
+    val bedtime: String? = null,
+    val usageAfterBedtimeMinutes: Int? = null,
+    val lastActivity: String? = null,
+    val activeNightsThisWeek: Int? = null,
+    val recentDays: List<NightUsageDayUiModel> = emptyList(),
+    val informationMessage: String? = "Todavía no hay información nocturna.",
 )
 data class AnalysisFactorUiModel(val icon: String, val title: String, val description: String)
 data class BehaviorComparisonUiModel(val label: String, val value: String)
@@ -609,7 +600,7 @@ data class AdultAttentionTabUiState(
 data class AdultDashboardUiState(
     val profile: Profile = Profile("", "🦊", 9),
     val period: DashboardPeriod = DashboardPeriod.TODAY,
-    val usage: DailyUsage = DailyUsage(0,180,0),
+    val usage: DailyUsage = DailyUsage(null, null, null),
     val apps: List<AppUsage> = emptyList(),
     val alerts: List<Alert> = emptyList(),
     val appsTab: AdultAppsTabUiState = AdultAppsTabUiState(),
@@ -618,7 +609,67 @@ data class AdultDashboardUiState(
 )
 class AdultViewModel(profileRepo: ProfileRepository, private val usageRepo: UsageRepository, private val alertRepo: AlertRepository) : ViewModel() {
     private val _state = MutableStateFlow(AdultDashboardUiState()); val state = _state.asStateFlow()
-    init { viewModelScope.launch { profileRepo.profile.filterNotNull().collect { p -> _state.update { it.copy(profile = p) } } }; load() }
+    private var requestId = 0
+    private var observedProfile = false
+    init {
+        viewModelScope.launch {
+            profileRepo.profile.filterNotNull().collect { profile ->
+                val changed = !observedProfile || state.value.profile.id != profile.id
+                observedProfile = true
+                _state.update { it.copy(profile = profile) }
+                if (changed) load()
+            }
+        }
+    }
     fun period(value: DashboardPeriod) { _state.update { it.copy(period = value) }; load() }
-    private fun load() = viewModelScope.launch { _state.update { it.copy(usage = usageRepo.daily(it.period), apps = usageRepo.apps(), alerts = alertRepo.alerts()) } }
+    private fun load() = viewModelScope.launch {
+        val activeRequest = ++requestId
+        val selectedPeriod = state.value.period
+        try {
+            val overview = usageRepo.overview(selectedPeriod)
+            val alerts = alertRepo.alerts()
+            if (activeRequest != requestId) return@launch
+            val apps = overview.applications.orEmpty()
+            _state.update {
+                it.copy(
+                    usage = overview.usage,
+                    apps = apps,
+                    alerts = alerts,
+                    appsTab = AdultAppsTabUiState(
+                        applications = apps.map { app -> AdultAppUsageUiModel(app.name, app.icon, app.minutes) },
+                        periodLabel = if (selectedPeriod == DashboardPeriod.TODAY) "hoy" else "los últimos 7 días",
+                        informationMessage = when {
+                            overview.applications == null -> metricUnavailableMessage(overview.applicationsStatus)
+                            overview.usage.informationMessage != null -> overview.usage.informationMessage
+                            else -> null
+                        },
+                    ),
+                    nightTab = AdultNightTabUiState(
+                        bedtime = overview.nightWindowStart,
+                        usageAfterBedtimeMinutes = overview.usage.nightUsageMinutes,
+                        informationMessage = overview.usage.informationMessage
+                            ?: if (overview.usage.nightUsageMinutes == null) metricUnavailableMessage(overview.usage.metricStatuses.nightUsageMinutes) else null,
+                    ),
+                )
+            }
+        } catch (exception: CancellationException) {
+            throw exception
+        } catch (_: Exception) {
+            if (activeRequest == requestId) _state.update {
+                it.copy(
+                    usage = DailyUsage(null, null, null, informationMessage = "No pudimos obtener las métricas del perfil."),
+                    apps = emptyList(),
+                    appsTab = AdultAppsTabUiState(informationMessage = "No pudimos obtener las aplicaciones."),
+                    nightTab = AdultNightTabUiState(informationMessage = "No pudimos obtener el uso nocturno."),
+                )
+            }
+        }
+    }
+
+    private fun metricUnavailableMessage(status: UsageMetricStatus) = when (status) {
+        UsageMetricStatus.PERMISSION_DENIED -> "El dispositivo infantil no otorgó permiso de acceso al uso."
+        UsageMetricStatus.CAPTURE_ERROR -> "El dispositivo infantil no pudo capturar esta métrica."
+        UsageMetricStatus.INCOMPLETE -> "La información disponible es parcial."
+        else -> "Todavía no hay información disponible."
+    }
 }
