@@ -39,7 +39,7 @@ private val restrictionLabels = linkedMapOf(
     ActivityRestriction.HIGH_CONCENTRATION to "Actividades que requieren mucha concentración", ActivityRestriction.NONE to "Ninguna de estas",
 )
 
-@Composable fun AdultProfileScreen(profile: Profile, onEditProfile: () -> Unit, onSchedules: () -> Unit, onPreferences: () -> Unit, onContexts: (() -> Unit)?, onMonitoringConsent: (() -> Unit)?, onAdultLinkCode: (() -> Unit)?, onUsageDiagnostics: (() -> Unit)?, onBack: () -> Unit) {
+@Composable fun AdultProfileScreen(profile: Profile, onEditProfile: () -> Unit, onSchedules: () -> Unit, onPreferences: () -> Unit, onContexts: (() -> Unit)?, onLinkedDevices: (() -> Unit)?, onMonitoringConsent: (() -> Unit)?, onAdultLinkCode: (() -> Unit)?, onUsageDiagnostics: (() -> Unit)?, onBack: () -> Unit) {
     LazyColumn(Modifier.fillMaxSize().background(AppColors.Surface).statusBarsPadding(), contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         item { Row(verticalAlignment = Alignment.CenterVertically) { IconButton(onBack) { Text("←", color = Color.White, fontSize = 24.sp) }; Text("Perfil de ${profile.name}", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold) } }
         item { Card(colors = CardDefaults.cardColors(containerColor = AppColors.Card), shape = RoundedCornerShape(18.dp)) { Row(Modifier.fillMaxWidth().padding(18.dp), verticalAlignment = Alignment.CenterVertically) { Text(profile.avatar, fontSize = 46.sp); Spacer(Modifier.width(14.dp)); Text("${profile.name} · ${profile.age} años", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold) } } }
@@ -47,6 +47,7 @@ private val restrictionLabels = linkedMapOf(
         item { ProfileGroup("Rutinas", "🕒", "Horarios de escuela y sueño", profileScheduleSummary(profile), onSchedules) }
         item { ProfileGroup("Actividades", "🌿", "Preferencias y necesidades", "Personalizá las actividades sugeridas", onPreferences) }
         if (onContexts != null) item { ProfileGroup("Rutinas", "📅", "Contexto", "Registrá situaciones y cambios de rutina", onContexts) }
+        if (onLinkedDevices != null) item { ProfileGroup("Seguridad", "📱", "Dispositivos vinculados", "Consultá y desvinculá dispositivos infantiles", onLinkedDevices) }
         if (onMonitoringConsent != null) item { ProfileGroup("Privacidad", "🔒", "Privacidad y monitoreo", "Administrá el consentimiento para registrar el uso", onMonitoringConsent) }
         if (onAdultLinkCode != null) item { ProfileGroup("Vinculación", "🔗", "Vincular a un adulto responsable", "Generá un código temporal para este perfil", onAdultLinkCode) }
         item { ProfileGroup("Seguridad", "🔐", "Cambiar PIN") }

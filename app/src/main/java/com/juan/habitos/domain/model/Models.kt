@@ -188,6 +188,16 @@ data class RegisteredDevice(
     val active: Boolean,
 )
 
+data class AdultManagedDevice(
+    val id: String,
+    val profileId: String,
+    val platform: String,
+    val active: Boolean,
+    val createdAt: String? = null,
+    val updatedAt: String? = null,
+    val lastSeenAt: String? = null,
+)
+
 data class DeviceProfileClaim(
     val device: RegisteredDevice,
     val profile: Profile,

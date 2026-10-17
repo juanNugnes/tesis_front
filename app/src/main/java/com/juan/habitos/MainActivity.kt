@@ -110,7 +110,20 @@ private inline fun <reified T : ViewModel> factory(crossinline create: () -> T) 
             val mode = session.mode ?: return@composable
             val profileRepository = if (mode == DeviceMode.ADULT) app.adultProfileRepository else app.profileRepository
             val profile by profileRepository.profile.collectAsStateWithLifecycle(initialValue = null)
-            profile?.let { AdultProfileScreen(it, { nav.navigate(EDIT_PROFILE_ROUTE) }, { nav.navigate("profileSchedules") }, { nav.navigate(PREFERENCES_ROUTE) }, if (session.mode == DeviceMode.ADULT) ({ nav.navigate("profileContexts") }) else null, if (session.mode == DeviceMode.ADULT) ({ nav.navigate("monitoringConsent") }) else null, if (session.mode == DeviceMode.CHILD) ({ nav.navigate("adultProfileLinkCode") }) else null, if (BuildConfig.DEBUG && UsageDiagnosticsLauncher.isAvailable) ({ UsageDiagnosticsLauncher.open(app) }) else null, { nav.popBackStack() }) }
+            profile?.let {
+                AdultProfileScreen(
+                    profile = it,
+                    onEditProfile = { nav.navigate(EDIT_PROFILE_ROUTE) },
+                    onSchedules = { nav.navigate("profileSchedules") },
+                    onPreferences = { nav.navigate(PREFERENCES_ROUTE) },
+                    onContexts = if (session.mode == DeviceMode.ADULT) ({ nav.navigate("profileContexts") }) else null,
+                    onLinkedDevices = if (session.mode == DeviceMode.ADULT) ({ nav.navigate("linkedDevices") }) else null,
+                    onMonitoringConsent = if (session.mode == DeviceMode.ADULT) ({ nav.navigate("monitoringConsent") }) else null,
+                    onAdultLinkCode = if (session.mode == DeviceMode.CHILD) ({ nav.navigate("adultProfileLinkCode") }) else null,
+                    onUsageDiagnostics = if (BuildConfig.DEBUG && UsageDiagnosticsLauncher.isAvailable) ({ UsageDiagnosticsLauncher.open(app) }) else null,
+                    onBack = { nav.popBackStack() },
+                )
+            }
         }
         composable("adultProfileLinkCode") { val vm: AdultProfileLinkCodeViewModel = viewModel(factory = factory { AdultProfileLinkCodeViewModel(app.deviceRepository) }); val state by vm.state.collectAsStateWithLifecycle(); AdultProfileLinkCodeScreen(state, vm::generate) { nav.popBackStack() } }
         composable(EDIT_PROFILE_ROUTE) {
@@ -169,6 +182,22 @@ private inline fun <reified T : ViewModel> factory(crossinline create: () -> T) 
                     if (state.adultAuthenticationRequired) nav.navigate("adultAuth") { popUpTo("adult") { inclusive = true } }
                 }
                 MonitoringConsentScreen(state, vm::grant, vm::requestRevoke, vm::confirmRevoke, vm::cancelRevoke) { nav.popBackStack() }
+            }
+        }
+        composable("linkedDevices") {
+            val session by app.deviceSessionRepository.session.collectAsStateWithLifecycle(initialValue = DeviceSession())
+            if (session.mode == DeviceMode.ADULT) {
+                val profile by app.adultProfileRepository.profile.collectAsStateWithLifecycle(initialValue = null)
+                val profileId = profile?.id ?: return@composable
+                val vm: LinkedDevicesViewModel = viewModel(
+                    key = "linked-devices-$profileId",
+                    factory = factory { LinkedDevicesViewModel(app.adultDeviceRepository, profileId, BuildConfig.DEMO_MODE) },
+                )
+                val state by vm.state.collectAsStateWithLifecycle()
+                LaunchedEffect(state.adultAuthenticationRequired) {
+                    if (state.adultAuthenticationRequired) nav.navigate("adultAuth") { popUpTo("adult") { inclusive = true } }
+                }
+                LinkedDevicesScreen(state, vm::refresh, vm::requestDeactivate, vm::confirmDeactivate, vm::cancelDeactivate) { nav.popBackStack() }
             }
         }
     }

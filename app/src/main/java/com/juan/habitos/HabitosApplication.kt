@@ -16,6 +16,7 @@ import com.juan.habitos.data.remote.AdultRequestAuthorization
 import com.juan.habitos.data.remote.DeviceRequestAuthorization
 import com.juan.habitos.data.remote.RemoteActivitySuggestionRepository
 import com.juan.habitos.data.remote.RemoteMonitoringConsentRepository
+import com.juan.habitos.data.remote.RemoteAdultDeviceRepository
 import com.juan.habitos.data.remote.AdultUsageRepository
 import com.juan.habitos.data.remote.DeviceUsageRepository
 import com.juan.habitos.data.remote.UsageSyncCoordinator
@@ -43,6 +44,10 @@ class HabitosApplication : Application() {
     val adultPreferencesRepository by lazy { CachedChildPreferencesRepository(localChildPreferencesStore, localProfileStore, habitsApi, adultRequestAuthorization) }
     val profileContextRepository by lazy { CachedProfileContextRepository(localProfileContextStore, localProfileStore, habitsApi, remoteEnabled = !BuildConfig.DEMO_MODE, authorization = adultRequestAuthorization) }
     val monitoringConsentRepository by lazy { RemoteMonitoringConsentRepository(habitsApi, adultRequestAuthorization) }
+    val adultDeviceRepository by lazy {
+        if (BuildConfig.DEMO_MODE) PreviewAdultDeviceRepository()
+        else RemoteAdultDeviceRepository(habitsApi, adultRequestAuthorization)
+    }
     val activitySuggestionRepository by lazy {
         if (BuildConfig.DEMO_MODE) PreviewActivitySuggestionRepository()
         else RemoteActivitySuggestionRepository(localProfileStore, habitsApi, deviceRequestAuthorization)

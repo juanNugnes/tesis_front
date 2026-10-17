@@ -321,6 +321,10 @@ interface HabitsApi {
     @PUT("api/v1/profiles/{profileId}/contexts/{contextId}") suspend fun updateProfileContext(@Path("profileId") profileId: String, @Path("contextId") contextId: String, @Header("Authorization") authorization: String, @Body request: ProfileContextRequest): ProfileContextDto
     @DELETE("api/v1/profiles/{profileId}/contexts/{contextId}") suspend fun deleteProfileContext(@Path("profileId") profileId: String, @Path("contextId") contextId: String, @Header("Authorization") authorization: String)
     @POST("api/v1/profiles/{profileId}/devices") suspend fun registerDevice(@Path("profileId") profileId: String, @Header("Authorization") authorization: String, @Body request: DeviceCreateRequest): Response<DeviceRegistrationDto>
+    @GET("api/v1/profiles/{profileId}/devices")
+    suspend fun getProfileDevices(@Path("profileId") profileId: String, @Header("Authorization") authorization: String): List<DeviceDto> = error("Not implemented")
+    @DELETE("api/v1/profiles/{profileId}/devices/{deviceId}")
+    suspend fun deactivateProfileDevice(@Path("profileId") profileId: String, @Path("deviceId") deviceId: String, @Header("Authorization") authorization: String): DeviceDto = error("Not implemented")
     @POST("api/v1/profiles/{profileId}/device-link-codes") suspend fun createDeviceLinkCode(@Path("profileId") profileId: String): Response<DeviceLinkCodeDto>
     @POST("api/v1/device-links/claim") suspend fun claimDeviceLink(@Body request: DeviceLinkClaimRequest): Response<DeviceLinkClaimResponse>
     @POST("api/v1/profiles/{profileId}/usage") suspend fun postUsage(@Path("profileId") id: String, @Body usage: UsageDto): UsageDto

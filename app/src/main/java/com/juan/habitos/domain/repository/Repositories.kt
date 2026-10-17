@@ -80,6 +80,11 @@ interface DeviceRepository {
     suspend fun claimProfile(code: String): DeviceProfileClaim
     suspend fun createAdultProfileLinkCode(): AdultProfileLinkCode
 }
+interface AdultDeviceRepository {
+    suspend fun devices(profileId: String): List<AdultManagedDevice>
+    suspend fun deactivate(profileId: String, deviceId: String): AdultManagedDevice
+}
+class AdultDeviceNotFoundException : Exception("Managed device not found")
 enum class DeviceLinkFailureReason { INVALID_OR_EXPIRED_CODE, INSTALLATION_CONFLICT, BOOTSTRAP_EXPIRED, SERVER_ERROR }
 class DeviceLinkException(val reason: DeviceLinkFailureReason, message: String) : Exception(message)
 enum class DeviceAuthenticationFailureReason { MISSING_CREDENTIAL, EXPIRED_OR_INVALID }

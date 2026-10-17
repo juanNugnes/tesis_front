@@ -60,6 +60,21 @@ class FakeAlertRepository : AlertRepository {
     )
 }
 
+class PreviewAdultDeviceRepository : AdultDeviceRepository {
+    override suspend fun devices(profileId: String) = listOf(
+        AdultManagedDevice(
+            id = "demo-device",
+            profileId = profileId,
+            platform = "ANDROID",
+            active = true,
+            lastSeenAt = "2026-10-16T18:30:00Z",
+        )
+    )
+
+    override suspend fun deactivate(profileId: String, deviceId: String): AdultManagedDevice =
+        throw UnsupportedOperationException("Demo device data is read-only")
+}
+
 class MockAuthRepository : AuthRepository {
     private companion object { const val VERIFICATION_CODE = "123456" }
     override suspend fun requestVerificationCode(email: String) = AdultOtpChallenge("Código demo generado", VERIFICATION_CODE)
