@@ -1,5 +1,8 @@
 package com.juan.habitos.ui.child
 
+import android.graphics.drawable.Drawable
+import android.content.pm.PackageManager
+import android.util.Log
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -14,9 +17,14 @@ import androidx.compose.ui.*
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.*
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.*
+import androidx.core.graphics.drawable.toBitmap
+import com.juan.habitos.domain.model.AppUsage
+import com.juan.habitos.domain.model.UsageMetricStatus
 import com.juan.habitos.ui.components.*
 import com.juan.habitos.ui.state.*
 import com.juan.habitos.ui.theme.*
@@ -80,12 +88,157 @@ private val ChildBorderColor = Color.White.copy(alpha = .20f)
     } }
 }
 
-@Composable private fun DayUsageSummary(todayMinutes: Int?, habitualMinutes: Int?, informationMessage: String?) { var expanded by rememberSaveable { mutableStateOf(false) }; val message = when { todayMinutes == null -> informationMessage ?: "Todavía no hay información de uso para hoy"; habitualMinutes == null -> "Hoy llevás ${formatMinutesLong(todayMinutes)} de uso registrado"; todayMinutes - habitualMinutes > 15 -> "Hoy usaste el celu un poquito más que otros días"; todayMinutes - habitualMinutes < -15 -> "Hoy usaste el celu un poquito menos que otros días"; else -> "Hoy viene parecido a otros días" }; ChildCard { Column(verticalArrangement = Arrangement.spacedBy(10.dp)) { Text("Así viene tu día", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 19.sp); Text(message, color = Color.White.copy(.82f), lineHeight = 20.sp); if (todayMinutes != null) { TextButton(onClick = { expanded = !expanded }, contentPadding = PaddingValues(horizontal = 0.dp)) { Text(if (expanded) "Ocultar mi tiempo ↑" else "Ver mi tiempo →", color = Color(0xFFFFE08A), fontWeight = FontWeight.Bold) }; AnimatedVisibility(visible = expanded, enter = expandVertically(tween(220)) + fadeIn(), exit = shrinkVertically(tween(180)) + fadeOut()) { if (habitualMinutes == null) Text(formatMinutesLong(todayMinutes), color = Color.White, fontWeight = FontWeight.Bold) else UsageComparison(todayMinutes, habitualMinutes) } } } } }
+internal fun dayUsageMessage(todayMinutes: Int?, habitualMinutes: Int?, informationMessage: String?, timeVisible: Boolean): String = when {
+    todayMinutes == null -> informationMessage ?: "Todavía no hay información de uso para hoy"
+    timeVisible -> "Hoy llevás ${formatMinutesLong(todayMinutes)} usando tu celular"
+    habitualMinutes == null -> "Ya hay información disponible sobre el uso de hoy"
+    todayMinutes - habitualMinutes > 15 -> "Hoy usaste el celu un poquito más que otros días"
+    todayMinutes - habitualMinutes < -15 -> "Hoy usaste el celu un poquito menos que otros días"
+    else -> "Hoy viene parecido a otros días"
+}
 
-@Composable private fun ChildUsageDetails(sessionCount: Int?, apps: List<com.juan.habitos.domain.model.AppUsage>?, applicationsStatus: com.juan.habitos.domain.model.UsageMetricStatus) { ChildCard { Column(verticalArrangement = Arrangement.spacedBy(10.dp)) { Text("Uso registrado", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp); Text(sessionCount?.let { "Sesiones: $it" } ?: "Sesiones: sin información", color = Color.White.copy(.82f)); when { apps == null -> Text(if (applicationsStatus == com.juan.habitos.domain.model.UsageMetricStatus.PERMISSION_DENIED) "Falta el permiso de uso para ver aplicaciones" else "Aplicaciones: sin información", color = Color.White.copy(.72f)); apps.isEmpty() -> Text("No se registraron aplicaciones en el período", color = Color.White.copy(.72f)); else -> apps.take(3).forEach { app -> Text("${app.name}: ${formatMinutesLong(app.minutes)}", color = Color.White.copy(.82f)) } } } } }
+@Composable private fun DayUsageSummary(todayMinutes: Int?, habitualMinutes: Int?, informationMessage: String?) {
+    var timeVisible by rememberSaveable { mutableStateOf(false) }
+    ChildCard {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text("Así viene tu día", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 19.sp)
+            AnimatedContent(targetState = timeVisible, label = "day-usage-visibility") { visible ->
+                Text(dayUsageMessage(todayMinutes, habitualMinutes, informationMessage, visible), color = Color.White.copy(.82f), lineHeight = 20.sp)
+            }
+            if (todayMinutes != null) {
+                TextButton(onClick = { timeVisible = !timeVisible }, contentPadding = PaddingValues(horizontal = 0.dp)) {
+                    Text(if (timeVisible) "Ocultar mi tiempo ↑" else "Ver mi tiempo →", color = Color(0xFFFFE08A), fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+    }
+}
 
-@Composable fun UsageComparison(todayMinutes: Int, habitualMinutes: Int) { val max = maxOf(todayMinutes, habitualMinutes, 1); Column(verticalArrangement = Arrangement.spacedBy(10.dp)) { HorizontalDivider(color = Color.White.copy(.18f)); ComparisonRow("Hoy", todayMinutes, max, Color(0xFFFFD166)); ComparisonRow("Habitual", habitualMinutes, max, Color(0xFFB8A6F7)) } }
-@Composable private fun ComparisonRow(label: String, minutes: Int, maxMinutes: Int, color: Color) { Row(verticalAlignment = Alignment.CenterVertically) { Text(label, Modifier.width(70.dp), color = Color.White.copy(.72f), fontSize = 13.sp); LinearProgressIndicator({ minutes.toFloat() / maxMinutes }, Modifier.weight(1f).height(9.dp).clip(CircleShape), color = color, trackColor = Color.White.copy(.13f)); Spacer(Modifier.width(12.dp)); Text(formatMinutes(minutes), Modifier.width(64.dp), color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold, maxLines = 1) } }
+private val packageNamePattern = Regex("^[a-zA-Z][a-zA-Z0-9_]*(\\.[a-zA-Z0-9_]+)+$")
+private val packageInfrastructureSegments = setOf("com", "org", "net", "android", "app", "apps", "mobile", "client", "release")
+
+internal fun packageDerivedDisplayName(packageName: String): String {
+    fun readableSegment(segment: String): String {
+        val separated = segment
+            .replace('_', ' ')
+            .replace('-', ' ')
+            .replace(Regex("(?<=[a-z])(?=[A-Z])"), " ")
+            .replace(Regex("(?<=[A-Za-z])(?=\\d+$)"), " ")
+            .trim()
+        return separated.split(Regex("\\s+"))
+            .filter(String::isNotBlank)
+            .joinToString(" ") { token -> token.lowercase().replaceFirstChar { it.titlecase() } }
+    }
+
+    val identifyingSegments = packageName.split('.')
+        .map(String::trim)
+        .filter { it.isNotEmpty() && it.lowercase() !in packageInfrastructureSegments }
+        .takeLast(2)
+        .map(::readableSegment)
+        .filter(String::isNotBlank)
+    return identifyingSegments.joinToString(" ").takeIf(String::isNotBlank) ?: "Aplicación"
+}
+
+internal fun resolveApplicationDisplayName(reportedName: String, packageName: String, installedLabel: String?): String {
+    val localLabel = installedLabel?.trim().orEmpty()
+    if (localLabel.isNotEmpty() && !packageNamePattern.matches(localLabel)) return localLabel
+    val reported = reportedName.trim()
+    if (reported.isNotEmpty() && reported != packageName && !packageNamePattern.matches(reported)) return reported
+    return packageDerivedDisplayName(packageName)
+}
+
+internal fun resolveApplicationDisplayName(reportedName: String, packageName: String, installedLabelLookup: () -> String?): String =
+    resolveApplicationDisplayName(reportedName, packageName, runCatching(installedLabelLookup).getOrNull())
+
+internal fun applicationsStateMessage(apps: List<AppUsage>?, status: UsageMetricStatus): String? = when {
+    apps == null && status == UsageMetricStatus.PERMISSION_DENIED -> "Falta el permiso de uso para ver aplicaciones"
+    apps == null -> "No hay información disponible sobre las aplicaciones"
+    apps.isEmpty() -> "No se registraron aplicaciones hoy"
+    else -> null
+}
+
+internal fun visibleApplications(apps: List<AppUsage>, showAll: Boolean): List<AppUsage> =
+    apps.sortedByDescending(AppUsage::minutes).let { ordered -> if (showAll) ordered else ordered.take(3) }
+
+private enum class InstalledApplicationLookupStatus { RESOLVED, NOT_FOUND_OR_NOT_VISIBLE, RESTRICTED, ERROR }
+private data class InstalledApplicationVisual(
+    val label: String?,
+    val icon: Drawable?,
+    val status: InstalledApplicationLookupStatus,
+)
+
+private fun PackageManager.applicationVisual(packageName: String): InstalledApplicationVisual {
+    if (packageName.isBlank()) return InstalledApplicationVisual(null, null, InstalledApplicationLookupStatus.NOT_FOUND_OR_NOT_VISIBLE)
+    return try {
+        @Suppress("DEPRECATION")
+        val applicationInfo = getApplicationInfo(packageName, 0)
+        InstalledApplicationVisual(
+            label = runCatching { applicationInfo.loadLabel(this).toString().takeIf(String::isNotBlank) }.getOrNull(),
+            icon = runCatching { applicationInfo.loadIcon(this) }.getOrNull(),
+            status = InstalledApplicationLookupStatus.RESOLVED,
+        )
+    } catch (_: PackageManager.NameNotFoundException) {
+        // Android 11+ uses the same result for an absent package and one filtered by visibility.
+        InstalledApplicationVisual(null, null, InstalledApplicationLookupStatus.NOT_FOUND_OR_NOT_VISIBLE)
+    } catch (_: SecurityException) {
+        InstalledApplicationVisual(null, null, InstalledApplicationLookupStatus.RESTRICTED)
+    } catch (exception: RuntimeException) {
+        Log.w("ChildApplicationRow", "Unable to resolve package metadata for $packageName", exception)
+        InstalledApplicationVisual(null, null, InstalledApplicationLookupStatus.ERROR)
+    }
+}
+
+@Composable private fun rememberInstalledApplicationVisual(packageName: String): InstalledApplicationVisual {
+    val packageManager = LocalContext.current.packageManager
+    return remember(packageManager, packageName) { packageManager.applicationVisual(packageName) }
+}
+
+@Composable private fun ChildApplicationRow(app: AppUsage) {
+    val installed = rememberInstalledApplicationVisual(app.packageName)
+    val displayName = resolveApplicationDisplayName(app.name, app.packageName, installed.label)
+    val icon = remember(installed.icon) { runCatching { installed.icon?.toBitmap()?.asImageBitmap() }.getOrNull() }
+    Surface(color = Color.White.copy(.09f), shape = RoundedCornerShape(16.dp), border = BorderStroke(1.dp, Color.White.copy(.12f))) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Surface(Modifier.size(42.dp), color = Color.White.copy(.92f), shape = RoundedCornerShape(12.dp)) {
+                Box(Modifier.padding(7.dp), contentAlignment = Alignment.Center) {
+                    if (icon != null) Image(icon, contentDescription = "Ícono de $displayName", modifier = Modifier.fillMaxSize())
+                    else Text(app.icon.takeIf(String::isNotBlank) ?: "📱", fontSize = 21.sp)
+                }
+            }
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Text(displayName, color = Color.White, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text(formatMinutesLong(app.minutes), color = Color(0xFFFFE08A), fontWeight = FontWeight.Bold, fontSize = 13.sp)
+            }
+        }
+    }
+}
+
+@Composable private fun ChildUsageDetails(sessionCount: Int?, apps: List<AppUsage>?, applicationsStatus: UsageMetricStatus) {
+    var showAll by rememberSaveable(apps?.size) { mutableStateOf(false) }
+    val sortedApps = remember(apps) { apps?.sortedByDescending(AppUsage::minutes) }
+    val displayedApps = remember(apps, showAll) { visibleApplications(apps.orEmpty(), showAll) }
+    ChildCard {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text("Tus aplicaciones de hoy", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+            Surface(color = Color.White.copy(.08f), shape = RoundedCornerShape(14.dp)) {
+                Row(Modifier.padding(horizontal = 12.dp, vertical = 9.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("◷", color = Color(0xFFFFE08A), fontSize = 18.sp)
+                    Spacer(Modifier.width(8.dp))
+                    Text(sessionCount?.let { if (it == 1) "1 sesión registrada hoy" else "$it sesiones registradas hoy" } ?: "Sesiones sin información", color = Color.White.copy(.82f), fontSize = 13.sp)
+                }
+            }
+            applicationsStateMessage(sortedApps, applicationsStatus)?.let { message ->
+                Text(message, color = Color.White.copy(.72f), lineHeight = 20.sp)
+            } ?: displayedApps.forEach { app -> ChildApplicationRow(app) }
+            if (sortedApps != null && sortedApps.size > 3) {
+                TextButton(onClick = { showAll = !showAll }, modifier = Modifier.align(Alignment.CenterHorizontally)) {
+                    Text(if (showAll) "Ver menos" else "Ver todas (${sortedApps.size})", color = Color(0xFFFFE08A), fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+    }
+}
 
 @Composable fun DayPeriodUsageCard(periods: List<DayPeriodUsageUiModel>) { var selected by rememberSaveable { mutableStateOf<DayPeriod?>(null) }; ChildCard { Column(verticalArrangement = Arrangement.spacedBy(14.dp)) { Text("Momentos de tu día", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp); Row(Modifier.fillMaxWidth(), Arrangement.spacedBy(9.dp)) { periods.forEachIndexed { index, period -> DayPeriodItem(period, selected == period.period, selected != null, index, Modifier.weight(1f)) { selected = if (selected == period.period) null else period.period } } }; AnimatedContent(targetState = selected, transitionSpec = { fadeIn(tween(220)) + expandVertically() togetherWith fadeOut(tween(140)) + shrinkVertically() }, label = "period-detail") { selectedPeriod -> periods.firstOrNull { it.period == selectedPeriod }?.let { item -> val label = periodPresentation(item.period).second; Text("$label\nUsaste el celu ${formatMinutesLong(item.minutes)}.", Modifier.fillMaxWidth().background(Color.White.copy(.10f), RoundedCornerShape(12.dp)).padding(12.dp), color = Color.White, fontWeight = FontWeight.Medium, lineHeight = 21.sp) } } } } }
 @Composable fun DayPeriodItem(item: DayPeriodUsageUiModel, selected: Boolean, hasSelection: Boolean, index: Int, modifier: Modifier = Modifier, onClick: () -> Unit) {
@@ -209,7 +362,6 @@ fun activityHistoryMessage(chosenActivities: Int?): String = when (chosenActivit
 @Composable fun ActivityHistory(chosenActivities: Int?) { Surface(color = Color(0xFFDAF5E3).copy(.96f), shape = RoundedCornerShape(22.dp), border = BorderStroke(1.dp, Color.White.copy(.5f))) { Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) { Text("🌱", fontSize = 25.sp); Spacer(Modifier.width(12.dp)); Text(activityHistoryMessage(chosenActivities), color = Color(0xFF24543A), fontWeight = FontWeight.Bold) } } }
 
 @Composable private fun ChildCard(containerColor: Color = ChildCardColor, borderColor: Color = ChildBorderColor, content: @Composable () -> Unit) { Card(colors = CardDefaults.cardColors(containerColor = containerColor), border = BorderStroke(1.dp, borderColor), shape = RoundedCornerShape(24.dp)) { Box(Modifier.fillMaxWidth().padding(18.dp)) { content() } } }
-private fun formatMinutes(minutes: Int): String = if (minutes >= 60) "${minutes / 60}h ${minutes % 60}m" else "${minutes}m"
 private fun formatMinutesLong(minutes: Int): String = if (minutes >= 60) "${minutes / 60} h ${minutes % 60} min" else "$minutes min"
 
 @Composable fun AdultPinScreen(state: PinUiState, onDigit: (Int) -> Unit, onDelete: () -> Unit, onBack: () -> Unit) { Column(Modifier.fillMaxSize().background(AppColors.Surface).statusBarsPadding().padding(28.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) { Text("👤", color = AppColors.PurpleSoft, fontSize = 58.sp); Spacer(Modifier.height(22.dp)); Text("Panel del adulto", color = Color.White, fontSize = 27.sp, fontWeight = FontWeight.Bold); Text("Ingresá tu PIN de 4 dígitos", color = Color(0xFFCBD5E1)); Spacer(Modifier.height(30.dp)); PinDots(state.digits.length, state.error, emptyColor = Color(0xFF64748B), filledColor = AppColors.PurpleSoft); if (state.error) Text("PIN incorrecto. Intentá nuevamente.", color = MaterialTheme.colorScheme.error, fontSize = 13.sp, modifier = Modifier.padding(top = 10.dp)); Spacer(Modifier.height(30.dp)); NumericPinKeyboard(onDigit, onDelete, highContrastDark = true); Spacer(Modifier.height(28.dp)); TextButton(onBack) { Text("← Volver", color = Color(0xFFCBD5E1)) } } }
