@@ -10,10 +10,13 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.*
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.*
 import com.juan.habitos.domain.model.Alert
+import com.juan.habitos.domain.model.AppUsage
 import com.juan.habitos.domain.model.DashboardPeriod
 import com.juan.habitos.ui.components.MetricCard
+import com.juan.habitos.ui.components.rememberApplicationVisualPresentation
 import com.juan.habitos.ui.state.*
 import com.juan.habitos.ui.theme.*
 
@@ -77,7 +80,7 @@ private val tabs = listOf("📊\nRESUMEN", "📱\nAPPS", "🌙\nNOCTURNO", "🧠
         item {
             AdultSectionCard("Aplicaciones más utilizadas durante ${state.periodLabel}") {
                 if (state.applications.isEmpty()) Text(state.informationMessage ?: "No se registraron aplicaciones en el período.", color = Color(0xFFCBD5E1))
-                else { val max = state.applications.maxOfOrNull { it.minutes } ?: 1; state.applications.forEach { app -> UsageDistributionRow(app.icon, app.name, formatMinutes(app.minutes), app.minutes.toFloat() / max) } }
+                else { val max = state.applications.maxOfOrNull { it.minutes } ?: 1; state.applications.forEach { app -> AdultApplicationRow(app, max) } }
             }
         }
         if (state.categories.isNotEmpty()) item {
@@ -147,6 +150,27 @@ private val tabs = listOf("📊\nRESUMEN", "📱\nAPPS", "🌙\nNOCTURNO", "🧠
 
 @Composable private fun AdultContentHeader(title: String, subtitle: String) { Column(verticalArrangement = Arrangement.spacedBy(3.dp)) { Text(title, color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold); Text(subtitle, color = Color(0xFF94A3B8), fontSize = 13.sp) } }
 @Composable private fun AdultSectionCard(title: String, content: @Composable ColumnScope.() -> Unit) { Card(colors = CardDefaults.cardColors(containerColor = AppColors.Card), border = BorderStroke(1.dp, AppColors.Divider), shape = RoundedCornerShape(18.dp)) { Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) { Text(title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 17.sp); content() } } }
+@Composable private fun AdultApplicationRow(app: AdultAppUsageUiModel, maxMinutes: Int) {
+    val visual = rememberApplicationVisualPresentation(AppUsage(app.name, app.packageName, app.minutes, icon = app.icon))
+    Surface(color = AppColors.Surface.copy(alpha = .72f), shape = RoundedCornerShape(14.dp), border = BorderStroke(1.dp, AppColors.Divider)) {
+        Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Surface(Modifier.size(42.dp), color = Color.White.copy(alpha = .92f), shape = RoundedCornerShape(11.dp)) {
+                    Box(Modifier.padding(7.dp), contentAlignment = Alignment.Center) {
+                        if (visual.installedIcon != null) Image(visual.installedIcon, contentDescription = "Ícono de ${visual.displayName}", modifier = Modifier.fillMaxSize())
+                        else Text(visual.fallbackIcon, fontSize = 20.sp)
+                    }
+                }
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Text(visual.displayName, color = Color.White, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    Text(formatMinutes(app.minutes), color = Color(0xFFCBD5E1), fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                }
+            }
+            LinearProgressIndicator({ app.minutes.toFloat() / maxMinutes.coerceAtLeast(1) }, Modifier.fillMaxWidth().height(7.dp), color = AppColors.PurpleSoft, trackColor = AppColors.Divider)
+        }
+    }
+}
 @Composable private fun UsageDistributionRow(icon: String, label: String, value: String, progress: Float) { Column(verticalArrangement = Arrangement.spacedBy(6.dp)) { Row(verticalAlignment = Alignment.CenterVertically) { if (icon.isNotEmpty()) { Text(icon, fontSize = 18.sp); Spacer(Modifier.width(8.dp)) }; Text(label, Modifier.weight(1f), color = Color.White, fontWeight = FontWeight.Medium); Text(value, color = Color(0xFFCBD5E1), fontWeight = FontWeight.Bold) }; LinearProgressIndicator({ progress.coerceIn(0f, 1f) }, Modifier.fillMaxWidth().height(7.dp), color = AppColors.PurpleSoft, trackColor = AppColors.Divider) } }
 @Composable private fun ComparisonBar(label: String, minutes: Int, max: Int) = UsageDistributionRow("", label, formatMinutes(minutes), minutes.toFloat() / max.coerceAtLeast(1))
 @Composable private fun NightMetricCard(label: String, value: String) { Card(colors = CardDefaults.cardColors(containerColor = AppColors.Card), border = BorderStroke(1.dp, AppColors.Divider), shape = RoundedCornerShape(16.dp)) { Column(Modifier.fillMaxWidth().heightIn(min = 112.dp).padding(16.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) { Text(label.uppercase(), color = Color(0xFF94A3B8), fontSize = 11.sp, fontWeight = FontWeight.Bold); Text(value, color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold) } } }

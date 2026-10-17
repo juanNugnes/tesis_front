@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.juan.habitos.domain.model.*
 import com.juan.habitos.domain.repository.*
+import com.juan.habitos.ui.components.resolveApplicationDisplayName
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -583,7 +584,7 @@ class ChildViewModel(
     }
 }
 
-data class AdultAppUsageUiModel(val name: String, val icon: String, val minutes: Int)
+data class AdultAppUsageUiModel(val name: String, val packageName: String, val icon: String, val minutes: Int)
 data class CategoryUsageUiModel(val name: String, val percentage: Int)
 data class AdultAppsTabUiState(
     val applications: List<AdultAppUsageUiModel> = emptyList(),
@@ -658,7 +659,14 @@ class AdultViewModel(profileRepo: ProfileRepository, private val usageRepo: Usag
                     apps = apps,
                     alerts = alerts,
                     appsTab = AdultAppsTabUiState(
-                        applications = apps.map { app -> AdultAppUsageUiModel(app.name, app.icon, app.minutes) },
+                        applications = apps.map { app ->
+                            AdultAppUsageUiModel(
+                                name = resolveApplicationDisplayName(app.name, app.packageName, installedLabel = null),
+                                packageName = app.packageName,
+                                icon = app.icon,
+                                minutes = app.minutes,
+                            )
+                        },
                         periodLabel = if (selectedPeriod == DashboardPeriod.TODAY) "hoy" else "los últimos 7 días",
                         informationMessage = when {
                             overview.applications == null -> metricUnavailableMessage(overview.applicationsStatus)

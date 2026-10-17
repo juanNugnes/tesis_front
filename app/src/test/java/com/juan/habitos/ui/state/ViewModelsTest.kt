@@ -62,6 +62,12 @@ private class TestDeviceRepo : DeviceRepository {
 }
 private class TestPinStore : PinStore { var pin = ""; override suspend fun save(pin: String) { this.pin = pin }; override suspend fun verify(pin: String) = pin == this.pin }
 private class TestUsage : UsageRepository { override suspend fun daily(period: DashboardPeriod) = DailyUsage(if(period == DashboardPeriod.TODAY) 165 else 900, 180, 8); override suspend fun apps() = emptyList<AppUsage>(); override suspend fun recommendation() = Recommendation("","","") }
+private class MutableOverviewUsage(var value: UsageOverview) : UsageRepository {
+    override suspend fun overview(period: DashboardPeriod) = value
+    override suspend fun daily(period: DashboardPeriod) = value.usage
+    override suspend fun apps() = value.applications.orEmpty()
+    override suspend fun recommendation() = Recommendation("", "", "")
+}
 private class TestAlerts : AlertRepository { override suspend fun alerts() = emptyList<Alert>() }
 private class TestActivitySuggestions(
     var values: List<ActivitySuggestion> = listOf(
@@ -163,6 +169,46 @@ class ViewModelsTest {
     @Test fun `incorrect pin clears and shows error`() = runTest(dispatcher) { val store = TestPinStore().apply { pin = "1234" }; val vm = PinViewModel(store); repeat(4) { vm.digit(9,false) {} }; advanceUntilIdle(); assertEquals("", vm.state.value.digits); assertTrue(vm.state.value.error) }
     @Test fun `correct pin invokes completion`() = runTest(dispatcher) { val store = TestPinStore().apply { pin = "1234" }; val vm = PinViewModel(store); var done = false; (1..4).forEach { vm.digit(it,false) { done = true } }; advanceUntilIdle(); assertTrue(done) }
     @Test fun `dashboard changes period`() = runTest(dispatcher) { val vm = AdultViewModel(TestProfileRepo(), TestUsage(), TestAlerts()); vm.period(DashboardPeriod.WEEK); advanceUntilIdle(); assertEquals(DashboardPeriod.WEEK, vm.state.value.period); assertEquals(900, vm.state.value.usage.currentMinutes) }
+    @Test fun `adult dashboard keeps every application and derives readable remote names`() = runTest(dispatcher) {
+        val profileRepo = TestProfileRepo()
+        val apps = (1..12).map { index -> AppUsage("com.example.application$index", "com.example.application$index", 100 - index) }
+        val usage = MutableOverviewUsage(UsageOverview(DailyUsage(120, null, 6), apps, UsageMetricStatus.MEASURED))
+        val vm = AdultViewModel(profileRepo, usage, TestAlerts())
+
+        profileRepo.profile.value = Profile("Niña", "🦊", 9, id = "profile-1")
+        advanceUntilIdle()
+
+        assertEquals(12, vm.state.value.appsTab.applications.size)
+        assertEquals("Example Application 1", vm.state.value.appsTab.applications.first().name)
+        assertEquals("com.example.application1", vm.state.value.appsTab.applications.first().packageName)
+    }
+    @Test fun `adult dashboard reloads applications when selected child profile changes`() = runTest(dispatcher) {
+        val profileRepo = TestProfileRepo()
+        val usage = MutableOverviewUsage(UsageOverview(DailyUsage(30, null, 2), listOf(AppUsage("YouTube", "com.google.android.youtube", 30)), UsageMetricStatus.MEASURED))
+        val vm = AdultViewModel(profileRepo, usage, TestAlerts())
+
+        profileRepo.profile.value = Profile("Primera", "🦊", 9, id = "profile-1")
+        advanceUntilIdle()
+        assertEquals("com.google.android.youtube", vm.state.value.appsTab.applications.single().packageName)
+
+        usage.value = UsageOverview(DailyUsage(20, null, 1), listOf(AppUsage("com.whatsapp.w4b", "com.whatsapp.w4b", 20)), UsageMetricStatus.MEASURED)
+        profileRepo.profile.value = Profile("Segunda", "🐼", 10, id = "profile-2")
+        advanceUntilIdle()
+
+        assertEquals("Whatsapp W4b", vm.state.value.appsTab.applications.single().name)
+        assertEquals("com.whatsapp.w4b", vm.state.value.appsTab.applications.single().packageName)
+    }
+    @Test fun `adult dashboard preserves unavailable application state`() = runTest(dispatcher) {
+        val profileRepo = TestProfileRepo()
+        val usage = MutableOverviewUsage(UsageOverview(DailyUsage(null, null, null), null, UsageMetricStatus.PERMISSION_DENIED))
+        val vm = AdultViewModel(profileRepo, usage, TestAlerts())
+
+        profileRepo.profile.value = Profile("Niña", "🦊", 9, id = "profile-1")
+        advanceUntilIdle()
+
+        assertTrue(vm.state.value.appsTab.applications.isEmpty())
+        assertEquals("El dispositivo infantil no otorgó permiso de acceso al uso.", vm.state.value.appsTab.informationMessage)
+    }
     @Test fun `child state loads confirmed count for exact local day boundaries`() = runTest(dispatcher) {
         val repo = TestActivitySuggestions().apply { selectionCountValue = 4 }
         val date = LocalDate.of(2026, 10, 10)

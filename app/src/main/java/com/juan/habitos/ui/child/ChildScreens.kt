@@ -1,8 +1,5 @@
 package com.juan.habitos.ui.child
 
-import android.graphics.drawable.Drawable
-import android.content.pm.PackageManager
-import android.util.Log
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -17,12 +14,10 @@ import androidx.compose.ui.*
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.*
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.*
-import androidx.core.graphics.drawable.toBitmap
 import com.juan.habitos.domain.model.AppUsage
 import com.juan.habitos.domain.model.UsageMetricStatus
 import com.juan.habitos.ui.components.*
@@ -114,42 +109,6 @@ internal fun dayUsageMessage(todayMinutes: Int?, habitualMinutes: Int?, informat
     }
 }
 
-private val packageNamePattern = Regex("^[a-zA-Z][a-zA-Z0-9_]*(\\.[a-zA-Z0-9_]+)+$")
-private val packageInfrastructureSegments = setOf("com", "org", "net", "android", "app", "apps", "mobile", "client", "release")
-
-internal fun packageDerivedDisplayName(packageName: String): String {
-    fun readableSegment(segment: String): String {
-        val separated = segment
-            .replace('_', ' ')
-            .replace('-', ' ')
-            .replace(Regex("(?<=[a-z])(?=[A-Z])"), " ")
-            .replace(Regex("(?<=[A-Za-z])(?=\\d+$)"), " ")
-            .trim()
-        return separated.split(Regex("\\s+"))
-            .filter(String::isNotBlank)
-            .joinToString(" ") { token -> token.lowercase().replaceFirstChar { it.titlecase() } }
-    }
-
-    val identifyingSegments = packageName.split('.')
-        .map(String::trim)
-        .filter { it.isNotEmpty() && it.lowercase() !in packageInfrastructureSegments }
-        .takeLast(2)
-        .map(::readableSegment)
-        .filter(String::isNotBlank)
-    return identifyingSegments.joinToString(" ").takeIf(String::isNotBlank) ?: "Aplicación"
-}
-
-internal fun resolveApplicationDisplayName(reportedName: String, packageName: String, installedLabel: String?): String {
-    val localLabel = installedLabel?.trim().orEmpty()
-    if (localLabel.isNotEmpty() && !packageNamePattern.matches(localLabel)) return localLabel
-    val reported = reportedName.trim()
-    if (reported.isNotEmpty() && reported != packageName && !packageNamePattern.matches(reported)) return reported
-    return packageDerivedDisplayName(packageName)
-}
-
-internal fun resolveApplicationDisplayName(reportedName: String, packageName: String, installedLabelLookup: () -> String?): String =
-    resolveApplicationDisplayName(reportedName, packageName, runCatching(installedLabelLookup).getOrNull())
-
 internal fun applicationsStateMessage(apps: List<AppUsage>?, status: UsageMetricStatus): String? = when {
     apps == null && status == UsageMetricStatus.PERMISSION_DENIED -> "Falta el permiso de uso para ver aplicaciones"
     apps == null -> "No hay información disponible sobre las aplicaciones"
@@ -157,57 +116,31 @@ internal fun applicationsStateMessage(apps: List<AppUsage>?, status: UsageMetric
     else -> null
 }
 
-internal fun visibleApplications(apps: List<AppUsage>, showAll: Boolean): List<AppUsage> =
-    apps.sortedByDescending(AppUsage::minutes).let { ordered -> if (showAll) ordered else ordered.take(3) }
+internal fun visibleApplications(apps: List<AppUsage>, expanded: Boolean): List<AppUsage> =
+    apps.sortedByDescending(AppUsage::minutes).take(if (expanded) 10 else 5)
 
-private enum class InstalledApplicationLookupStatus { RESOLVED, NOT_FOUND_OR_NOT_VISIBLE, RESTRICTED, ERROR }
-private data class InstalledApplicationVisual(
-    val label: String?,
-    val icon: Drawable?,
-    val status: InstalledApplicationLookupStatus,
-)
+internal fun shouldShowApplicationExpansion(applicationCount: Int): Boolean = applicationCount > 5
 
-private fun PackageManager.applicationVisual(packageName: String): InstalledApplicationVisual {
-    if (packageName.isBlank()) return InstalledApplicationVisual(null, null, InstalledApplicationLookupStatus.NOT_FOUND_OR_NOT_VISIBLE)
-    return try {
-        @Suppress("DEPRECATION")
-        val applicationInfo = getApplicationInfo(packageName, 0)
-        InstalledApplicationVisual(
-            label = runCatching { applicationInfo.loadLabel(this).toString().takeIf(String::isNotBlank) }.getOrNull(),
-            icon = runCatching { applicationInfo.loadIcon(this) }.getOrNull(),
-            status = InstalledApplicationLookupStatus.RESOLVED,
-        )
-    } catch (_: PackageManager.NameNotFoundException) {
-        // Android 11+ uses the same result for an absent package and one filtered by visibility.
-        InstalledApplicationVisual(null, null, InstalledApplicationLookupStatus.NOT_FOUND_OR_NOT_VISIBLE)
-    } catch (_: SecurityException) {
-        InstalledApplicationVisual(null, null, InstalledApplicationLookupStatus.RESTRICTED)
-    } catch (exception: RuntimeException) {
-        Log.w("ChildApplicationRow", "Unable to resolve package metadata for $packageName", exception)
-        InstalledApplicationVisual(null, null, InstalledApplicationLookupStatus.ERROR)
-    }
-}
-
-@Composable private fun rememberInstalledApplicationVisual(packageName: String): InstalledApplicationVisual {
-    val packageManager = LocalContext.current.packageManager
-    return remember(packageManager, packageName) { packageManager.applicationVisual(packageName) }
+internal fun childSessionSummary(sessionCount: Int?): String = when (sessionCount) {
+    null -> "Todavía no hay información sobre tus momentos de uso"
+    0 -> "Hoy no se registraron momentos de uso"
+    1 -> "Hoy usaste el celular en 1 momento"
+    else -> "Hoy usaste el celular en $sessionCount momentos"
 }
 
 @Composable private fun ChildApplicationRow(app: AppUsage) {
-    val installed = rememberInstalledApplicationVisual(app.packageName)
-    val displayName = resolveApplicationDisplayName(app.name, app.packageName, installed.label)
-    val icon = remember(installed.icon) { runCatching { installed.icon?.toBitmap()?.asImageBitmap() }.getOrNull() }
+    val visual = rememberApplicationVisualPresentation(app)
     Surface(color = Color.White.copy(.09f), shape = RoundedCornerShape(16.dp), border = BorderStroke(1.dp, Color.White.copy(.12f))) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
             Surface(Modifier.size(42.dp), color = Color.White.copy(.92f), shape = RoundedCornerShape(12.dp)) {
                 Box(Modifier.padding(7.dp), contentAlignment = Alignment.Center) {
-                    if (icon != null) Image(icon, contentDescription = "Ícono de $displayName", modifier = Modifier.fillMaxSize())
-                    else Text(app.icon.takeIf(String::isNotBlank) ?: "📱", fontSize = 21.sp)
+                    if (visual.installedIcon != null) Image(visual.installedIcon, contentDescription = "Ícono de ${visual.displayName}", modifier = Modifier.fillMaxSize())
+                    else Text(visual.fallbackIcon, fontSize = 21.sp)
                 }
             }
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                Text(displayName, color = Color.White, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text(visual.displayName, color = Color.White, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 Text(formatMinutesLong(app.minutes), color = Color(0xFFFFE08A), fontWeight = FontWeight.Bold, fontSize = 13.sp)
             }
         }
@@ -225,15 +158,15 @@ private fun PackageManager.applicationVisual(packageName: String): InstalledAppl
                 Row(Modifier.padding(horizontal = 12.dp, vertical = 9.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text("◷", color = Color(0xFFFFE08A), fontSize = 18.sp)
                     Spacer(Modifier.width(8.dp))
-                    Text(sessionCount?.let { if (it == 1) "1 sesión registrada hoy" else "$it sesiones registradas hoy" } ?: "Sesiones sin información", color = Color.White.copy(.82f), fontSize = 13.sp)
+                    Text(childSessionSummary(sessionCount), color = Color.White.copy(.82f), fontSize = 13.sp)
                 }
             }
             applicationsStateMessage(sortedApps, applicationsStatus)?.let { message ->
                 Text(message, color = Color.White.copy(.72f), lineHeight = 20.sp)
             } ?: displayedApps.forEach { app -> ChildApplicationRow(app) }
-            if (sortedApps != null && sortedApps.size > 3) {
+            if (sortedApps != null && shouldShowApplicationExpansion(sortedApps.size)) {
                 TextButton(onClick = { showAll = !showAll }, modifier = Modifier.align(Alignment.CenterHorizontally)) {
-                    Text(if (showAll) "Ver menos" else "Ver todas (${sortedApps.size})", color = Color(0xFFFFE08A), fontWeight = FontWeight.Bold)
+                    Text(if (showAll) "Ver menos" else "Ver más aplicaciones", color = Color(0xFFFFE08A), fontWeight = FontWeight.Bold)
                 }
             }
         }

@@ -2,9 +2,13 @@ package com.juan.habitos.ui.child
 
 import com.juan.habitos.domain.model.AppUsage
 import com.juan.habitos.domain.model.UsageMetricStatus
+import com.juan.habitos.ui.components.applicationFallbackIcon
+import com.juan.habitos.ui.components.resolveApplicationDisplayName
 import com.juan.habitos.ui.state.ActivityState
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ChildScreensTest {
@@ -52,17 +56,32 @@ class ChildScreensTest {
         assertNull(applicationsStateMessage(listOf(AppUsage("YouTube", "com.google.android.youtube", 20)), UsageMetricStatus.MEASURED))
     }
 
-    @Test fun `application preview contains the three apps with most usage`() {
-        val apps = listOf(
-            AppUsage("Dos", "app.two", 20),
-            AppUsage("Cuatro", "app.four", 40),
-            AppUsage("Uno", "app.one", 10),
-            AppUsage("Tres", "app.three", 30),
-        )
-        val preview = visibleApplications(apps, showAll = false)
-        assertEquals(listOf("Cuatro", "Tres", "Dos"), preview.map(AppUsage::name))
-        assertEquals(listOf("app.four", "app.three", "app.two"), preview.map(AppUsage::packageName))
-        assertEquals(4, visibleApplications(apps, showAll = true).size)
+    @Test fun `application preview shows five and expands to at most ten ordered apps`() {
+        val apps = (1..12).map { index -> AppUsage("App $index", "app.$index", index) }
+        val preview = visibleApplications(apps, expanded = false)
+        val expanded = visibleApplications(apps, expanded = true)
+        assertEquals(listOf("App 12", "App 11", "App 10", "App 9", "App 8"), preview.map(AppUsage::name))
+        assertEquals(listOf("app.12", "app.11", "app.10", "app.9", "app.8"), preview.map(AppUsage::packageName))
+        assertEquals(10, expanded.size)
+        assertEquals("App 3", expanded.last().name)
+    }
+
+    @Test fun `application expansion is hidden for five or fewer apps`() {
+        assertFalse(shouldShowApplicationExpansion(0))
+        assertFalse(shouldShowApplicationExpansion(5))
+        assertTrue(shouldShowApplicationExpansion(6))
+    }
+
+    @Test fun `known package icons use exact catalog matches and unknown apps use generic fallback`() {
+        assertEquals("▶️", applicationFallbackIcon("com.google.android.youtube", "📱"))
+        assertEquals("💬", applicationFallbackIcon("com.whatsapp.w4b", null))
+        assertEquals("📱", applicationFallbackIcon("com.google.android.youtube.clone", null))
+    }
+
+    @Test fun `friendly session summary preserves missing and measured states`() {
+        assertEquals("Todavía no hay información sobre tus momentos de uso", childSessionSummary(null))
+        assertEquals("Hoy usaste el celular en 1 momento", childSessionSummary(1))
+        assertEquals("Hoy usaste el celular en 8 momentos", childSessionSummary(8))
     }
 
     @Test fun `zero selections shows not selected message`() {
