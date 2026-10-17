@@ -5,6 +5,8 @@ import androidx.lifecycle.viewModelScope
 import com.juan.habitos.domain.model.*
 import com.juan.habitos.domain.repository.*
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.time.LocalDate
@@ -421,7 +423,10 @@ data class ChildHomeUiState(
     val activityState: ActivityState = ActivityState.Loading,
     val chosenActivities: Int? = null,
     val selectionRegistrationFailed: Boolean = false,
+    val showCompletionCelebration: Boolean = false,
+    val completionCelebrationId: Long = 0,
 )
+internal const val COMPLETION_CELEBRATION_MILLIS = 2_600L
 class ChildViewModel(
     profileRepo: ProfileRepository,
     private val usageRepo: UsageRepository,
@@ -437,6 +442,7 @@ class ChildViewModel(
     private var pendingSelection: ActivitySelection? = null
     private var selectionRegistrationInFlight = false
     private var selectionCountRequestId = 0
+    private var completionCelebrationJob: Job? = null
     init {
         viewModelScope.launch { profileRepo.profile.filterNotNull().collect { profile -> _state.update { it.copy(profile = profile) } } }
         viewModelScope.launch {
@@ -501,7 +507,23 @@ class ChildViewModel(
     }
     fun finishActivity() {
         val activity = (state.value.activityState as? ActivityState.Running)?.activity ?: return
-        _state.update { it.copy(activityState = ActivityState.Suggested(activity)) }
+        val celebrationId = state.value.completionCelebrationId + 1
+        _state.update {
+            it.copy(
+                activityState = ActivityState.Suggested(activity),
+                showCompletionCelebration = true,
+                completionCelebrationId = celebrationId,
+            )
+        }
+        completionCelebrationJob?.cancel()
+        completionCelebrationJob = viewModelScope.launch {
+            delay(COMPLETION_CELEBRATION_MILLIS)
+            _state.update { current ->
+                if (current.completionCelebrationId == celebrationId) {
+                    current.copy(showCompletionCelebration = false)
+                } else current
+            }
+        }
     }
     fun retryActivitySelection() = sendPendingSelection()
 

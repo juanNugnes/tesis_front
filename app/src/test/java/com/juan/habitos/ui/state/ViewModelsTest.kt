@@ -317,6 +317,45 @@ class ViewModelsTest {
     @Test fun `successful selection refreshes confirmed count from backend`() = runTest(dispatcher) { val vm = ChildViewModel(TestProfileRepo(), TestUsage(), TestActivitySuggestions()); vm.refreshActivitySelectionCount(); advanceUntilIdle(); val selected = (vm.state.value.activityState as ActivityState.Suggested).activity; vm.startActivity(); assertEquals(selected, (vm.state.value.activityState as ActivityState.Running).activity); assertEquals(2, vm.state.value.chosenActivities); advanceUntilIdle(); assertEquals(3, vm.state.value.chosenActivities) }
     @Test fun `unconfirmed selection does not increment count`() = runTest(dispatcher) { val repo = TestActivitySuggestions().apply { registerFailure = java.io.IOException("offline") }; val vm = ChildViewModel(TestProfileRepo(), TestUsage(), repo); vm.refreshActivitySelectionCount(); advanceUntilIdle(); assertEquals(2, vm.state.value.chosenActivities); vm.startActivity(); advanceUntilIdle(); assertEquals(2, vm.state.value.chosenActivities); assertTrue(vm.state.value.selectionRegistrationFailed); assertEquals(1, repo.countRequests.size) }
     @Test fun `finishing activity returns to suggestions without duplicating history`() = runTest(dispatcher) { val vm = ChildViewModel(TestProfileRepo(), TestUsage(), TestActivitySuggestions()); vm.refreshActivitySelectionCount(); advanceUntilIdle(); vm.startActivity(); advanceUntilIdle(); vm.finishActivity(); assertTrue(vm.state.value.activityState is ActivityState.Suggested); assertEquals(3, vm.state.value.chosenActivities) }
+    @Test fun `real finish emits one celebration and repeated state reads do not retrigger it`() = runTest(dispatcher) {
+        val vm = ChildViewModel(TestProfileRepo(), TestUsage(), TestActivitySuggestions())
+        advanceUntilIdle()
+        vm.startActivity()
+        advanceUntilIdle()
+
+        vm.finishActivity()
+        assertTrue(vm.state.value.showCompletionCelebration)
+        assertEquals(1L, vm.state.value.completionCelebrationId)
+        repeat(5) { vm.state.value }
+        vm.finishActivity()
+        assertEquals(1L, vm.state.value.completionCelebrationId)
+
+        advanceTimeBy(COMPLETION_CELEBRATION_MILLIS - 1)
+        runCurrent()
+        assertTrue(vm.state.value.showCompletionCelebration)
+        advanceTimeBy(1)
+        runCurrent()
+        assertFalse(vm.state.value.showCompletionCelebration)
+    }
+    @Test fun `consecutive completed activities restart celebration timeout safely`() = runTest(dispatcher) {
+        val vm = ChildViewModel(TestProfileRepo(), TestUsage(), TestActivitySuggestions())
+        advanceUntilIdle()
+        vm.startActivity()
+        advanceUntilIdle()
+        vm.finishActivity()
+        advanceTimeBy(1_000)
+        runCurrent()
+
+        vm.startActivity()
+        vm.finishActivity()
+        assertEquals(2L, vm.state.value.completionCelebrationId)
+        advanceTimeBy(COMPLETION_CELEBRATION_MILLIS - 1_000)
+        runCurrent()
+        assertTrue(vm.state.value.showCompletionCelebration)
+        advanceTimeBy(1_000)
+        runCurrent()
+        assertFalse(vm.state.value.showCompletionCelebration)
+    }
     @Test fun `preferences support multiple interests and demo persists locally`() = runTest(dispatcher) { val profile = TestProfileRepo().apply { this.profile.value = Profile("Sofía", "🦋", 8) }; val repo = TestPreferencesRepo(); val vm = ChildPreferencesViewModel(repo, profile, demoMode = true); advanceUntilIdle(); vm.toggleInterest(ChildInterest.MUSIC); vm.toggleInterest(ChildInterest.STORIES); vm.save(); advanceUntilIdle(); assertEquals(setOf(ChildInterest.MUSIC, ChildInterest.STORIES), repo.preferences.value.interests); assertEquals(0, repo.refreshCalls); assertEquals(0, repo.updateCalls); assertTrue(vm.state.value.saved) }
     @Test fun `explicit none clears selected considerations and remains answered`() = runTest(dispatcher) { val vm = ChildPreferencesViewModel(TestPreferencesRepo(), TestProfileRepo(), demoMode = true); advanceUntilIdle(); vm.toggleConsideration(ChildConsideration.VISUAL); vm.selectNoConsiderations(); assertTrue(vm.state.value.preferences.considerationsAnswered); assertTrue(vm.state.value.preferences.considerations.isEmpty()) }
     @Test fun `marking a consideration after none replaces none`() = runTest(dispatcher) { val vm = ChildPreferencesViewModel(TestPreferencesRepo(), TestProfileRepo(), demoMode = true); advanceUntilIdle(); vm.selectNoConsiderations(); vm.toggleConsideration(ChildConsideration.AUDITORY); assertTrue(vm.state.value.preferences.considerationsAnswered); assertEquals(setOf(ChildConsideration.AUDITORY), vm.state.value.preferences.considerations.keys) }

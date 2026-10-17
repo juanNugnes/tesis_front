@@ -3,6 +3,7 @@ package com.juan.habitos.ui.child
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.*
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
@@ -26,13 +27,18 @@ private val ChildBorderColor = Color.White.copy(alpha = .20f)
 
 @Composable fun ChildHomeScreen(state: ChildHomeUiState, onLock: () -> Unit, onAnotherActivity: () -> Unit, onStartActivity: () -> Unit, onFinishActivity: () -> Unit, onRetryActivity: () -> Unit, onRetrySelection: () -> Unit, onCompletePreferences: (() -> Unit)? = null) {
     val gradient = Brush.verticalGradient(listOf(Color(0xFF5B21B6), Color(0xFF4F46E5), Color(0xFF2563EB)))
+    val listState = rememberLazyListState()
+    LaunchedEffect(state.showCompletionCelebration, state.completionCelebrationId) {
+        if (state.showCompletionCelebration) listState.animateScrollToItem(1)
+    }
     LazyColumn(
         modifier = Modifier.fillMaxSize().background(gradient).statusBarsPadding(),
+        state = listState,
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         item { ChildHeader(state, onLock) }
-        item { DaySceneCard(state.profile.avatar, state.chosenActivities ?: 0) }
+        item { DaySceneCard(state.profile.avatar, state.chosenActivities ?: 0, state.showCompletionCelebration, state.completionCelebrationId) }
         item { DayUsageSummary(state.usage.currentMinutes, state.habitualUsageMinutes, state.usage.informationMessage) }
         item { ChildUsageDetails(state.usage.sessionCount, state.apps, state.applicationsStatus) }
         item { ActivitySuggestionCard(state.profile.avatar, state.activityState, state.selectionRegistrationFailed, onAnotherActivity, onStartActivity, onFinishActivity, onRetryActivity, onRetrySelection, onCompletePreferences) }
@@ -44,10 +50,20 @@ private val ChildBorderColor = Color.White.copy(alpha = .20f)
 
 @Composable private fun ChildHeader(state: ChildHomeUiState, onLock: () -> Unit) { Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) { Surface(Modifier.size(64.dp), shape = CircleShape, color = Color(0xFFFFF4D8), border = BorderStroke(2.dp, Color.White.copy(.55f))) { Box(contentAlignment = Alignment.Center) { Text(state.profile.avatar, fontSize = 34.sp) } }; Spacer(Modifier.width(14.dp)); Text("¡Hola, ${state.profile.name}!", Modifier.weight(1f), color = Color.White, fontSize = 27.sp, fontWeight = FontWeight.Bold); FilledTonalIconButton(onLock, colors = IconButtonDefaults.filledTonalIconButtonColors(containerColor = Color.White.copy(.15f), contentColor = Color.White)) { Text("🔒") } } }
 
-@Composable private fun DaySceneCard(avatar: String, chosenActivities: Int) {
+@Composable private fun DaySceneCard(avatar: String, chosenActivities: Int, showCompletionCelebration: Boolean, completionCelebrationId: Long) {
     val idle = rememberInfiniteTransition(label = "day-scene-idle")
     val avatarOffset by idle.animateFloat(-3f, 3f, infiniteRepeatable(tween(3600, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "avatar-float")
     val cloudOffset by idle.animateFloat(-8f, 10f, infiniteRepeatable(tween(9000, easing = LinearEasing), RepeatMode.Reverse), label = "cloud-drift")
+    val celebrationProgress = remember { Animatable(0f) }
+    LaunchedEffect(showCompletionCelebration, completionCelebrationId) {
+        if (showCompletionCelebration) {
+            celebrationProgress.snapTo(0f)
+            celebrationProgress.animateTo(1f, tween(2_400, easing = LinearEasing))
+        } else celebrationProgress.snapTo(0f)
+    }
+    val celebrationBounce = if (showCompletionCelebration) {
+        1f + kotlin.math.sin(celebrationProgress.value * kotlin.math.PI.toFloat() * 3f).coerceAtLeast(0f) * .12f
+    } else 1f
     ChildCard(containerColor = Color(0xFFE9F8EE).copy(.96f), borderColor = Color.White.copy(.55f)) { Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("🌱  Tu día", color = Color(0xFF24543A), fontWeight = FontWeight.Bold, fontSize = 18.sp)
         Box(Modifier.fillMaxWidth().height(150.dp).clip(RoundedCornerShape(18.dp)).background(Brush.verticalGradient(listOf(Color(0xFFBDE9FF), Color(0xFFE9F8D8))))) {
@@ -56,9 +72,10 @@ private val ChildBorderColor = Color.White.copy(alpha = .20f)
             Box(Modifier.size(94.dp).offset(x = (-18).dp, y = 96.dp).background(Color(0xFF8ED081), CircleShape))
             Box(Modifier.size(150.dp).align(Alignment.BottomEnd).offset(x = 32.dp, y = 78.dp).background(Color(0xFF72C979), CircleShape))
             Text("☀️", Modifier.align(Alignment.TopEnd).padding(14.dp), fontSize = 27.sp)
-            Text(avatar, Modifier.align(Alignment.BottomCenter).padding(bottom = 18.dp).graphicsLayer { translationY = avatarOffset }, fontSize = 43.sp)
+            Text(avatar, Modifier.align(Alignment.BottomCenter).padding(bottom = 18.dp).graphicsLayer { translationY = avatarOffset; scaleX = celebrationBounce; scaleY = celebrationBounce }, fontSize = 43.sp)
             val details = listOf("🌿", "🌼", "🦋", "⭐")
             details.forEachIndexed { index, detail -> val visible = index < chosenActivities.coerceIn(0, details.size); val detailScale by animateFloatAsState(if (visible) 1f else .7f, tween(350, easing = FastOutSlowInEasing), label = "day-detail-scale-$index"); val detailAlpha by animateFloatAsState(if (visible) 1f else 0f, tween(280), label = "day-detail-alpha-$index"); Text(detail, Modifier.align(if (index % 2 == 0) Alignment.CenterStart else Alignment.CenterEnd).padding(horizontal = (18 + index * 7).dp, vertical = (8 + index * 4).dp).graphicsLayer { scaleX = detailScale; scaleY = detailScale; alpha = detailAlpha }, fontSize = 22.sp) }
+            if (showCompletionCelebration) SceneCompletionCelebration(celebrationProgress.value)
         }
     } }
 }
@@ -97,8 +114,6 @@ fun activityUnavailablePresentation(state: ActivityState, navigationAvailable: B
     val scope = rememberCoroutineScope()
     val avatarScale = remember { Animatable(1f) }
     val refreshRotation = remember { Animatable(0f) }
-    val celebrationProgress = remember { Animatable(0f) }
-    var finishReaction by remember { mutableStateOf(false) }
     fun react() { scope.launch { avatarScale.snapTo(1f); avatarScale.animateTo(1.07f, tween(110)); avatarScale.animateTo(1f, tween(180, easing = FastOutSlowInEasing)) } }
     ChildCard(containerColor = Color(0xFF312E81).copy(.88f), borderColor = Color(0xFFFFE08A).copy(.55f)) { Box { AnimatedContent(targetState = activityState, transitionSpec = { (slideInHorizontally(tween(300, easing = FastOutSlowInEasing)) { it / 3 } + fadeIn(tween(260))) togetherWith (slideOutHorizontally(tween(260)) { -it / 3 } + fadeOut(tween(180))) }, label = "activity") { currentState -> when (currentState) {
     ActivityState.Loading -> Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -127,10 +142,10 @@ fun activityUnavailablePresentation(state: ActivityState, navigationAvailable: B
         Text(currentState.activity.emoji, fontSize = 42.sp)
         Text(currentState.activity.title, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
         Text(currentState.activity.description, color = Color.White.copy(.72f), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
-        Button(onClick = { react(); finishReaction = true; scope.launch { celebrationProgress.snapTo(0f); celebrationProgress.animateTo(1f, tween(1300, easing = FastOutSlowInEasing)); finishReaction = false }; onFinish() }, modifier = Modifier.fillMaxWidth().height(50.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFF7F5FF), contentColor = AppColors.PurpleUi), shape = RoundedCornerShape(14.dp)) { Text("Finalizar actividad", fontWeight = FontWeight.Bold) }
+        Button(onClick = { react(); onFinish() }, modifier = Modifier.fillMaxWidth().height(50.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFF7F5FF), contentColor = AppColors.PurpleUi), shape = RoundedCornerShape(14.dp)) { Text("Finalizar actividad", fontWeight = FontWeight.Bold) }
         if (selectionRegistrationFailed) SelectionRetry(onRetrySelection)
     }
-} }; if (finishReaction) CelebrationOverlay(celebrationProgress.value) } } }
+} } } } }
 
 @Composable private fun SelectionRetry(onRetry: () -> Unit) {
     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -151,16 +166,35 @@ private val celebrationParticles = listOf(
     CelebrationParticle(.93f, 12.dp, 195.dp, Color(0xFFFDA4AF), -18f),
 )
 
-@Composable private fun CelebrationOverlay(progress: Float) {
+private data class CelebrationBalloon(val xFraction: Float, val emoji: String, val travel: Dp, val delay: Float)
+private val celebrationBalloons = listOf(
+    CelebrationBalloon(.12f, "🎈", 145.dp, 0f),
+    CelebrationBalloon(.77f, "🎈", 165.dp, .08f),
+    CelebrationBalloon(.89f, "🎈", 135.dp, .16f),
+)
+
+@Composable private fun SceneCompletionCelebration(progress: Float) {
     val density = LocalDensity.current
     BoxWithConstraints(Modifier.fillMaxSize()) {
-        celebrationParticles.forEachIndexed { index, particle ->
-            val delayedProgress = ((progress - index * .025f) / (1f - index * .025f)).coerceIn(0f, 1f)
-            val eased = FastOutSlowInEasing.transform(delayedProgress)
-            Box(Modifier.align(Alignment.BottomStart).offset(x = maxWidth * particle.xFraction - particle.size / 2).size(particle.size).graphicsLayer { translationY = -with(density) { particle.travel.toPx() } * eased; translationX = kotlin.math.sin(eased * 3.14f + index) * with(density) { 10.dp.toPx() }; rotationZ = particle.rotation * eased; alpha = if (delayedProgress < .72f) 1f else ((1f - delayedProgress) / .28f).coerceIn(0f, 1f); scaleX = .8f + eased * .2f; scaleY = scaleX }.background(particle.color, if (index % 2 == 0) CircleShape else RoundedCornerShape(4.dp)))
+        celebrationBalloons.forEachIndexed { index, balloon ->
+            val balloonProgress = ((progress - balloon.delay) / (1f - balloon.delay)).coerceIn(0f, 1f)
+            Text(
+                balloon.emoji,
+                Modifier.align(Alignment.BottomStart).offset(x = maxWidth * balloon.xFraction - 14.dp).graphicsLayer {
+                    translationY = -with(density) { balloon.travel.toPx() } * FastOutSlowInEasing.transform(balloonProgress)
+                    translationX = kotlin.math.sin(balloonProgress * 5f + index) * with(density) { 7.dp.toPx() }
+                    alpha = if (balloonProgress < .78f) 1f else ((1f - balloonProgress) / .22f).coerceIn(0f, 1f)
+                },
+                fontSize = 25.sp,
+            )
         }
-        Surface(Modifier.align(Alignment.Center).graphicsLayer { alpha = if (progress < .72f) 1f else ((1f - progress) / .28f).coerceIn(0f, 1f); scaleX = .92f + progress.coerceAtMost(.3f) * .26f; scaleY = scaleX }, color = Color(0xFFF7F5FF), shape = RoundedCornerShape(18.dp), shadowElevation = 6.dp) {
-            Column(Modifier.padding(horizontal = 22.dp, vertical = 14.dp), horizontalAlignment = Alignment.CenterHorizontally) { Text("¡Actividad terminada!", color = AppColors.PurpleUi, fontWeight = FontWeight.Bold, fontSize = 18.sp); Text("Elegiste hacer algo diferente.", color = Color(0xFF475569), fontSize = 13.sp) }
+        celebrationParticles.forEachIndexed { index, particle ->
+            val delayedProgress = ((progress - index * .018f) / (1f - index * .018f)).coerceIn(0f, 1f)
+            val eased = FastOutSlowInEasing.transform(delayedProgress)
+            Box(Modifier.align(Alignment.BottomStart).offset(x = maxWidth * particle.xFraction - particle.size / 2).size(particle.size).graphicsLayer { translationY = -with(density) { (particle.travel * .72f).toPx() } * eased; translationX = kotlin.math.sin(eased * 3.14f + index) * with(density) { 8.dp.toPx() }; rotationZ = particle.rotation * eased; alpha = if (delayedProgress < .76f) .9f else ((1f - delayedProgress) / .24f).coerceIn(0f, 1f); scaleX = .7f + eased * .25f; scaleY = scaleX }.background(particle.color, if (index % 2 == 0) CircleShape else RoundedCornerShape(4.dp)))
+        }
+        Surface(Modifier.align(Alignment.Center).graphicsLayer { alpha = when { progress < .12f -> progress / .12f; progress < .78f -> 1f; else -> ((1f - progress) / .22f).coerceIn(0f, 1f) }; scaleX = .9f + progress.coerceAtMost(.22f) * .45f; scaleY = scaleX }, color = Color.White.copy(.94f), shape = RoundedCornerShape(16.dp), shadowElevation = 5.dp) {
+            Text("¡Actividad completada!", Modifier.padding(horizontal = 18.dp, vertical = 11.dp), color = AppColors.PurpleUi, fontWeight = FontWeight.Bold, fontSize = 16.sp)
         }
     }
 }
