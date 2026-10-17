@@ -82,7 +82,10 @@ interface DeviceRepository {
 }
 enum class DeviceLinkFailureReason { INVALID_OR_EXPIRED_CODE, INSTALLATION_CONFLICT, BOOTSTRAP_EXPIRED, SERVER_ERROR }
 class DeviceLinkException(val reason: DeviceLinkFailureReason, message: String) : Exception(message)
-class DeviceAuthenticationRequiredException : Exception("Device authentication required")
+enum class DeviceAuthenticationFailureReason { MISSING_CREDENTIAL, EXPIRED_OR_INVALID }
+class DeviceAuthenticationRequiredException(
+    val reason: DeviceAuthenticationFailureReason = DeviceAuthenticationFailureReason.MISSING_CREDENTIAL,
+) : Exception("Device authentication required: $reason")
 class AdultAuthenticationRequiredException : Exception("Adult authentication required")
 class AdultAuthorizationException : Exception("Adult operation forbidden")
 enum class AdultLinkFailureReason { INVALID_OR_EXPIRED_CODE, REVOKED_LINK }

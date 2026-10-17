@@ -9,6 +9,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavType
 import androidx.navigation.navArgument
@@ -45,6 +46,12 @@ internal fun childSetupDestination(linkExistingProfile: Boolean): String =
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) { super.onCreate(savedInstanceState); setContent { AppTheme { HabitosApp() } } }
+    override fun onResume() {
+        super.onResume()
+        if (!BuildConfig.DEMO_MODE) lifecycleScope.launch {
+            (application as HabitosApplication).usageWorkController.reconcile()
+        }
+    }
 }
 
 private inline fun <reified T : ViewModel> factory(crossinline create: () -> T) = object : ViewModelProvider.Factory { @Suppress("UNCHECKED_CAST") override fun <V : ViewModel> create(modelClass: Class<V>): V = create() as V }

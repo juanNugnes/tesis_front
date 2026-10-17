@@ -18,10 +18,17 @@ import com.juan.habitos.data.remote.RemoteActivitySuggestionRepository
 import com.juan.habitos.data.remote.RemoteMonitoringConsentRepository
 import com.juan.habitos.data.remote.AdultUsageRepository
 import com.juan.habitos.data.remote.DeviceUsageRepository
+import com.juan.habitos.data.remote.UsageSyncCoordinator
+import com.juan.habitos.data.sync.UsageWorkController
+import com.juan.habitos.data.sync.WorkManagerUsageWorkScheduler
 import com.juan.habitos.domain.model.*
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.first
 
 class HabitosApplication : Application() {
+    private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val localProfileStore by lazy { DataStoreProfileRepository(this) }
     private val localChildPreferencesStore by lazy { DataStoreChildPreferencesRepository(this) }
     private val localProfileContextStore by lazy { DataStoreProfileContextStore(this) }
@@ -46,16 +53,45 @@ class HabitosApplication : Application() {
     val linkRepository by lazy { if (BuildConfig.DEMO_MODE) MockLinkRepository(profileRepository, deviceSessionRepository) else RemoteLinkRepository(habitsApi, deviceSessionRepository, localProfileStore) }
     val pinStore by lazy { HashedPinStore(this) }
     private val pendingUsageSnapshotStore by lazy { EncryptedUsageSnapshotStore(this) }
-    private val usageCollector by lazy { AndroidAggregatedUsageCollector(AndroidDeviceUsageDataSource(this)) }
+    private val androidUsageDataSource by lazy { AndroidDeviceUsageDataSource(this) }
+    private val usageCollector by lazy { AndroidAggregatedUsageCollector(androidUsageDataSource) }
+    private val usageWorkScheduler by lazy { WorkManagerUsageWorkScheduler(this) }
+    val usageSyncCoordinator by lazy {
+        UsageSyncCoordinator(
+            localProfileStore,
+            localDeviceIdentityStore,
+            usageCollector,
+            androidUsageDataSource::hasUsageAccess,
+            usageApi,
+            deviceRequestAuthorization,
+            pendingUsageSnapshotStore,
+            onAutomaticPause = { usageWorkScheduler.cancel() },
+        )
+    }
+    val usageWorkController by lazy {
+        UsageWorkController(
+            deviceSessionRepository,
+            localProfileStore,
+            localDeviceIdentityStore,
+            androidUsageDataSource::hasUsageAccess,
+            usageWorkScheduler,
+            usageSyncCoordinator,
+        )
+    }
     val usageRepository by lazy {
         if (BuildConfig.DEMO_MODE) FakeUsageRepository()
-        else DeviceUsageRepository(localProfileStore, usageCollector, usageApi, deviceRequestAuthorization, pendingUsageSnapshotStore)
+        else DeviceUsageRepository(usageSyncCoordinator)
     }
     val adultUsageRepository by lazy {
         if (BuildConfig.DEMO_MODE) FakeUsageRepository()
         else AdultUsageRepository(localProfileStore, usageApi, adultRequestAuthorization)
     }
     val alertRepository by lazy { FakeAlertRepository() }
+
+    override fun onCreate() {
+        super.onCreate()
+        if (!BuildConfig.DEMO_MODE) usageWorkController.start(applicationScope)
+    }
 
     suspend fun initializeDemoIfNeeded() {
         if (!BuildConfig.DEMO_MODE) return
