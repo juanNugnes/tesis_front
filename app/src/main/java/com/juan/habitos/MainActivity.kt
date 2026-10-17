@@ -35,6 +35,7 @@ internal const val PREFERENCES_ROUTE_PATTERN = "$PREFERENCES_ROUTE?returnToChild
 internal const val PREFERENCES_FROM_CHILD_ROUTE = "$PREFERENCES_ROUTE?returnToChild=true"
 internal const val PREFERENCES_UPDATED_KEY = "preferencesUpdated"
 internal const val DEVICE_PROFILE_LINK_ROUTE = "deviceProfileLink"
+internal const val SAME_DEVICE_MONITORING_ROUTE = "sameDeviceMonitoring"
 
 internal fun childEntryRoute(profileId: String?, onboardingComplete: Boolean): String = when {
     profileId == null -> CHILD_PROFILE_SETUP_ROUTE
@@ -43,6 +44,8 @@ internal fun childEntryRoute(profileId: String?, onboardingComplete: Boolean): S
 }
 internal fun childSetupDestination(linkExistingProfile: Boolean): String =
     if (linkExistingProfile) DEVICE_PROFILE_LINK_ROUTE else "profile"
+internal fun postAdultAuthenticationDestination(mode: DeviceMode?): String =
+    if (mode == DeviceMode.CHILD) SAME_DEVICE_MONITORING_ROUTE else "adultLink"
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) { super.onCreate(savedInstanceState); setContent { AppTheme { HabitosApp() } } }
@@ -85,7 +88,19 @@ private inline fun <reified T : ViewModel> factory(crossinline create: () -> T) 
         composable(DEVICE_PROFILE_LINK_ROUTE) { val vm: DeviceProfileLinkViewModel = viewModel(factory = factory { DeviceProfileLinkViewModel(app.deviceRepository, app.profileRepository, app.childPreferencesRepository) }); val state by vm.state.collectAsStateWithLifecycle(); DeviceProfileLinkScreen(state, vm::code, { vm.submit { nav.navigate("child") { popUpTo(CHILD_PROFILE_SETUP_ROUTE) { inclusive = true } } } }, { nav.popBackStack() }) }
         navigation(startDestination = "adultEmail", route = "adultAuth") {
             composable("adultEmail") { entry -> val parent = remember(entry) { nav.getBackStackEntry("adultAuth") }; val vm: AdultAuthViewModel = viewModel(parent, factory = factory { AdultAuthViewModel(app.authRepository, app.deviceSessionRepository, BuildConfig.DEBUG) }); val state by vm.state.collectAsStateWithLifecycle(); AdultEmailScreen(state, vm::email) { vm.requestCode { nav.navigate("adultVerification") } } }
-            composable("adultVerification") { entry -> val parent = remember(entry) { nav.getBackStackEntry("adultAuth") }; val vm: AdultAuthViewModel = viewModel(parent, factory = factory { AdultAuthViewModel(app.authRepository, app.deviceSessionRepository, BuildConfig.DEBUG) }); val state by vm.state.collectAsStateWithLifecycle(); AdultVerificationScreen(state, vm::code, { vm.verify { nav.navigate("adultLink") { popUpTo("adultAuth") { inclusive = true } } } }, { nav.popBackStack() }) }
+            composable("adultVerification") { entry ->
+                val parent = remember(entry) { nav.getBackStackEntry("adultAuth") }
+                val vm: AdultAuthViewModel = viewModel(parent, factory = factory { AdultAuthViewModel(app.authRepository, app.deviceSessionRepository, BuildConfig.DEBUG) })
+                val state by vm.state.collectAsStateWithLifecycle()
+                AdultVerificationScreen(state, vm::code, {
+                    vm.verify {
+                        scope.launch {
+                            val mode = app.deviceSessionRepository.session.first().mode
+                            nav.navigate(postAdultAuthenticationDestination(mode)) { popUpTo("adultAuth") { inclusive = true } }
+                        }
+                    }
+                }, { nav.popBackStack() })
+            }
         }
         composable("adultLink") { val vm: LinkDeviceViewModel = viewModel(factory = factory { LinkDeviceViewModel(app.linkRepository) }); val state by vm.state.collectAsStateWithLifecycle(); LaunchedEffect(state.authenticationRequired) { if (state.authenticationRequired) nav.navigate("adultAuth") { popUpTo("adultLink") { inclusive = true } } }; val openPanel: (com.juan.habitos.domain.model.Profile) -> Unit = { profile -> vm.open(profile) { nav.navigate("adult") { popUpTo("adultLink") { inclusive = true } } }; Unit }; AdultLinkProfileScreen(state, vm::code, vm::find, { vm.confirm { nav.navigate("adult") { popUpTo("adultLink") { inclusive = true } } } }, openPanel) }
         composable("profile") { val vm: ProfileViewModel = viewModel(factory = factory { ProfileViewModel(app.profileRepository, app.deviceRepository) }); val state by vm.state.collectAsStateWithLifecycle(); ProfileScreen(state, vm::setName, vm::selectAvatar, vm::selectAge, vm::toggleSchoolSchedule, vm::sleepStart, vm::sleepEnd) { if (BuildConfig.DEMO_MODE) vm.save { nav.navigate("createPin") } else vm.create { nav.navigate("createPin") } } }
@@ -118,7 +133,11 @@ private inline fun <reified T : ViewModel> factory(crossinline create: () -> T) 
                     onPreferences = { nav.navigate(PREFERENCES_ROUTE) },
                     onContexts = if (session.mode == DeviceMode.ADULT) ({ nav.navigate("profileContexts") }) else null,
                     onLinkedDevices = if (session.mode == DeviceMode.ADULT) ({ nav.navigate("linkedDevices") }) else null,
-                    onMonitoringConsent = if (session.mode == DeviceMode.ADULT) ({ nav.navigate("monitoringConsent") }) else null,
+                    onMonitoringConsent = when (session.mode) {
+                        DeviceMode.ADULT -> ({ nav.navigate("monitoringConsent") })
+                        DeviceMode.CHILD -> ({ nav.navigate(SAME_DEVICE_MONITORING_ROUTE) })
+                        null -> null
+                    },
                     onAdultLinkCode = if (session.mode == DeviceMode.CHILD) ({ nav.navigate("adultProfileLinkCode") }) else null,
                     onUsageDiagnostics = if (BuildConfig.DEBUG && UsageDiagnosticsLauncher.isAvailable) ({ UsageDiagnosticsLauncher.open(app) }) else null,
                     onBack = { nav.popBackStack() },
@@ -168,18 +187,56 @@ private inline fun <reified T : ViewModel> factory(crossinline create: () -> T) 
                 ProfileContextScreen(state, vm::beginCreate, vm::beginEdit, vm::delete, vm::type, vm::startDate, vm::endDate, vm::description, vm::save, vm::dismissForm) { nav.popBackStack() }
             }
         }
+        composable(SAME_DEVICE_MONITORING_ROUTE) {
+            val vm: SameDeviceMonitoringViewModel = viewModel(
+                factory = factory {
+                    SameDeviceMonitoringViewModel(
+                        app.profileRepository,
+                        app.deviceRepository,
+                        app.linkRepository,
+                        BuildConfig.DEMO_MODE,
+                    )
+                },
+            )
+            val state by vm.state.collectAsStateWithLifecycle()
+            LaunchedEffect(state.adultAuthenticationRequired) {
+                if (state.adultAuthenticationRequired) {
+                    nav.navigate("adultAuth") { popUpTo(SAME_DEVICE_MONITORING_ROUTE) { inclusive = true } }
+                }
+            }
+            LaunchedEffect(state.ready) {
+                if (state.ready) {
+                    nav.navigate("monitoringConsent") { popUpTo(SAME_DEVICE_MONITORING_ROUTE) { inclusive = true } }
+                }
+            }
+            SameDeviceMonitoringSetupScreen(state, vm::prepare) { nav.popBackStack() }
+        }
         composable("monitoringConsent") {
             val session by app.deviceSessionRepository.session.collectAsStateWithLifecycle(initialValue = DeviceSession())
-            if (session.mode == DeviceMode.ADULT) {
-                val profile by app.adultProfileRepository.profile.collectAsStateWithLifecycle(initialValue = null)
+            val mode = session.mode
+            val adultActor = mode == DeviceMode.ADULT
+            val allowed = adultActor || (mode == DeviceMode.CHILD && (session.adultAuthenticated || BuildConfig.DEMO_MODE))
+            if (allowed) {
+                val profileRepository = if (adultActor) app.adultProfileRepository else app.profileRepository
+                val profile by profileRepository.profile.collectAsStateWithLifecycle(initialValue = null)
                 val profileId = profile?.id ?: return@composable
                 val vm: MonitoringConsentViewModel = viewModel(
                     key = "monitoring-consent-$profileId",
-                    factory = factory { MonitoringConsentViewModel(app.monitoringConsentRepository, profileId, BuildConfig.DEMO_MODE) },
+                    factory = factory {
+                        MonitoringConsentViewModel(
+                            app.monitoringConsentRepository,
+                            profileId,
+                            BuildConfig.DEMO_MODE,
+                            app.usageWorkController::resumeAfterMonitoringAuthorization,
+                        )
+                    },
                 )
                 val state by vm.state.collectAsStateWithLifecycle()
                 LaunchedEffect(state.adultAuthenticationRequired) {
-                    if (state.adultAuthenticationRequired) nav.navigate("adultAuth") { popUpTo("adult") { inclusive = true } }
+                    if (state.adultAuthenticationRequired) {
+                        val popUpRoute = if (mode == DeviceMode.CHILD) "monitoringConsent" else "adult"
+                        nav.navigate("adultAuth") { popUpTo(popUpRoute) { inclusive = true } }
+                    }
                 }
                 MonitoringConsentScreen(state, vm::grant, vm::requestRevoke, vm::confirmRevoke, vm::cancelRevoke) { nav.popBackStack() }
             }

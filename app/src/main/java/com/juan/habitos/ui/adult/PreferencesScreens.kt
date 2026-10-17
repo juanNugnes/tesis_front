@@ -48,7 +48,7 @@ private val restrictionLabels = linkedMapOf(
         item { ProfileGroup("Actividades", "🌿", "Preferencias y necesidades", "Personalizá las actividades sugeridas", onPreferences) }
         if (onContexts != null) item { ProfileGroup("Rutinas", "📅", "Contexto", "Registrá situaciones y cambios de rutina", onContexts) }
         if (onLinkedDevices != null) item { ProfileGroup("Seguridad", "📱", "Dispositivos vinculados", "Consultá y desvinculá dispositivos infantiles", onLinkedDevices) }
-        if (onMonitoringConsent != null) item { ProfileGroup("Privacidad", "🔒", "Privacidad y monitoreo", "Administrá el consentimiento para registrar el uso", onMonitoringConsent) }
+        if (onMonitoringConsent != null) item { ProfileGroup("Privacidad", "🔒", "Autorización de monitoreo", "Administrá el consentimiento para registrar el uso", onMonitoringConsent) }
         if (onAdultLinkCode != null) item { ProfileGroup("Vinculación", "🔗", "Vincular a un adulto responsable", "Generá un código temporal para este perfil", onAdultLinkCode) }
         item { ProfileGroup("Seguridad", "🔐", "Cambiar PIN") }
         if (onUsageDiagnostics != null) item { ProfileGroup("Herramientas de desarrollo", "🛠️", "Diagnóstico de uso", "Solo disponible en versión de desarrollo", onUsageDiagnostics) }

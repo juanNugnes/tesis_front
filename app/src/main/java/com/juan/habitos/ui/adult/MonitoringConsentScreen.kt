@@ -35,7 +35,57 @@ import androidx.compose.ui.unit.sp
 import com.juan.habitos.domain.model.RepresentativeVerificationStatus
 import com.juan.habitos.ui.state.MonitoringConsentUiState
 import com.juan.habitos.ui.state.PRIVACY_NOTICE_VERSION
+import com.juan.habitos.ui.state.SameDeviceMonitoringStage
+import com.juan.habitos.ui.state.SameDeviceMonitoringUiState
 import com.juan.habitos.ui.theme.AppColors
+
+@Composable
+fun SameDeviceMonitoringSetupScreen(
+    state: SameDeviceMonitoringUiState,
+    onRetry: () -> Unit,
+    onBack: () -> Unit,
+) {
+    Column(
+        Modifier.fillMaxSize().background(AppColors.Surface).statusBarsPadding().padding(18.dp),
+        verticalArrangement = Arrangement.spacedBy(18.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onBack) { Text("←", color = Color.White, fontSize = 24.sp) }
+            Column {
+                Text("Autorización de monitoreo", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                Text("Acceso protegido para la persona adulta responsable.", color = Color(0xFFCBD5E1), fontSize = 13.sp)
+            }
+        }
+        Card(
+            colors = CardDefaults.cardColors(containerColor = AppColors.Card),
+            border = BorderStroke(1.dp, AppColors.Divider),
+            shape = RoundedCornerShape(18.dp),
+        ) {
+            Column(
+                Modifier.fillMaxWidth().padding(20.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
+                if (state.loading) {
+                    CircularProgressIndicator(color = AppColors.PurpleSoft)
+                    Text(
+                        if (state.stage == SameDeviceMonitoringStage.LINKING_PROFILE) "Vinculando el perfil infantil…" else "Comprobando la vinculación…",
+                        color = Color.White,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Text("Este proceso no modifica la identidad ni las métricas guardadas en el dispositivo.", color = Color(0xFFCBD5E1), fontSize = 14.sp)
+                } else if (!state.ready) {
+                    Text(state.errorMessage.orEmpty(), color = Color(0xFFFCA5A5), fontSize = 14.sp)
+                    if (!state.adultAuthenticationRequired) {
+                        Button(onRetry, Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = AppColors.Purple)) {
+                            Text("Reintentar")
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
 
 @Composable
 fun MonitoringConsentScreen(
@@ -55,7 +105,7 @@ fun MonitoringConsentScreen(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onBack) { Text("←", color = Color.White, fontSize = 24.sp) }
                 Column {
-                    Text("Privacidad y monitoreo", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                    Text("Autorización de monitoreo", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
                     Text("Administrá el permiso para registrar el uso del dispositivo.", color = Color(0xFFCBD5E1), fontSize = 13.sp)
                 }
             }
@@ -119,7 +169,7 @@ private fun ConsentStatusCard(
                     ) { Text(if (state.submitting) "Habilitando…" else "Aceptar y habilitar monitoreo", fontWeight = FontWeight.Bold) }
                 }
                 state.verificationMissing -> {
-                    StatusText("Autorización no disponible", "No encontramos un estado de autorización para este perfil. Contactá al equipo responsable para continuar.")
+                    StatusText("Verificación pendiente", "La verificación de la persona adulta todavía no está registrada. Para el MVP, contactá al equipo responsable para completar el procedimiento manual.")
                 }
                 state.verificationStatus == RepresentativeVerificationStatus.PENDING -> {
                     StatusText("Autorización pendiente", "Tu autorización está pendiente de verificación. Cuando la verificación esté aprobada vas a poder habilitar el monitoreo.")

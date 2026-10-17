@@ -119,7 +119,8 @@ class MonitoringConsentViewModelTest {
 
     @Test fun `explicit grant sends fixed version and purpose then reloads backend state`() = runTest(dispatcher) {
         val repository = TestMonitoringConsentRepository()
-        val viewModel = MonitoringConsentViewModel(repository, "profile-1", demoMode = false)
+        val resumedProfiles = mutableListOf<String>()
+        val viewModel = MonitoringConsentViewModel(repository, "profile-1", demoMode = false) { resumedProfiles += it }
         advanceUntilIdle()
 
         viewModel.grant()
@@ -129,6 +130,7 @@ class MonitoringConsentViewModelTest {
         assertEquals(1, repository.grantCalls)
         assertEquals(PRIVACY_NOTICE_VERSION, repository.grantedVersion)
         assertEquals(setOf("USAGE_MONITORING"), repository.grantedPurposes)
+        assertEquals(listOf("profile-1"), resumedProfiles)
         assertEquals(2, repository.verificationCalls)
         assertEquals(2, repository.currentCalls)
         assertTrue(viewModel.state.value.monitoringEnabled)

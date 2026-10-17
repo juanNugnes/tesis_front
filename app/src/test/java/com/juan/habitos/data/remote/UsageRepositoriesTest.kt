@@ -98,6 +98,41 @@ private fun coordinator(
 )
 
 class UsageRepositoriesTest {
+    @Test fun `valid adult monitoring authorization resumes only consent-blocked snapshots without changing payloads`() = runTest {
+        val store = MemoryPendingUsageStore()
+        val consentBlocked = PendingUsageSnapshot(
+            "profile-1",
+            request("consent-blocked", "2026-10-16T18:00:00Z"),
+            state = UsageQueueEntryState.AUTHORIZATION_BLOCKED,
+            authorizationBlockReason = UsageAuthorizationBlockReason.MONITORING_NOT_AUTHORIZED,
+            blockedCredentialFingerprint = "same-device-token",
+            attemptCount = 2,
+        )
+        val credentialBlocked = PendingUsageSnapshot(
+            "profile-1",
+            request("credential-blocked", "2026-10-16T19:00:00Z"),
+            state = UsageQueueEntryState.AUTHORIZATION_BLOCKED,
+            authorizationBlockReason = UsageAuthorizationBlockReason.EXPIRED_OR_INVALID,
+            blockedCredentialFingerprint = "expired-token",
+        )
+        store.values["profile-1"] = UsageSnapshotQueue(entries = listOf(consentBlocked, credentialBlocked))
+        val sync = coordinator(
+            collector = UsageSnapshotCollector { _, _ -> error("not used") },
+            api = usageApi { _, _ -> error("not used") },
+            store = store,
+        )
+
+        sync.resumeAfterMonitoringAuthorization("profile-1")
+
+        val entries = store.load("profile-1").entries
+        assertEquals(listOf("consent-blocked", "credential-blocked"), entries.map { it.request.snapshotId })
+        assertEquals(consentBlocked.request, entries[0].request)
+        assertEquals(UsageQueueEntryState.PENDING, entries[0].state)
+        assertNull(entries[0].authorizationBlockReason)
+        assertEquals(2, entries[0].attemptCount)
+        assertEquals(credentialBlocked, entries[1])
+    }
+
     @Test fun `retry preserves immutable snapshot id and exact payload`() = runTest {
         val sent = mutableListOf<UsageSnapshotRequest>()
         var calls = 0

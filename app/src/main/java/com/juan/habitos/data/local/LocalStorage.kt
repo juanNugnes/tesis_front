@@ -168,12 +168,24 @@ private fun StoredProfileContext.toDomainContext() = ProfileContext(
     description = description,
 )
 
+internal fun modeAfterAdultAuthentication(currentMode: DeviceMode?): DeviceMode =
+    if (currentMode == DeviceMode.CHILD) DeviceMode.CHILD else DeviceMode.ADULT
+
 class DataStoreDeviceSessionRepository(private val context: Context) : DeviceSessionRepository {
     private object Keys { val mode = stringPreferencesKey("device_mode"); val email = stringPreferencesKey("adult_email"); val authenticated = booleanPreferencesKey("adult_authenticated"); val linkedProfiles = stringSetPreferencesKey("adult_linked_profiles"); val accessToken = stringPreferencesKey("adult_access_token") }
     override val session = context.dataStore.data.map { values -> DeviceSession(values[Keys.mode]?.let { name -> DeviceMode.entries.find { it.name == name } }, values[Keys.email], values[Keys.authenticated] ?: false, values[Keys.linkedProfiles].orEmpty()) }
     override val adultAccessToken = context.dataStore.data.map { values -> values[Keys.accessToken] }
     override suspend fun setMode(mode: DeviceMode) { context.dataStore.edit { it[Keys.mode] = mode.name } }
-    override suspend fun authenticateAdult(email: String) { context.dataStore.edit { it[Keys.email] = email; it[Keys.authenticated] = true; it[Keys.mode] = DeviceMode.ADULT.name } }
+    override suspend fun authenticateAdult(email: String) {
+        context.dataStore.edit { preferences ->
+            preferences[Keys.email] = email
+            preferences[Keys.authenticated] = true
+            // An adult can authenticate temporarily on the child's phone. Keeping CHILD here
+            // preserves the device identity and prevents the usage worker from being cancelled.
+            val currentMode = preferences[Keys.mode]?.let { stored -> DeviceMode.entries.find { it.name == stored } }
+            preferences[Keys.mode] = modeAfterAdultAuthentication(currentMode).name
+        }
+    }
     override suspend fun addLinkedProfile(profileKey: String) { context.dataStore.edit { values -> values[Keys.linkedProfiles] = values[Keys.linkedProfiles].orEmpty() + profileKey } }
     override suspend fun saveAdultAccessToken(token: String) { context.dataStore.edit { it[Keys.accessToken] = token } }
     override suspend fun clearAdultAuthentication() { context.dataStore.edit { values -> values.remove(Keys.accessToken); values[Keys.authenticated] = false } }

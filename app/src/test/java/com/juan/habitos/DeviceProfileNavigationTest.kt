@@ -1,5 +1,6 @@
 package com.juan.habitos
 
+import com.juan.habitos.domain.model.DeviceMode
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Test
@@ -21,5 +22,11 @@ class DeviceProfileNavigationTest {
         assertEquals("profile", childEntryRoute(profileId = "profile-1", onboardingComplete = false))
         assertEquals("child", childEntryRoute(profileId = "profile-1", onboardingComplete = true))
         assertNotEquals(CHILD_PROFILE_SETUP_ROUTE, childEntryRoute(profileId = "profile-1", onboardingComplete = true))
+    }
+
+    @Test fun `adult OTP returns to same-device authorization only for a child device`() {
+        assertEquals(SAME_DEVICE_MONITORING_ROUTE, postAdultAuthenticationDestination(DeviceMode.CHILD))
+        assertEquals("adultLink", postAdultAuthenticationDestination(DeviceMode.ADULT))
+        assertEquals("adultLink", postAdultAuthenticationDestination(null))
     }
 }

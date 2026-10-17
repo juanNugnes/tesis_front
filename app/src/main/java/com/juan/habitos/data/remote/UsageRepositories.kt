@@ -67,6 +67,25 @@ class UsageSyncCoordinator(
     private val synchronization: Mutex = Mutex(),
     private val onAutomaticPause: suspend () -> Unit = {},
 ) {
+    suspend fun resumeAfterMonitoringAuthorization(profileId: String) = synchronization.withLock {
+        queueStore.update(profileId) { queue ->
+            queue.copy(entries = queue.entries.map { entry ->
+                if (
+                    entry.state == UsageQueueEntryState.AUTHORIZATION_BLOCKED &&
+                    entry.authorizationBlockReason == UsageAuthorizationBlockReason.MONITORING_NOT_AUTHORIZED
+                ) {
+                    entry.copy(
+                        state = UsageQueueEntryState.PENDING,
+                        authorizationBlockReason = null,
+                        blockedCredentialFingerprint = null,
+                    )
+                } else {
+                    entry
+                }
+            })
+        }
+    }
+
     suspend fun isAuthorizationPaused(profileId: String, token: String): Boolean =
         queueStore.load(profileId).entries.any {
             it.state == UsageQueueEntryState.AUTHORIZATION_BLOCKED &&

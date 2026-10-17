@@ -101,6 +101,11 @@ class UsageWorkController(
         applySchedule(currentEligibility())
     }
 
+    suspend fun resumeAfterMonitoringAuthorization(profileId: String) {
+        coordinator.resumeAfterMonitoringAuthorization(profileId)
+        reconcile()
+    }
+
     suspend fun synchronizeFromWorker(): UsageSyncOutcome? {
         val eligibility = currentEligibility()
         if (!eligibility.eligible) {

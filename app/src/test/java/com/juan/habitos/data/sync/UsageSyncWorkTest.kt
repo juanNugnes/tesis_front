@@ -28,7 +28,14 @@ private class WorkSessionStore : DeviceSessionRepository {
     override val session = MutableStateFlow(DeviceSession(mode = DeviceMode.CHILD))
     override val adultAccessToken = MutableStateFlow<String?>(null)
     override suspend fun setMode(mode: DeviceMode) { session.value = session.value.copy(mode = mode) }
-    override suspend fun authenticateAdult(email: String) = Unit
+    override suspend fun authenticateAdult(email: String) {
+        val currentMode = session.value.mode
+        session.value = session.value.copy(
+            mode = if (currentMode == DeviceMode.CHILD) DeviceMode.CHILD else DeviceMode.ADULT,
+            adultEmail = email,
+            adultAuthenticated = true,
+        )
+    }
     override suspend fun addLinkedProfile(profileKey: String) = Unit
     override suspend fun saveAdultAccessToken(token: String) = Unit
     override suspend fun clearAdultAuthentication() = Unit
@@ -95,6 +102,27 @@ private fun workCoordinator(
 )
 
 class UsageSyncWorkTest {
+    @Test fun `temporary adult authentication preserves child scheduling and pending queue`() = runTest {
+        val profiles = WorkProfileStore()
+        val session = WorkSessionStore()
+        val identity = WorkIdentityStore()
+        val queue = WorkQueueStore().apply {
+            this.queue = UsageSnapshotQueue(entries = listOf(PendingUsageSnapshot("profile-1", workRequest())))
+        }
+        val scheduler = RecordingScheduler()
+        val controller = UsageWorkController(session, profiles, identity, { true }, scheduler, workCoordinator(profiles, identity, queue))
+        val before = queue.queue
+
+        session.authenticateAdult("adult@example.com")
+        controller.reconcile()
+
+        assertEquals(DeviceMode.CHILD, session.session.value.mode)
+        assertEquals(1, scheduler.scheduled)
+        assertEquals(0, scheduler.cancelled)
+        assertEquals(before, queue.queue)
+        assertEquals("token-1", identity.credentials.value.accessToken)
+    }
+
     @Test fun `only eligible child configuration keeps periodic work scheduled`() = runTest {
         val profiles = WorkProfileStore()
         val session = WorkSessionStore()
@@ -137,6 +165,31 @@ class UsageSyncWorkTest {
 
         identity.credentials.value = DeviceCredentials(accessToken = "token-2")
         controller.reconcile()
+        assertEquals(1, scheduler.scheduled)
+    }
+
+    @Test fun `new adult consent resumes work paused only for missing monitoring authorization`() = runTest {
+        val profiles = WorkProfileStore()
+        val session = WorkSessionStore()
+        val identity = WorkIdentityStore()
+        val queue = WorkQueueStore().apply {
+            this.queue = UsageSnapshotQueue(entries = listOf(
+                PendingUsageSnapshot(
+                    "profile-1",
+                    workRequest(),
+                    state = UsageQueueEntryState.AUTHORIZATION_BLOCKED,
+                    authorizationBlockReason = UsageAuthorizationBlockReason.MONITORING_NOT_AUTHORIZED,
+                    blockedCredentialFingerprint = "existing-token",
+                ),
+            ))
+        }
+        val scheduler = RecordingScheduler()
+        val controller = UsageWorkController(session, profiles, identity, { true }, scheduler, workCoordinator(profiles, identity, queue))
+
+        controller.resumeAfterMonitoringAuthorization("profile-1")
+
+        assertEquals(UsageQueueEntryState.PENDING, queue.queue.entries.single().state)
+        assertEquals("snapshot-1", queue.queue.entries.single().request.snapshotId)
         assertEquals(1, scheduler.scheduled)
     }
 }

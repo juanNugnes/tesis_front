@@ -39,6 +39,7 @@ class MonitoringConsentViewModel(
     private val repository: MonitoringConsentRepository,
     private val profileId: String,
     private val demoMode: Boolean,
+    private val onMonitoringAuthorized: suspend (String) -> Unit = {},
 ) : ViewModel() {
     private val _state = MutableStateFlow(MonitoringConsentUiState())
     val state: StateFlow<MonitoringConsentUiState> = _state.asStateFlow()
@@ -65,6 +66,7 @@ class MonitoringConsentViewModel(
                     privacyNoticeVersion = PRIVACY_NOTICE_VERSION,
                     purposes = setOf(USAGE_MONITORING_PURPOSE),
                 )
+                onMonitoringAuthorized(profileId)
                 load()
             } catch (exception: CancellationException) {
                 throw exception
