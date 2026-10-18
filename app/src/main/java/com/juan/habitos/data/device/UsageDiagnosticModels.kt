@@ -5,6 +5,7 @@ data class RawUsageEvent(
     val packageName: String?,
     val eventType: Int,
     val eventName: String,
+    val className: String? = null,
 )
 
 data class AppUsageDiagnostic(

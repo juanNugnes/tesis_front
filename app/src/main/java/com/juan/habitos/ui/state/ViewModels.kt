@@ -14,6 +14,7 @@ import java.time.LocalDate
 import java.time.Duration
 import java.time.Instant
 import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import java.util.UUID
 
 data class ProfileUiState(
@@ -630,6 +631,13 @@ data class AdultDashboardUiState(
     val nightTab: AdultNightTabUiState = AdultNightTabUiState(),
     val attentionTab: AdultAttentionTabUiState = AdultAttentionTabUiState(),
 )
+
+internal fun formatLastNightActivity(instant: Instant?, timezone: String?): String? {
+    if (instant == null || timezone.isNullOrBlank()) return null
+    val zone = runCatching { ZoneId.of(timezone) }.getOrNull() ?: return null
+    return DateTimeFormatter.ofPattern("HH:mm").format(instant.atZone(zone))
+}
+
 class AdultViewModel(profileRepo: ProfileRepository, private val usageRepo: UsageRepository, private val alertRepo: AlertRepository) : ViewModel() {
     private val _state = MutableStateFlow(AdultDashboardUiState()); val state = _state.asStateFlow()
     private var requestId = 0
@@ -677,8 +685,16 @@ class AdultViewModel(profileRepo: ProfileRepository, private val usageRepo: Usag
                     nightTab = AdultNightTabUiState(
                         bedtime = overview.nightWindowStart,
                         usageAfterBedtimeMinutes = overview.usage.nightUsageMinutes,
+                        lastActivity = formatLastNightActivity(
+                            overview.lastNightActivityAt,
+                            overview.lastNightActivityTimezone,
+                        ).takeIf { overview.usage.metricStatuses.lastNightActivityAt == UsageMetricStatus.MEASURED },
                         informationMessage = overview.usage.informationMessage
-                            ?: if (overview.usage.nightUsageMinutes == null) metricUnavailableMessage(overview.usage.metricStatuses.nightUsageMinutes) else null,
+                            ?: when {
+                                overview.usage.nightUsageMinutes == null -> metricUnavailableMessage(overview.usage.metricStatuses.nightUsageMinutes)
+                                overview.lastNightActivityAt == null -> metricUnavailableMessage(overview.usage.metricStatuses.lastNightActivityAt)
+                                else -> null
+                            },
                     ),
                 )
             }

@@ -68,12 +68,13 @@ private fun read(
     sessions: Int? = 4, night: Int? = 10, maxSession: Int? = 40, unlocks: Int? = 5,
     apps: List<AppUsageReadDto>? = listOf(AppUsageReadDto(packageName = "com.video", appName = "Video", usageMinutes = 60)),
     metricStatuses: UsageMetricStatusesDto = statuses(), periodsUniform: Boolean = true,
+    lastNightActivityAt: String? = null, timezone: String = "America/Argentina/Buenos_Aires",
 ) = DailyUsageReadDto(
     id = "daily-$date", profileId = profileId, date = date, totalUsageMinutes = total,
     sessionCount = sessions, nightUsageMinutes = night, maxSessionMinutes = maxSession,
     unlockCount = unlocks, applications = apps, metricStatuses = metricStatuses,
     coverageStatus = "UNKNOWN", periodStartAt = "${date}T03:00:00Z", periodEndAt = "${date}T20:00:00Z",
-    timezone = "America/Argentina/Buenos_Aires", durationUnit = "MINUTES",
+    timezone = timezone, durationUnit = "MINUTES", lastNightActivityAt = lastNightActivityAt,
     measurementMethod = "ANDROID_USAGE_STATS_AGGREGATES", calculationVersion = "android-collector-1.0",
     nightWindow = NightWindowDto(startLocalTime = "22:00", endLocalTime = "07:00"), periodsUniform = periodsUniform, sourceCount = 1,
     createdAt = "2026-10-16T20:00:00Z", updatedAt = "2026-10-16T20:00:00Z",
@@ -334,5 +335,37 @@ class UsageRepositoriesTest {
         val overview = aggregate(listOf(read(periodsUniform = false)), expectedDays = 1)
         assertFalse(overview.usage.periodsUniform)
         assertTrue(overview.usage.informationMessage!!.contains("incompatibles"))
+    }
+
+    @Test fun `adult aggregation keeps latest measured night activity and its source timezone`() {
+        val measured = statuses().copy(lastNightActivityAt = "MEASURED")
+
+        val overview = aggregate(
+            listOf(
+                read(
+                    date = "2026-10-15",
+                    metricStatuses = measured,
+                    lastNightActivityAt = "2026-10-15T23:40:00-03:00",
+                ),
+                read(
+                    date = "2026-10-16",
+                    metricStatuses = measured,
+                    lastNightActivityAt = "2026-10-17T00:20:00-03:00",
+                ),
+            ),
+            expectedDays = 2,
+        )
+
+        assertEquals(Instant.parse("2026-10-17T03:20:00Z"), overview.lastNightActivityAt)
+        assertEquals("America/Argentina/Buenos_Aires", overview.lastNightActivityTimezone)
+        assertEquals(UsageMetricStatus.MEASURED, overview.usage.metricStatuses.lastNightActivityAt)
+    }
+
+    @Test fun `historical response without night activity remains unavailable`() {
+        val overview = aggregate(listOf(read()), expectedDays = 1)
+
+        assertNull(overview.lastNightActivityAt)
+        assertNull(overview.lastNightActivityTimezone)
+        assertEquals(UsageMetricStatus.UNAVAILABLE, overview.usage.metricStatuses.lastNightActivityAt)
     }
 }

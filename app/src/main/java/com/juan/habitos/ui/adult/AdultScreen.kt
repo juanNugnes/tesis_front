@@ -105,7 +105,7 @@ private val tabs = listOf("📊\nRESUMEN", "📱\nAPPS", "🌙\nNOCTURNO", "🧠
         item {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Box(Modifier.weight(1f)) { NightMetricCard("Uso durante el horario de descanso", state.usageAfterBedtimeMinutes?.let(::formatMinutes) ?: "Sin datos") }
-                Box(Modifier.weight(1f)) { NightMetricCard("Última actividad", state.lastActivity ?: "Sin datos") }
+                Box(Modifier.weight(1f)) { NightMetricCard("Última actividad registrada", state.lastActivity ?: "Sin datos") }
             }
         }
         state.informationMessage?.let { message -> item { Text(message, color = Color(0xFFCBD5E1), fontSize = 13.sp) } }

@@ -43,7 +43,7 @@ class AndroidDeviceUsageDataSource(private val context: Context) : DeviceUsageDa
             val event = UsageEvents.Event()
             while (stream.hasNextEvent()) {
                 stream.getNextEvent(event)
-                add(RawUsageEvent(event.timeStamp, event.packageName?.takeIf { it.isNotBlank() }, event.eventType, eventName(event.eventType)))
+                add(RawUsageEvent(event.timeStamp, event.packageName?.takeIf { it.isNotBlank() }, event.eventType, eventName(event.eventType), event.className?.takeIf { it.isNotBlank() }))
             }
         }.sortedBy { it.timestamp }
         val sessionAnalysis = UsageDiagnosticsCalculator.analyzeSessions(events)
@@ -69,7 +69,7 @@ class AndroidDeviceUsageDataSource(private val context: Context) : DeviceUsageDa
                     val event = UsageEvents.Event()
                     while (stream.hasNextEvent()) {
                         stream.getNextEvent(event)
-                        add(RawUsageEvent(event.timeStamp, event.packageName?.takeIf(String::isNotBlank), event.eventType, eventName(event.eventType)))
+                        add(RawUsageEvent(event.timeStamp, event.packageName?.takeIf(String::isNotBlank), event.eventType, eventName(event.eventType), event.className?.takeIf(String::isNotBlank)))
                     }
                 }.sortedBy(RawUsageEvent::timestamp)
             }

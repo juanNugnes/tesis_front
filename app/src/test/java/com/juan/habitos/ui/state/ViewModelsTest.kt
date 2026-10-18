@@ -8,6 +8,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.*
 import org.junit.*
 import org.junit.Assert.*
+import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import com.juan.habitos.ui.adult.profileScheduleSummary
@@ -208,6 +209,35 @@ class ViewModelsTest {
 
         assertTrue(vm.state.value.appsTab.applications.isEmpty())
         assertEquals("El dispositivo infantil no otorgó permiso de acceso al uso.", vm.state.value.appsTab.informationMessage)
+    }
+    @Test fun `adult night card formats measured activity in child timezone`() = runTest(dispatcher) {
+        val profileRepo = TestProfileRepo()
+        val baseUsage = DailyUsage(currentMinutes = 60, sessionCount = 2, nightUsageMinutes = 20)
+        val measuredUsage = baseUsage.copy(
+            metricStatuses = baseUsage.metricStatuses.copy(lastNightActivityAt = UsageMetricStatus.MEASURED),
+        )
+        val usage = MutableOverviewUsage(
+            UsageOverview(
+                usage = measuredUsage,
+                applications = emptyList(),
+                applicationsStatus = UsageMetricStatus.MEASURED,
+                lastNightActivityAt = Instant.parse("2026-10-17T02:42:00Z"),
+                lastNightActivityTimezone = "America/Argentina/Buenos_Aires",
+            ),
+        )
+        val vm = AdultViewModel(profileRepo, usage, TestAlerts())
+
+        profileRepo.profile.value = Profile("Child", "fox", 9, id = "profile-1")
+        advanceUntilIdle()
+
+        assertEquals("23:42", vm.state.value.nightTab.lastActivity)
+    }
+    @Test fun `night activity formatter rejects absent or invalid source timezone`() {
+        val timestamp = Instant.parse("2026-10-17T02:42:00Z")
+
+        assertNull(formatLastNightActivity(null, "America/Argentina/Buenos_Aires"))
+        assertNull(formatLastNightActivity(timestamp, null))
+        assertNull(formatLastNightActivity(timestamp, "Invalid/Timezone"))
     }
     @Test fun `child state loads confirmed count for exact local day boundaries`() = runTest(dispatcher) {
         val repo = TestActivitySuggestions().apply { selectionCountValue = 4 }

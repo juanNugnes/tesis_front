@@ -1,6 +1,7 @@
 package com.juan.habitos.domain.model
 
 import java.time.LocalDate
+import java.time.Instant
 
 enum class SchoolSchedule { MORNING, AFTERNOON, EVENING }
 enum class BedtimeRange { FROM_20_TO_21, FROM_21_TO_22, FROM_22_TO_23, FROM_23_TO_00, AFTER_00 }
@@ -27,6 +28,7 @@ data class UsageMetricStatuses(
     val maxSessionMinutes: UsageMetricStatus,
     val unlockCount: UsageMetricStatus,
     val applications: UsageMetricStatus,
+    val lastNightActivityAt: UsageMetricStatus = UsageMetricStatus.UNAVAILABLE,
 )
 
 data class AppUsage(
@@ -65,6 +67,8 @@ data class UsageOverview(
     val nightWindowStart: String? = null,
     val nightWindowEnd: String? = null,
     val recordCount: Int = 1,
+    val lastNightActivityAt: Instant? = null,
+    val lastNightActivityTimezone: String? = null,
 )
 data class Recommendation(val title: String, val description: String, val activity: String)
 data class ActivitySuggestion(

@@ -9,6 +9,7 @@ data class UsageMetricStatusesDto(
     @SerializedName("max_session_minutes") val maxSessionMinutes: String,
     @SerializedName("unlock_count") val unlockCount: String,
     val applications: String,
+    @SerializedName("last_night_activity_at") val lastNightActivityAt: String? = null,
 )
 
 data class NightWindowDto(
@@ -47,6 +48,7 @@ data class UsageSnapshotRequest(
     @SerializedName("total_usage_minutes") val totalUsageMinutes: Int?,
     @SerializedName("session_count") val sessionCount: Int?,
     @SerializedName("night_usage_minutes") val nightUsageMinutes: Int?,
+    @SerializedName("last_night_activity_at") val lastNightActivityAt: String? = null,
     @SerializedName("max_session_minutes") val maxSessionMinutes: Int?,
     @SerializedName("unlock_count") val unlockCount: Int?,
     val applications: List<AppUsageCreateDto>?,
@@ -68,6 +70,7 @@ data class UsageSourceDto(
     @SerializedName("total_usage_minutes") val totalUsageMinutes: Int?,
     @SerializedName("session_count") val sessionCount: Int?,
     @SerializedName("night_usage_minutes") val nightUsageMinutes: Int?,
+    @SerializedName("last_night_activity_at") val lastNightActivityAt: String? = null,
     @SerializedName("max_session_minutes") val maxSessionMinutes: Int?,
     @SerializedName("unlock_count") val unlockCount: Int?,
     val applications: List<AppUsageCreateDto>?,
@@ -82,6 +85,7 @@ data class DailyUsageReadDto(
     @SerializedName("total_usage_minutes") val totalUsageMinutes: Int?,
     @SerializedName("session_count") val sessionCount: Int?,
     @SerializedName("night_usage_minutes") val nightUsageMinutes: Int?,
+    @SerializedName("last_night_activity_at") val lastNightActivityAt: String? = null,
     @SerializedName("max_session_minutes") val maxSessionMinutes: Int?,
     @SerializedName("unlock_count") val unlockCount: Int?,
     val applications: List<AppUsageReadDto>?,

@@ -36,7 +36,7 @@ data class AndroidAggregateEvidence(
 )
 
 object AggregatedUsageSnapshotMapper {
-    const val CALCULATION_VERSION = "android-collector-1.0"
+    const val CALCULATION_VERSION = "android-collector-1.1"
 
     fun map(
         evidence: AndroidAggregateEvidence,
@@ -79,6 +79,16 @@ object AggregatedUsageSnapshotMapper {
         val unlockCount = usableEvents?.count { it.eventType == UsageEvents.Event.KEYGUARD_HIDDEN }
 
         val nightWindow = parseNightWindow(profile)
+        val nightIntervals = nightWindow?.let {
+            nightIntervals(
+                date = date,
+                periodStart = start.toInstant(),
+                periodEnd = end.toInstant(),
+                zoneId = zoneId,
+                startTime = LocalTime.parse(it.startLocalTime),
+                endTime = LocalTime.parse(it.endLocalTime),
+            )
+        }.orEmpty()
         val nightStatus = when {
             nightWindow == null -> UsageMetricStatus.UNAVAILABLE
             baseFailure != null -> baseFailure
@@ -92,6 +102,12 @@ object AggregatedUsageSnapshotMapper {
         val nightConsistent = computedNightMinutes == null || totalMinutes == null || computedNightMinutes <= totalMinutes
         val nightMinutes = computedNightMinutes.takeIf { nightConsistent }
         val effectiveNightStatus = if (nightConsistent) nightStatus else UsageMetricStatus.INCOMPLETE
+        val lastNightActivity = when {
+            nightWindow == null -> LastNightActivityResult(null, UsageMetricStatus.UNAVAILABLE)
+            baseFailure != null -> LastNightActivityResult(null, baseFailure)
+            usableEvents == null -> LastNightActivityResult(null, UsageMetricStatus.CAPTURE_ERROR)
+            else -> LastNightActivityCalculator.calculate(usableEvents, nightIntervals)
+        }
 
         return UsageSnapshotRequest(
             snapshotId = snapshotId,
@@ -100,10 +116,17 @@ object AggregatedUsageSnapshotMapper {
             periodStartAt = DateTimeFormatter.ISO_OFFSET_DATE_TIME.format(start),
             periodEndAt = DateTimeFormatter.ISO_OFFSET_DATE_TIME.format(end),
             timezone = zoneId.id,
-            coverageStatus = if (analysis?.incomplete?.isNotEmpty() == true) "PARTIAL" else "UNKNOWN",
+            calculationVersion = CALCULATION_VERSION,
+            coverageStatus = if (
+                analysis?.incomplete?.isNotEmpty() == true ||
+                lastNightActivity.status == UsageMetricStatus.INCOMPLETE
+            ) "PARTIAL" else "UNKNOWN",
             totalUsageMinutes = totalMinutes,
             sessionCount = sessionCount,
             nightUsageMinutes = nightMinutes,
+            lastNightActivityAt = lastNightActivity.timestamp
+                ?.atZone(zoneId)
+                ?.let(DateTimeFormatter.ISO_OFFSET_DATE_TIME::format),
             maxSessionMinutes = maxSessionMinutes,
             unlockCount = unlockCount,
             applications = applications,
@@ -114,6 +137,7 @@ object AggregatedUsageSnapshotMapper {
                 maxSessionMinutes = maxSessionStatus.name,
                 unlockCount = eventStatus.name,
                 applications = appStatus.name,
+                lastNightActivityAt = lastNightActivity.status.name,
             ),
             nightWindow = nightWindow,
         )

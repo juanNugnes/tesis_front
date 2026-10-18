@@ -327,12 +327,17 @@ internal fun aggregate(records: List<DailyUsageReadDto>, expectedDays: Int): Usa
         status(records.map { it.metricStatuses.totalUsageMinutes }), status(records.map { it.metricStatuses.sessionCount }),
         status(records.map { it.metricStatuses.nightUsageMinutes }), status(records.map { it.metricStatuses.maxSessionMinutes }),
         status(records.map { it.metricStatuses.unlockCount }), status(records.map { it.metricStatuses.applications }),
+        status(records.map { it.metricStatuses.lastNightActivityAt ?: UsageMetricStatus.UNAVAILABLE.name }),
     )
-    val incomplete = listOf(statuses.totalUsageMinutes, statuses.sessionCount, statuses.nightUsageMinutes, statuses.maxSessionMinutes, statuses.unlockCount, statuses.applications).any { it == UsageMetricStatus.INCOMPLETE } || !periodsUniform
+    val incomplete = listOf(statuses.totalUsageMinutes, statuses.sessionCount, statuses.nightUsageMinutes, statuses.maxSessionMinutes, statuses.unlockCount, statuses.applications, statuses.lastNightActivityAt).any { it == UsageMetricStatus.INCOMPLETE } || !periodsUniform
     val apps = records.flatMap { it.applications.orEmpty() }.groupBy(AppUsageReadDto::packageName).map { (packageName, values) ->
         AppUsage(values.mapNotNull(AppUsageReadDto::appName).firstOrNull() ?: packageName, packageName, values.sumOf(AppUsageReadDto::usageMinutes), values.mapNotNull(AppUsageReadDto::category).distinct().singleOrNull())
     }.sortedByDescending(AppUsage::minutes).takeIf { records.any { it.applications != null } }
     val windows = records.mapNotNull(DailyUsageReadDto::nightWindow).distinct()
+    val lastNightRecord = if (statuses.lastNightActivityAt == UsageMetricStatus.MEASURED) {
+        records.mapNotNull { record -> record.lastNightActivityAt.toInstantOrNull()?.let { it to record } }
+            .maxByOrNull { it.first }
+    } else null
     return UsageOverview(
         DailyUsage(
             sumAvailable(records.map(DailyUsageReadDto::totalUsageMinutes)), null,
@@ -346,6 +351,7 @@ internal fun aggregate(records: List<DailyUsageReadDto>, expectedDays: Int): Usa
                 else -> null
             },
         ), apps, statuses.applications, windows.singleOrNull()?.startLocalTime, windows.singleOrNull()?.endLocalTime, records.size,
+        lastNightRecord?.first, lastNightRecord?.second?.timezone,
     )
 }
 
@@ -353,11 +359,13 @@ internal fun UsageSnapshotRequest.toOverview(message: String? = null): UsageOver
     DailyUsage(totalUsageMinutes, null, sessionCount, nightUsageMinutes, maxSessionMinutes, unlockCount, metricStatuses.toDomain(), coverageStatus.toCoverage(), informationMessage = message),
     applications?.map { AppUsage(it.appName ?: it.packageName, it.packageName, it.usageMinutes, null) },
     metricStatuses.applications.toMetricStatus(), nightWindow?.startLocalTime, nightWindow?.endLocalTime,
+    lastNightActivityAt = lastNightActivityAt.toInstantOrNull(), lastNightActivityTimezone = timezone,
 )
 
 internal fun DailyUsageReadDto.toOverview() = aggregate(listOf(this), 1)
-private fun UsageMetricStatusesDto.toDomain() = UsageMetricStatuses(totalUsageMinutes.toMetricStatus(), sessionCount.toMetricStatus(), nightUsageMinutes.toMetricStatus(), maxSessionMinutes.toMetricStatus(), unlockCount.toMetricStatus(), applications.toMetricStatus())
-private fun String.toMetricStatus() = runCatching { UsageMetricStatus.valueOf(this) }.getOrDefault(UsageMetricStatus.UNAVAILABLE)
+private fun UsageMetricStatusesDto.toDomain() = UsageMetricStatuses(totalUsageMinutes.toMetricStatus(), sessionCount.toMetricStatus(), nightUsageMinutes.toMetricStatus(), maxSessionMinutes.toMetricStatus(), unlockCount.toMetricStatus(), applications.toMetricStatus(), lastNightActivityAt.toMetricStatus())
+private fun String?.toMetricStatus() = this?.let { value -> runCatching { UsageMetricStatus.valueOf(value) }.getOrNull() } ?: UsageMetricStatus.UNAVAILABLE
+private fun String?.toInstantOrNull(): Instant? = this?.let { runCatching { Instant.parse(it) }.getOrNull() }
 private fun String.toCoverage() = runCatching { UsageCoverageStatus.valueOf(this) }.getOrDefault(UsageCoverageStatus.UNKNOWN)
 private fun sumAvailable(values: List<Int?>): Int? = values.filterNotNull().takeIf(List<Int>::isNotEmpty)?.sum()
 private fun combineStatus(statuses: List<String>, complete: Boolean): UsageMetricStatus {

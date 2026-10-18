@@ -1,5 +1,6 @@
 package com.juan.habitos.data.device
 
+import android.app.usage.UsageEvents
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
 import com.juan.habitos.domain.model.Profile
@@ -136,5 +137,46 @@ class AggregatedUsageSnapshotMapperTest {
         assertEquals(Instant.parse("2026-10-16T10:00:00Z"), intervals[0].second)
         assertEquals(Instant.parse("2026-10-17T01:00:00Z"), intervals[1].first)
         assertEquals(Instant.parse("2026-10-17T02:00:00Z"), intervals[1].second)
+    }
+
+    @Test fun `maps real nighttime pause with source timezone and dedicated status`() {
+        val snapshot = AggregatedUsageSnapshotMapper.map(
+            AndroidAggregateEvidence(
+                applications = listOf(AndroidAppAggregate("com.video", "Video", 10 * 60_000L)),
+                events = listOf(
+                    RawUsageEvent(Instant.parse("2026-10-16T09:30:00Z").toEpochMilli(), "com.video", UsageEvents.Event.ACTIVITY_RESUMED, "ACTIVITY_RESUMED", "Player"),
+                    RawUsageEvent(Instant.parse("2026-10-16T09:42:00Z").toEpochMilli(), "com.video", UsageEvents.Event.ACTIVITY_PAUSED, "ACTIVITY_PAUSED", "Player"),
+                ),
+                nightForegroundMillis = 10 * 60_000L,
+            ),
+            profile,
+            Instant.parse("2026-10-16T20:00:00Z"),
+            zone,
+            "snapshot-last-night",
+        )
+
+        assertEquals("2026-10-16T06:42:00-03:00", snapshot.lastNightActivityAt)
+        assertEquals("MEASURED", snapshot.metricStatuses.lastNightActivityAt)
+        assertEquals("android-collector-1.1", snapshot.calculationVersion)
+    }
+
+    @Test fun `open nighttime application is incomplete and never receives a synthetic timestamp`() {
+        val snapshot = AggregatedUsageSnapshotMapper.map(
+            AndroidAggregateEvidence(
+                applications = listOf(AndroidAppAggregate("com.video", "Video", 10 * 60_000L)),
+                events = listOf(
+                    RawUsageEvent(Instant.parse("2026-10-16T09:30:00Z").toEpochMilli(), "com.video", UsageEvents.Event.ACTIVITY_RESUMED, "ACTIVITY_RESUMED", "Player"),
+                ),
+                nightForegroundMillis = 10 * 60_000L,
+            ),
+            profile,
+            Instant.parse("2026-10-16T20:00:00Z"),
+            zone,
+            "snapshot-open-night",
+        )
+
+        assertNull(snapshot.lastNightActivityAt)
+        assertEquals("INCOMPLETE", snapshot.metricStatuses.lastNightActivityAt)
+        assertEquals("PARTIAL", snapshot.coverageStatus)
     }
 }
