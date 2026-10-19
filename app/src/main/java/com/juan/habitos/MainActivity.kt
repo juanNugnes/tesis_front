@@ -3,6 +3,7 @@ package com.juan.habitos
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.platform.LocalContext
@@ -13,6 +14,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavType
 import androidx.navigation.navArgument
+import androidx.navigation.navOptions
 import androidx.navigation.compose.*
 import com.juan.habitos.domain.model.DeviceMode
 import com.juan.habitos.domain.model.DeviceSession
@@ -46,6 +48,12 @@ internal fun childSetupDestination(linkExistingProfile: Boolean): String =
     if (linkExistingProfile) DEVICE_PROFILE_LINK_ROUTE else "profile"
 internal fun postAdultAuthenticationDestination(mode: DeviceMode?): String =
     if (mode == DeviceMode.CHILD) SAME_DEVICE_MONITORING_ROUTE else "adultLink"
+
+internal fun adultPanelNavigationOptions() = navOptions { launchSingleTop = true }
+internal fun adultProfileListNavigationOptions() = navOptions {
+    popUpTo("adult") { inclusive = true }
+    launchSingleTop = true
+}
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) { super.onCreate(savedInstanceState); setContent { AppTheme { HabitosApp() } } }
@@ -102,7 +110,7 @@ private inline fun <reified T : ViewModel> factory(crossinline create: () -> T) 
                 }, { nav.popBackStack() })
             }
         }
-        composable("adultLink") { val vm: LinkDeviceViewModel = viewModel(factory = factory { LinkDeviceViewModel(app.linkRepository) }); val state by vm.state.collectAsStateWithLifecycle(); LaunchedEffect(state.authenticationRequired) { if (state.authenticationRequired) nav.navigate("adultAuth") { popUpTo("adultLink") { inclusive = true } } }; val openPanel: (com.juan.habitos.domain.model.Profile) -> Unit = { profile -> vm.open(profile) { nav.navigate("adult") { popUpTo("adultLink") { inclusive = true } } }; Unit }; AdultLinkProfileScreen(state, vm::code, vm::find, { vm.confirm { nav.navigate("adult") { popUpTo("adultLink") { inclusive = true } } } }, openPanel) }
+        composable("adultLink") { val vm: LinkDeviceViewModel = viewModel(factory = factory { LinkDeviceViewModel(app.linkRepository) }); val state by vm.state.collectAsStateWithLifecycle(); LaunchedEffect(state.authenticationRequired) { if (state.authenticationRequired) nav.navigate("adultAuth") { popUpTo("adultLink") { inclusive = true } } }; val openPanel: (com.juan.habitos.domain.model.Profile) -> Unit = { profile -> vm.open(profile) { nav.navigate("adult", adultPanelNavigationOptions()) }; Unit }; AdultLinkProfileScreen(state, vm::code, vm::find, { vm.confirm { nav.navigate("adult", adultPanelNavigationOptions()) } }, openPanel) }
         composable("profile") { val vm: ProfileViewModel = viewModel(factory = factory { ProfileViewModel(app.profileRepository, app.deviceRepository) }); val state by vm.state.collectAsStateWithLifecycle(); ProfileScreen(state, vm::setName, vm::selectAvatar, vm::selectAge, vm::toggleSchoolSchedule, vm::sleepStart, vm::sleepEnd) { if (BuildConfig.DEMO_MODE) vm.save { nav.navigate("createPin") } else vm.create { nav.navigate("createPin") } } }
         composable("createPin") { val vm: PinViewModel = viewModel(factory = factory { PinViewModel(app.pinStore) }); val state by vm.state.collectAsStateWithLifecycle(); CreatePinScreen(state, { vm.digit(it, true) { nav.navigate("permissions") } }, vm::delete) }
         composable("permissions") { var granted by rememberSaveable { mutableStateOf(emptySet<Int>()) }; val manager = remember { AndroidPermissionManager(app) }; PermissionsScreen(granted, { index -> manager.request(index); granted = granted + index }, { nav.navigate("preferencesIntro") }) }
@@ -124,7 +132,12 @@ private inline fun <reified T : ViewModel> factory(crossinline create: () -> T) 
             val visibleMessages = if (messages.profileId == selectedProfile?.id) messages else AdultMessagesUiState(
                 profileId = selectedProfile?.id, loading = selectedProfile?.id != null, demo = BuildConfig.DEMO_MODE,
             )
-            AdultDashboardScreen(state, vm::period, { nav.navigate("adultProfile") }, visibleMessages, messagesVm::retry, { nav.navigate("adultAuth") }) { if (session.mode == DeviceMode.CHILD) nav.navigate("child") { popUpTo("child") { inclusive = true } } }
+            val returnToProfiles = { nav.navigate("adultLink", adultProfileListNavigationOptions()) }
+            BackHandler(enabled = mode == DeviceMode.ADULT, onBack = returnToProfiles)
+            AdultDashboardScreen(state, vm::period, { nav.navigate("adultProfile") }, visibleMessages, messagesVm::retry, { nav.navigate("adultAuth") }) {
+                if (mode == DeviceMode.CHILD) nav.navigate("child") { popUpTo("child") { inclusive = true } }
+                else returnToProfiles()
+            }
         }
         composable("adultProfile") {
             val session by app.deviceSessionRepository.session.collectAsStateWithLifecycle(initialValue = DeviceSession())
