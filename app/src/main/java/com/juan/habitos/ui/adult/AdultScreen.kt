@@ -24,6 +24,7 @@ import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
 private const val SUMMARY_TAB = 0
+private const val ANALYSIS_TAB = 3
 private const val ALERTS_TAB = 4
 private val tabs = listOf("📊\nRESUMEN", "📱\nAPPS", "🌙\nNOCTURNO", "🧠\nANÁLISIS", "🔔\nALERTAS")
 
@@ -48,17 +49,17 @@ private val tabs = listOf("📊\nRESUMEN", "📱\nAPPS", "🌙\nNOCTURNO", "🧠
         HorizontalDivider(color = AppColors.Divider)
         Box(Modifier.weight(1f)) {
             when (tab) {
-                SUMMARY_TAB -> Summary(state, onPeriod, messages, onRetryMessages, onMessagesSignIn)
+                SUMMARY_TAB -> Summary(state, onPeriod, messages) { tab = ANALYSIS_TAB }
                 1 -> AppsScreen(state.appsTab)
                 2 -> NightScreen(state.nightTab)
-                3 -> AttentionScreen(state.attentionTab)
+                ANALYSIS_TAB -> AttentionScreen(state.attentionTab, messages, onRetryMessages, onMessagesSignIn)
                 ALERTS_TAB -> AlertsScreen(state.alerts)
             }
         }
     }
 }
 
-@Composable private fun Summary(state: AdultDashboardUiState, onPeriod: (DashboardPeriod) -> Unit, messages: AdultMessagesUiState, onRetryMessages: () -> Unit, onMessagesSignIn: () -> Unit) {
+@Composable private fun Summary(state: AdultDashboardUiState, onPeriod: (DashboardPeriod) -> Unit, messages: AdultMessagesUiState, onAnalysis: () -> Unit) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(18.dp)) {
         Row(Modifier.fillMaxWidth().background(AppColors.Card, RoundedCornerShape(14.dp)).padding(4.dp)) {
             listOf(DashboardPeriod.TODAY to "Hoy", DashboardPeriod.WEEK to "Esta semana").forEach { (period, label) ->
@@ -74,11 +75,19 @@ private val tabs = listOf("📊\nRESUMEN", "📱\nAPPS", "🌙\nNOCTURNO", "🧠
             Box(Modifier.weight(1f)) { MetricCard("Sesiones", usage.sessionCount?.toString() ?: "Sin datos", usage.maxSessionMinutes?.let { "Máxima: ${formatMinutes(it)}" } ?: "Sin duración máxima disponible") }
         }
         usage.informationMessage?.let { message -> Spacer(Modifier.height(12.dp)); Text(message, color = Color(0xFFCBD5E1), fontSize = 13.sp) }
-        Spacer(Modifier.height(20.dp))
-        AdultMessagesSection(messages, onRetryMessages, onMessagesSignIn)
+        adultMessageSummaryTitle(messages)?.let { title ->
+            Spacer(Modifier.height(20.dp))
+            AdultSectionCard(title) {
+                TextButton(onClick = onAnalysis) { Text("Ver análisis") }
+            }
+        }
         Spacer(Modifier.navigationBarsPadding())
     }
 }
+
+internal fun adultMessageSummaryTitle(state: AdultMessagesUiState): String? =
+    if (state.loading || state.error != null || state.profileId == null) null
+    else state.current.firstOrNull()?.card?.title
 
 @Composable private fun AdultMessagesSection(state: AdultMessagesUiState, onRetry: () -> Unit, onSignIn: () -> Unit) {
     var showHistory by rememberSaveable(state.profileId) { mutableStateOf(false) }
@@ -177,9 +186,10 @@ private val tabs = listOf("📊\nRESUMEN", "📱\nAPPS", "🌙\nNOCTURNO", "🧠
     }
 }
 
-@Composable private fun AttentionScreen(state: AdultAttentionTabUiState) {
+@Composable private fun AttentionScreen(state: AdultAttentionTabUiState, messages: AdultMessagesUiState, onRetryMessages: () -> Unit, onMessagesSignIn: () -> Unit) {
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         item { AdultContentHeader("Análisis del comportamiento", "Patrones observados a partir del historial de uso") }
+        item { AdultMessagesSection(messages, onRetryMessages, onMessagesSignIn) }
         item {
             AdultSectionCard("Patrones observados") {
                 state.factors.forEach { factor ->
