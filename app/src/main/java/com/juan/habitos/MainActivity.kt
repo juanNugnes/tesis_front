@@ -118,7 +118,13 @@ private inline fun <reified T : ViewModel> factory(crossinline create: () -> T) 
             val usageRepository = if (mode == DeviceMode.ADULT) app.adultUsageRepository else app.usageRepository
             val vm: AdultViewModel = viewModel(key = "adult-dashboard-$mode", factory = factory { AdultViewModel(profileRepository, usageRepository, app.alertRepository) })
             val state by vm.state.collectAsStateWithLifecycle()
-            AdultDashboardScreen(state, vm::period, { nav.navigate("adultProfile") }) { if (session.mode == DeviceMode.CHILD) nav.navigate("child") { popUpTo("child") { inclusive = true } } }
+            val messagesVm: AdultMessagesViewModel = viewModel(key = "adult-messages-$mode", factory = factory { AdultMessagesViewModel(profileRepository, app.adultMessagesRepository, BuildConfig.DEMO_MODE) })
+            val messages by messagesVm.state.collectAsStateWithLifecycle()
+            val selectedProfile by profileRepository.profile.collectAsStateWithLifecycle(initialValue = null)
+            val visibleMessages = if (messages.profileId == selectedProfile?.id) messages else AdultMessagesUiState(
+                profileId = selectedProfile?.id, loading = selectedProfile?.id != null, demo = BuildConfig.DEMO_MODE,
+            )
+            AdultDashboardScreen(state, vm::period, { nav.navigate("adultProfile") }, visibleMessages, messagesVm::retry, { nav.navigate("adultAuth") }) { if (session.mode == DeviceMode.CHILD) nav.navigate("child") { popUpTo("child") { inclusive = true } } }
         }
         composable("adultProfile") {
             val session by app.deviceSessionRepository.session.collectAsStateWithLifecycle(initialValue = DeviceSession())

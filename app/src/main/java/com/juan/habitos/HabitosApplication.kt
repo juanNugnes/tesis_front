@@ -92,6 +92,11 @@ class HabitosApplication : Application() {
         else AdultUsageRepository(localProfileStore, usageApi, adultRequestAuthorization)
     }
     val alertRepository by lazy { FakeAlertRepository() }
+    val adultMessagesRepository by lazy {
+        com.juan.habitos.data.remote.adultMessagesRepositoryForMode(
+            BuildConfig.DEMO_MODE, HabitsApiClient.adultMessagesApi, adultRequestAuthorization,
+        )
+    }
 
     override fun onCreate() {
         super.onCreate()

@@ -19,12 +19,15 @@ import com.juan.habitos.ui.components.MetricCard
 import com.juan.habitos.ui.components.rememberApplicationVisualPresentation
 import com.juan.habitos.ui.state.*
 import com.juan.habitos.ui.theme.*
+import com.juan.habitos.data.remote.*
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
 
 private const val SUMMARY_TAB = 0
 private const val ALERTS_TAB = 4
 private val tabs = listOf("📊\nRESUMEN", "📱\nAPPS", "🌙\nNOCTURNO", "🧠\nANÁLISIS", "🔔\nALERTAS")
 
-@Composable fun AdultDashboardScreen(state: AdultDashboardUiState, onPeriod: (DashboardPeriod) -> Unit, onProfile: () -> Unit, onExit: () -> Unit) {
+@Composable fun AdultDashboardScreen(state: AdultDashboardUiState, onPeriod: (DashboardPeriod) -> Unit, onProfile: () -> Unit, messages: AdultMessagesUiState = AdultMessagesUiState(), onRetryMessages: () -> Unit = {}, onMessagesSignIn: () -> Unit = {}, onExit: () -> Unit) {
     var tab by rememberSaveable { mutableIntStateOf(SUMMARY_TAB) }
     Column(Modifier.fillMaxSize().background(AppColors.Surface).statusBarsPadding()) {
         Row(Modifier.padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -45,7 +48,7 @@ private val tabs = listOf("📊\nRESUMEN", "📱\nAPPS", "🌙\nNOCTURNO", "🧠
         HorizontalDivider(color = AppColors.Divider)
         Box(Modifier.weight(1f)) {
             when (tab) {
-                SUMMARY_TAB -> Summary(state, onPeriod)
+                SUMMARY_TAB -> Summary(state, onPeriod, messages, onRetryMessages, onMessagesSignIn)
                 1 -> AppsScreen(state.appsTab)
                 2 -> NightScreen(state.nightTab)
                 3 -> AttentionScreen(state.attentionTab)
@@ -55,7 +58,7 @@ private val tabs = listOf("📊\nRESUMEN", "📱\nAPPS", "🌙\nNOCTURNO", "🧠
     }
 }
 
-@Composable private fun Summary(state: AdultDashboardUiState, onPeriod: (DashboardPeriod) -> Unit) {
+@Composable private fun Summary(state: AdultDashboardUiState, onPeriod: (DashboardPeriod) -> Unit, messages: AdultMessagesUiState, onRetryMessages: () -> Unit, onMessagesSignIn: () -> Unit) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(18.dp)) {
         Row(Modifier.fillMaxWidth().background(AppColors.Card, RoundedCornerShape(14.dp)).padding(4.dp)) {
             listOf(DashboardPeriod.TODAY to "Hoy", DashboardPeriod.WEEK to "Esta semana").forEach { (period, label) ->
@@ -71,6 +74,60 @@ private val tabs = listOf("📊\nRESUMEN", "📱\nAPPS", "🌙\nNOCTURNO", "🧠
             Box(Modifier.weight(1f)) { MetricCard("Sesiones", usage.sessionCount?.toString() ?: "Sin datos", usage.maxSessionMinutes?.let { "Máxima: ${formatMinutes(it)}" } ?: "Sin duración máxima disponible") }
         }
         usage.informationMessage?.let { message -> Spacer(Modifier.height(12.dp)); Text(message, color = Color(0xFFCBD5E1), fontSize = 13.sp) }
+        Spacer(Modifier.height(20.dp))
+        AdultMessagesSection(messages, onRetryMessages, onMessagesSignIn)
+        Spacer(Modifier.navigationBarsPadding())
+    }
+}
+
+@Composable private fun AdultMessagesSection(state: AdultMessagesUiState, onRetry: () -> Unit, onSignIn: () -> Unit) {
+    var showHistory by rememberSaveable(state.profileId) { mutableStateOf(false) }
+    AdultSectionCard("Mensajes para acompañarte") {
+        if (state.demo) Text("Contenido de demostración", color = AppColors.PurpleSoft)
+        when {
+            state.loading -> CircularProgressIndicator(Modifier.size(28.dp), color = AppColors.PurpleSoft)
+            state.error != null -> {
+                Text(state.error, color = Color(0xFFCBD5E1))
+                if (state.retryable) TextButton(onClick = onRetry) { Text("Reintentar") }
+                if (state.authenticationRequired) TextButton(onClick = onSignIn) { Text("Iniciar sesión adulta") }
+            }
+            state.profileId == null -> Text("Seleccioná un perfil infantil para consultar sus mensajes.", color = Color(0xFFCBD5E1))
+            else -> {
+                if (state.current.isEmpty()) Text(
+                    if (state.archived.isEmpty()) "Todavía no hay mensajes disponibles" else "No hay mensajes en seguimiento.",
+                    color = Color(0xFFCBD5E1),
+                )
+                state.current.forEach { AdultMessageContent(it.card) }
+                if (state.archived.isNotEmpty()) {
+                    TextButton(onClick = { showHistory = !showHistory }) {
+                        Text(if (showHistory) "Ocultar historial" else "Ver historial")
+                    }
+                    if (showHistory) state.archived.forEach { AdultMessageContent(it.card) }
+                }
+                TextButton(onClick = onRetry) { Text("Actualizar mensajes") }
+            }
+        }
+    }
+}
+
+@Composable private fun AdultMessageContent(card: AdultMessageCard) {
+    var expanded by rememberSaveable(card.cardId, card.updatedDate, card.evaluationDate) { mutableStateOf(false) }
+    Surface(color = AppColors.Surface, shape = RoundedCornerShape(14.dp), border = BorderStroke(1.dp, AppColors.Divider)) {
+        Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(messageStatusLabel(card.status), color = AppColors.PurpleSoft, fontSize = 12.sp)
+            Text(card.title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 17.sp)
+            Text(card.text, color = Color(0xFFCBD5E1))
+            if (card.recommendation.isNotBlank()) Text(card.recommendation, color = Color.White)
+            val date = card.updatedDate ?: card.evaluationDate
+            val formattedDate = runCatching { LocalDate.parse(date).format(DateTimeFormatter.ofPattern("dd/MM/yyyy")) }.getOrDefault(date)
+            Text("${if (card.updatedDate != null) "Actualizado" else "Evaluado"}: $formattedDate", color = Color(0xFF94A3B8), fontSize = 12.sp)
+            if (!card.correctedDates.isNullOrEmpty()) Text("Incluye correcciones de datos registrados.", color = Color(0xFFCBD5E1), fontSize = 12.sp)
+            TextButton(onClick = { expanded = !expanded }) { Text(if (expanded) "Ver menos" else "Ver detalle") }
+            if (expanded) {
+                Text(card.measurementDetail, color = Color(0xFFCBD5E1), fontSize = 13.sp)
+                Text("Referencia desde ${card.openingReferenceStart} · Comparación desde ${card.comparisonRecentStart}", color = Color(0xFF94A3B8), fontSize = 12.sp)
+            }
+        }
     }
 }
 
