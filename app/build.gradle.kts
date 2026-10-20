@@ -26,8 +26,14 @@ android {
         buildConfigField("String", "API_BASE_URL", apiBaseUrlBuildConfigValue)
     }
     buildTypes {
-        debug { buildConfigField("boolean", "DEMO_MODE", providers.gradleProperty("demoMode").orNull?.toBooleanStrictOrNull()?.toString() ?: "true") }
-        release { buildConfigField("boolean", "DEMO_MODE", "false") }
+        debug {
+            buildConfigField("boolean", "DEMO_MODE", providers.gradleProperty("demoMode").orNull?.toBooleanStrictOrNull()?.toString() ?: "true")
+            buildConfigField("boolean", "ADULT_MESSAGES_DEMO_MODE", providers.gradleProperty("adultMessagesDemoMode").orNull?.toBooleanStrictOrNull()?.toString() ?: "false")
+        }
+        release {
+            buildConfigField("boolean", "DEMO_MODE", "false")
+            buildConfigField("boolean", "ADULT_MESSAGES_DEMO_MODE", "false")
+        }
     }
     buildFeatures { compose = true; buildConfig = true }
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }

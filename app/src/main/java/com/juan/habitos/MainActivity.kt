@@ -126,11 +126,11 @@ private inline fun <reified T : ViewModel> factory(crossinline create: () -> T) 
             val usageRepository = if (mode == DeviceMode.ADULT) app.adultUsageRepository else app.usageRepository
             val vm: AdultViewModel = viewModel(key = "adult-dashboard-$mode", factory = factory { AdultViewModel(profileRepository, usageRepository, app.alertRepository) })
             val state by vm.state.collectAsStateWithLifecycle()
-            val messagesVm: AdultMessagesViewModel = viewModel(key = "adult-messages-$mode", factory = factory { AdultMessagesViewModel(profileRepository, app.adultMessagesRepository, BuildConfig.DEMO_MODE) })
+            val messagesVm: AdultMessagesViewModel = viewModel(key = "adult-messages-$mode", factory = factory { AdultMessagesViewModel(profileRepository, app.adultMessagesRepository, BuildConfig.DEMO_MODE || app.adultMessagesDemoEnabled) })
             val messages by messagesVm.state.collectAsStateWithLifecycle()
             val selectedProfile by profileRepository.profile.collectAsStateWithLifecycle(initialValue = null)
             val visibleMessages = if (messages.profileId == selectedProfile?.id) messages else AdultMessagesUiState(
-                profileId = selectedProfile?.id, loading = selectedProfile?.id != null, demo = BuildConfig.DEMO_MODE,
+                profileId = selectedProfile?.id, loading = selectedProfile?.id != null, demo = BuildConfig.DEMO_MODE || app.adultMessagesDemoEnabled,
             )
             val returnToProfiles = { nav.navigate("adultLink", adultProfileListNavigationOptions()) }
             BackHandler(enabled = mode == DeviceMode.ADULT, onBack = returnToProfiles)

@@ -49,9 +49,14 @@ fun interface AdultMessagesRepository {
 
 internal fun adultMessagesRepositoryForMode(
     demo: Boolean, api: AdultMessagesApi, authorization: RequestAuthorization,
-): AdultMessagesRepository = if (demo) {
-    AdultMessagesRepository { AdultMessageHistory(emptyList()) }
-} else RemoteAdultMessagesRepository(api, authorization)
+    adultMessagesDemo: Boolean = false,
+    isDebug: Boolean = false,
+    demoMessages: () -> AdultMessagesRepository = { error("Debug messages repository unavailable") },
+): AdultMessagesRepository = when {
+    isDebug && adultMessagesDemo -> demoMessages()
+    demo -> AdultMessagesRepository { AdultMessageHistory(emptyList()) }
+    else -> RemoteAdultMessagesRepository(api, authorization)
+}
 
 class RemoteAdultMessagesRepository(
     private val api: AdultMessagesApi,

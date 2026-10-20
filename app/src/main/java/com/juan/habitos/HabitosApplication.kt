@@ -92,9 +92,13 @@ class HabitosApplication : Application() {
         else AdultUsageRepository(localProfileStore, usageApi, adultRequestAuthorization)
     }
     val alertRepository by lazy { FakeAlertRepository() }
+    val adultMessagesDemoEnabled: Boolean get() = BuildConfig.DEBUG && BuildConfig.ADULT_MESSAGES_DEMO_MODE
     val adultMessagesRepository by lazy {
         com.juan.habitos.data.remote.adultMessagesRepositoryForMode(
             BuildConfig.DEMO_MODE, HabitsApiClient.adultMessagesApi, adultRequestAuthorization,
+            adultMessagesDemo = BuildConfig.ADULT_MESSAGES_DEMO_MODE,
+            isDebug = BuildConfig.DEBUG,
+            demoMessages = ::createAdultMessagesDemoRepository,
         )
     }
 

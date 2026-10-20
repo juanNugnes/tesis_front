@@ -3,6 +3,7 @@ package com.juan.habitos.ui.adult
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -24,12 +25,14 @@ import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
 private const val SUMMARY_TAB = 0
-private const val ANALYSIS_TAB = 3
+internal const val ANALYSIS_TAB = 3
 private const val ALERTS_TAB = 4
 private val tabs = listOf("📊\nRESUMEN", "📱\nAPPS", "🌙\nNOCTURNO", "🧠\nANÁLISIS", "🔔\nALERTAS")
 
 @Composable fun AdultDashboardScreen(state: AdultDashboardUiState, onPeriod: (DashboardPeriod) -> Unit, onProfile: () -> Unit, messages: AdultMessagesUiState = AdultMessagesUiState(), onRetryMessages: () -> Unit = {}, onMessagesSignIn: () -> Unit = {}, onExit: () -> Unit) {
     var tab by rememberSaveable { mutableIntStateOf(SUMMARY_TAB) }
+    var focusedMessageId by rememberSaveable(messages.profileId) { mutableStateOf<String?>(null) }
+    var focusedMessageVersion by rememberSaveable(messages.profileId) { mutableIntStateOf(0) }
     Column(Modifier.fillMaxSize().background(AppColors.Surface).statusBarsPadding()) {
         Row(Modifier.padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onExit) { Text("←", color = Color.White, fontSize = 24.sp) }
@@ -52,8 +55,13 @@ private val tabs = listOf("📊\nRESUMEN", "📱\nAPPS", "🌙\nNOCTURNO", "🧠
                 SUMMARY_TAB -> Summary(state, onPeriod, messages) { tab = ANALYSIS_TAB }
                 1 -> AppsScreen(state.appsTab)
                 2 -> NightScreen(state.nightTab)
-                ANALYSIS_TAB -> AttentionScreen(state.attentionTab, messages, onRetryMessages, onMessagesSignIn)
-                ALERTS_TAB -> AlertsScreen(state.alerts)
+                ANALYSIS_TAB -> AttentionScreen(state.attentionTab, messages, onRetryMessages, onMessagesSignIn, focusedMessageId, focusedMessageVersion)
+                ALERTS_TAB -> AlertsScreen(state.alerts, adultMessageDemoAlert(messages)) { target ->
+                    openAdultMessageDemoAlert(target,
+                        selectMessage = { id, version -> focusedMessageId = id; focusedMessageVersion = version },
+                        selectTab = { tab = it },
+                    )
+                }
             }
         }
     }
@@ -78,6 +86,7 @@ private val tabs = listOf("📊\nRESUMEN", "📱\nAPPS", "🌙\nNOCTURNO", "🧠
         adultMessageSummaryTitle(messages)?.let { title ->
             Spacer(Modifier.height(20.dp))
             AdultSectionCard(title) {
+                if (messages.demo) Text(ADULT_MESSAGES_DEMO_LABEL, color = AppColors.PurpleSoft, fontSize = 12.sp)
                 TextButton(onClick = onAnalysis) { Text("Ver análisis") }
             }
         }
@@ -89,10 +98,10 @@ internal fun adultMessageSummaryTitle(state: AdultMessagesUiState): String? =
     if (state.loading || state.error != null || state.profileId == null) null
     else state.current.firstOrNull()?.card?.title
 
-@Composable private fun AdultMessagesSection(state: AdultMessagesUiState, onRetry: () -> Unit, onSignIn: () -> Unit) {
+@Composable private fun AdultMessagesSection(state: AdultMessagesUiState, onRetry: () -> Unit, onSignIn: () -> Unit, focusedMessageId: String? = null, focusedVersion: Int = 0) {
     var showHistory by rememberSaveable(state.profileId) { mutableStateOf(false) }
     AdultSectionCard("Mensajes para acompañarte") {
-        if (state.demo) Text("Contenido de demostración", color = AppColors.PurpleSoft)
+        if (state.demo) Text(ADULT_MESSAGES_DEMO_LABEL, color = AppColors.PurpleSoft)
         when {
             state.loading -> CircularProgressIndicator(Modifier.size(28.dp), color = AppColors.PurpleSoft)
             state.error != null -> {
@@ -106,12 +115,26 @@ internal fun adultMessageSummaryTitle(state: AdultMessagesUiState): String? =
                     if (state.archived.isEmpty()) "Todavía no hay mensajes disponibles" else "No hay mensajes en seguimiento.",
                     color = Color(0xFFCBD5E1),
                 )
-                state.current.forEach { AdultMessageContent(it.card) }
+                state.current.forEach { latest ->
+                    val opening = if (state.demo) state.history?.versions
+                        ?.filter { it.card.cardId == latest.card.cardId && it.version < latest.version }
+                        ?.minByOrNull { it.version } else null
+                    var showOpening by rememberSaveable(state.profileId, latest.card.cardId, focusedMessageId, focusedVersion) {
+                        mutableStateOf(opening != null && focusedMessageId == latest.card.cardId && focusedVersion == opening.version)
+                    }
+                    if (opening != null) {
+                        Text(if (showOpening) "Versión inicial del ejemplo" else "Actualización del ejemplo", color = AppColors.PurpleSoft, fontSize = 12.sp)
+                        TextButton(onClick = { showOpening = !showOpening }) {
+                            Text(if (showOpening) "Ver seguimiento" else "Ver versión inicial")
+                        }
+                    }
+                    AdultMessageContent(if (showOpening && opening != null) opening.card else latest.card, demo = state.demo)
+                }
                 if (state.archived.isNotEmpty()) {
                     TextButton(onClick = { showHistory = !showHistory }) {
                         Text(if (showHistory) "Ocultar historial" else "Ver historial")
                     }
-                    if (showHistory) state.archived.forEach { AdultMessageContent(it.card) }
+                    if (showHistory) state.archived.forEach { AdultMessageContent(it.card, demo = state.demo) }
                 }
                 TextButton(onClick = onRetry) { Text("Actualizar mensajes") }
             }
@@ -119,10 +142,11 @@ internal fun adultMessageSummaryTitle(state: AdultMessagesUiState): String? =
     }
 }
 
-@Composable private fun AdultMessageContent(card: AdultMessageCard) {
+@Composable private fun AdultMessageContent(card: AdultMessageCard, demo: Boolean = false) {
     var expanded by rememberSaveable(card.cardId, card.updatedDate, card.evaluationDate) { mutableStateOf(false) }
     Surface(color = AppColors.Surface, shape = RoundedCornerShape(14.dp), border = BorderStroke(1.dp, AppColors.Divider)) {
         Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (demo) Text(ADULT_MESSAGES_DEMO_LABEL, color = AppColors.PurpleSoft, fontSize = 12.sp)
             Text(messageStatusLabel(card.status), color = AppColors.PurpleSoft, fontSize = 12.sp)
             Text(card.title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 17.sp)
             Text(card.text, color = Color(0xFFCBD5E1))
@@ -186,10 +210,14 @@ internal fun adultMessageSummaryTitle(state: AdultMessagesUiState): String? =
     }
 }
 
-@Composable private fun AttentionScreen(state: AdultAttentionTabUiState, messages: AdultMessagesUiState, onRetryMessages: () -> Unit, onMessagesSignIn: () -> Unit) {
-    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+@Composable private fun AttentionScreen(state: AdultAttentionTabUiState, messages: AdultMessagesUiState, onRetryMessages: () -> Unit, onMessagesSignIn: () -> Unit, focusedMessageId: String?, focusedVersion: Int) {
+    val listState = rememberLazyListState()
+    LaunchedEffect(focusedMessageId, focusedVersion) {
+        if (focusedMessageId != null) listState.scrollToItem(1)
+    }
+    LazyColumn(Modifier.fillMaxSize(), state = listState, contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         item { AdultContentHeader("Análisis del comportamiento", "Patrones observados a partir del historial de uso") }
-        item { AdultMessagesSection(messages, onRetryMessages, onMessagesSignIn) }
+        item { AdultMessagesSection(messages, onRetryMessages, onMessagesSignIn, focusedMessageId, focusedVersion) }
         item {
             AdultSectionCard("Patrones observados") {
                 state.factors.forEach { factor ->
@@ -243,19 +271,22 @@ internal fun adultMessageSummaryTitle(state: AdultMessagesUiState): String? =
 @Composable private fun NightMetricCard(label: String, value: String) { Card(colors = CardDefaults.cardColors(containerColor = AppColors.Card), border = BorderStroke(1.dp, AppColors.Divider), shape = RoundedCornerShape(16.dp)) { Column(Modifier.fillMaxWidth().heightIn(min = 112.dp).padding(16.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) { Text(label.uppercase(), color = Color(0xFF94A3B8), fontSize = 11.sp, fontWeight = FontWeight.Bold); Text(value, color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold) } } }
 private fun formatMinutes(minutes: Int): String = if (minutes >= 60) "${minutes / 60} h ${minutes % 60} min" else "$minutes min"
 
-@Composable private fun AlertsScreen(alerts: List<Alert>) {
+@Composable private fun AlertsScreen(alerts: List<Alert>, demoAlert: AdultMessageDemoAlert?, onOpenMessage: (AdultMessageDemoAlert) -> Unit) {
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         item {
             Text("Alertas", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
             Text("Situaciones identificadas a partir del historial de uso", color = Color(0xFF94A3B8), fontSize = 13.sp)
+        }
+        if (demoAlert != null) item(key = demoAlert.alert.id) {
+            AlertCard(demoAlert.alert) { onOpenMessage(demoAlert) }
         }
         alerts.forEach { alert -> item(key = alert.id) { AlertCard(alert) } }
         item { Spacer(Modifier.navigationBarsPadding()) }
     }
 }
 
-@Composable private fun AlertCard(alert: Alert) {
-    Card(colors = CardDefaults.cardColors(containerColor = AppColors.Card), border = BorderStroke(1.dp, AppColors.Divider), shape = RoundedCornerShape(18.dp)) {
+@Composable private fun AlertCard(alert: Alert, onClick: (() -> Unit)? = null) {
+    Card(modifier = if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier, colors = CardDefaults.cardColors(containerColor = AppColors.Card), border = BorderStroke(1.dp, AppColors.Divider), shape = RoundedCornerShape(18.dp)) {
         Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Surface(color = AppColors.Purple.copy(alpha = .18f), shape = RoundedCornerShape(10.dp)) { Text(alert.icon, Modifier.padding(9.dp), fontSize = 22.sp) }
@@ -264,12 +295,15 @@ private fun formatMinutes(minutes: Int): String = if (minutes >= 60) "${minutes 
             }
             Text(alert.title, color = Color.White, fontSize = 19.sp, fontWeight = FontWeight.Bold, lineHeight = 24.sp)
             Text(alert.description, color = Color(0xFFCBD5E1), fontSize = 14.sp, lineHeight = 21.sp)
-            Surface(color = AppColors.Surface, shape = RoundedCornerShape(12.dp), border = BorderStroke(1.dp, AppColors.Divider)) {
+            if (alert.detail.isNotBlank()) Surface(color = AppColors.Surface, shape = RoundedCornerShape(12.dp), border = BorderStroke(1.dp, AppColors.Divider)) {
                 Text(alert.detail, Modifier.fillMaxWidth().padding(14.dp), color = Color(0xFFE2E8F0), fontSize = 13.sp, lineHeight = 20.sp)
             }
-            HorizontalDivider(color = AppColors.Divider)
-            Text("RECOMENDACIÓN", color = Color(0xFF94A3B8), fontSize = 11.sp, fontWeight = FontWeight.Bold)
-            Text(alert.recommendation, color = Color(0xFFCBD5E1), fontSize = 14.sp, lineHeight = 21.sp)
+            if (alert.recommendation.isNotBlank()) {
+                HorizontalDivider(color = AppColors.Divider)
+                Text("RECOMENDACIÓN", color = Color(0xFF94A3B8), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                Text(alert.recommendation, color = Color(0xFFCBD5E1), fontSize = 14.sp, lineHeight = 21.sp)
+            }
+            if (onClick != null) Text("Ver análisis →", color = AppColors.PurpleSoft, fontWeight = FontWeight.Bold)
         }
     }
 }
