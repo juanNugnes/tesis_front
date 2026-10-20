@@ -16,6 +16,8 @@ data class UsageDiagnosticsUiState(
     val error: String? = null,
     val historicalExporting: Boolean = false,
     val historicalJson: String? = null,
+    val historicalDate: String? = null,
+    val historicalTimezone: String? = null,
     val historicalIncludesOverlaps: Boolean = false,
     val historicalError: String? = null,
     val observationCalculating: Boolean = false,
@@ -47,17 +49,22 @@ class UsageDiagnosticsViewModel(
     }
     fun exportText(): String? = state.value.snapshot?.let { repository.export(state.value.range, it) }
 
-    fun generateHistoricalJson(includeOverlappingRuns: Boolean) {
-        if (_state.value.historicalExporting) return
+    fun generateHistoricalJson(includeOverlappingRuns: Boolean, yesterday: Boolean = false) {
+        if (_state.value.historicalExporting || _state.value.observationCalculating) return
         _state.update { it.copy(historicalExporting = true, historicalError = null) }
         viewModelScope.launch {
             try {
-                val json = repository.generateHistoricalJson(profileId(), deviceId(), includeOverlappingRuns)
+                val sample = repository.generateHistoricalJson(profileId(), deviceId(), includeOverlappingRuns, yesterday)
                 _state.update {
                     it.copy(
                         historicalExporting = false,
-                        historicalJson = json,
+                        historicalJson = sample.historicalJson,
+                        historicalDate = sample.historical.localDate,
+                        historicalTimezone = sample.historical.timezoneId,
                         historicalIncludesOverlaps = includeOverlappingRuns,
+                        interactiveScreenObservation = sample.observation ?: it.interactiveScreenObservation,
+                        observationJson = sample.observation?.let(repository::observationJson) ?: it.observationJson,
+                        observationError = if (sample.observation != null) null else it.observationError,
                     )
                 }
             } catch (exception: CancellationException) {
@@ -76,7 +83,7 @@ class UsageDiagnosticsViewModel(
     fun historicalJson(): String? = state.value.historicalJson
 
     fun calculateInteractiveScreenObservation() {
-        if (_state.value.observationCalculating) return
+        if (_state.value.observationCalculating || _state.value.historicalExporting) return
         _state.update { it.copy(observationCalculating = true, observationError = null) }
         viewModelScope.launch {
             try {

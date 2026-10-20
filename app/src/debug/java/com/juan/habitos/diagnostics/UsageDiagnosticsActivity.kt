@@ -60,14 +60,16 @@ class UsageDiagnosticsActivity : ComponentActivity() {
             Toast.makeText(context, tooLargeMessage, Toast.LENGTH_LONG).show()
         }
     }
-    val shareHistoricalJson: (String) -> Unit = { json ->
+    var pendingShare by remember { mutableStateOf<Triple<Boolean, String, String>?>(null) }
+    val shareJson: (Boolean, String, String) -> Unit = { observation, json, date ->
         coroutineScope.launch {
             try {
                 val prepared = withContext(Dispatchers.IO) {
                     HistoricalJsonFileExporter.prepare(
                         cacheDirectory = context.cacheDir,
                         json = json,
-                        date = LocalDate.now(ZoneId.systemDefault()),
+                        date = LocalDate.parse(date),
+                        observation = observation,
                     )
                 }
                 val uri = FileProvider.getUriForFile(
@@ -81,12 +83,31 @@ class UsageDiagnosticsActivity : ComponentActivity() {
                     clipData = ClipData.newUri(context.contentResolver, prepared.file.name, uri)
                     addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 }
-                context.startActivity(Intent.createChooser(sendIntent, "Compartir JSON histórico"))
+                context.startActivity(Intent.createChooser(sendIntent, if (observation) "Compartir observación JSON" else "Compartir JSON histórico"))
             } catch (exception: Exception) {
-                Log.e("UsageDiagnostics", "Unable to share historical JSON file", exception)
+                Log.e("UsageDiagnostics", "Unable to share diagnostic JSON file", exception)
                 Toast.makeText(context, "No pudimos preparar el archivo para compartir.", Toast.LENGTH_LONG).show()
             }
         }
+    }
+    pendingShare?.let { (observation, json, date) ->
+        AlertDialog(
+            onDismissRequest = { pendingShare = null },
+            title = { Text("Revisar datos antes de compartir") },
+            text = { Text(
+                "Fecha: $date. Se comparte el JSON original íntegro, sin minimizar. " +
+                    if (observation) {
+                        "Incluye identificadores de perfil/dispositivo, zona horaria, horarios, minutos y milisegundos, estados, errores y evidencia de consultas, cobertura, reinicios y conflictos. No verifica quién usó el teléfono ni la calidad de la captura."
+                    } else {
+                        "Incluye identificadores de perfil/dispositivo, zona horaria, horarios, paquetes y clases de aplicaciones, versión de Android, modelo del teléfono y errores de consultas. También puede incluir eventos previos al día como evidencia de estado inicial."
+                    }
+            ) },
+            confirmButton = { TextButton(onClick = {
+                pendingShare = null
+                shareJson(observation, json, date)
+            }) { Text("Compartir original") } },
+            dismissButton = { TextButton(onClick = { pendingShare = null }) { Text("Cancelar") } },
+        )
     }
     UsageDiagnosticsScreen(
         state = state,
@@ -95,10 +116,12 @@ class UsageDiagnosticsActivity : ComponentActivity() {
         onOpenSettings = { AndroidPermissionManager(context.applicationContext).request(0) },
         onCopyDiagnostic = { vm.exportText()?.let { copyText("Usage diagnostics", it, "Diagnóstico copiado", "El diagnóstico es demasiado grande para copiar.") } },
         onGenerateHistorical = { vm.generateHistoricalJson(false) },
+        onGenerateYesterday = { vm.generateHistoricalJson(false, yesterday = true) },
         onGenerateOverlapping = { vm.generateHistoricalJson(true) },
-        onShareHistorical = { vm.historicalJson()?.let(shareHistoricalJson) },
+        onShareHistorical = { vm.historicalJson()?.let { json -> state.historicalDate?.let { pendingShare = Triple(false, json, it) } } },
         onCopyHistorical = { vm.historicalJson()?.let { copyText("Historical usage JSON", it, "JSON histórico copiado", "El diagnóstico es demasiado grande para copiar. Usá Compartir JSON.") } },
         onCalculateObservation = vm::calculateInteractiveScreenObservation,
+        onShareObservation = { vm.observationJson()?.let { json -> state.interactiveScreenObservation?.localDate?.let { pendingShare = Triple(true, json, it) } } },
         onCopyObservation = { vm.observationJson()?.let { copyText("Interactive screen observation", it, "Observación compacta copiada", "La observación es demasiado grande para copiar.") } },
     )
 }
@@ -110,17 +133,29 @@ class UsageDiagnosticsActivity : ComponentActivity() {
     onOpenSettings: () -> Unit,
     onCopyDiagnostic: () -> Unit,
     onGenerateHistorical: () -> Unit,
+    onGenerateYesterday: () -> Unit,
     onGenerateOverlapping: () -> Unit,
     onShareHistorical: () -> Unit,
     onCopyHistorical: () -> Unit,
     onCalculateObservation: () -> Unit,
     onCopyObservation: () -> Unit,
+    onShareObservation: () -> Unit,
 ) {
     LazyColumn(Modifier.fillMaxSize().background(AppColors.Background).statusBarsPadding(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         item { Text("Diagnóstico de uso", color = Color.White, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold); Text("Herramienta experimental · solo build debug", color = Color(0xFF94A3B8)) }
         item { AccessCard(state.hasAccess, onOpenSettings) }
-        item { InteractiveScreenObservationCard(state, onCalculateObservation, onCopyObservation) }
-        item { HistoricalExportCard(state, onGenerateHistorical, onGenerateOverlapping, onShareHistorical, onCopyHistorical) }
+        item { InteractiveScreenObservationCard(state, onCalculateObservation, onCopyObservation, onShareObservation) }
+        item { HistoricalExportCard(state, onGenerateHistorical, onGenerateYesterday, onGenerateOverlapping, onShareHistorical, onCopyHistorical) }
+        state.interactiveScreenObservation?.let { observation ->
+            if (state.historicalDate != null) item {
+                val matches = state.historicalDate == observation.localDate && state.historicalTimezone == observation.timezoneId
+                Text(
+                    if (matches) "Ambos JSON corresponden a ${observation.localDate} · ${observation.timezoneId}." else
+                        "Fechas o zonas diferentes. Usá Generar JSON de ayer para preparar ambos desde la misma captura.",
+                    color = if (matches) Color(0xFF34D399) else Color(0xFFFBBF24),
+                )
+            }
+        }
         if (state.hasAccess) {
             item { RangeSelector(state.range, onRange) }
             if (state.loading) item { LinearProgressIndicator(Modifier.fillMaxWidth()) }
@@ -159,17 +194,20 @@ class UsageDiagnosticsActivity : ComponentActivity() {
     state: UsageDiagnosticsUiState,
     onCalculate: () -> Unit,
     onCopy: () -> Unit,
+    onShare: () -> Unit,
 ) {
     DiagnosticCard {
         Text("MINUTOS DE PANTALLA INTERACTIVA", color = AppColors.PurpleSoft, fontWeight = FontWeight.Bold)
         Text("Observación técnica de la pantalla del dispositivo; no identifica quién usó físicamente el teléfono.", color = Color(0xFFCBD5E1), style = MaterialTheme.typography.bodySmall)
-        Button(onCalculate, Modifier.fillMaxWidth(), enabled = !state.observationCalculating) {
+        Button(onCalculate, Modifier.fillMaxWidth(), enabled = !state.observationCalculating && !state.historicalExporting) {
             Text(if (state.observationCalculating) "Calculando…" else "Calcular observación diaria")
         }
         state.observationError?.let { Text("Error: $it", color = MaterialTheme.colorScheme.error) }
         state.interactiveScreenObservation?.let { observation ->
             HorizontalDivider(color = AppColors.Divider)
             SummaryLine("Fecha", observation.localDate)
+            SummaryLine("Zona horaria", observation.timezoneId)
+            OutlinedButton(onShare, Modifier.fillMaxWidth()) { Text("Compartir observación JSON") }
             SummaryLine("Minutos", observation.interactiveScreenMinutes?.toString() ?: "No disponible")
             SummaryLine("Milisegundos exactos", observation.interactiveScreenMillis?.toString() ?: "No disponible")
             SummaryLine("Estado", observation.status.name)
@@ -191,6 +229,7 @@ class UsageDiagnosticsActivity : ComponentActivity() {
 @Composable private fun HistoricalExportCard(
     state: UsageDiagnosticsUiState,
     onGenerate: () -> Unit,
+    onGenerateYesterday: () -> Unit,
     onGenerateOverlapping: () -> Unit,
     onShare: () -> Unit,
     onCopy: () -> Unit,
@@ -198,14 +237,19 @@ class UsageDiagnosticsActivity : ComponentActivity() {
     DiagnosticCard {
         Text("EXPORT HISTÓRICO RAW", color = AppColors.PurpleSoft, fontWeight = FontWeight.Bold)
         Text("Genera un JSON local con eventos sin deduplicar. No calcula minutos ni envía información al backend.", color = Color(0xFFCBD5E1), style = MaterialTheme.typography.bodySmall)
-        Button(onGenerate, Modifier.fillMaxWidth(), enabled = !state.historicalExporting) {
+        Button(onGenerate, Modifier.fillMaxWidth(), enabled = !state.historicalExporting && !state.observationCalculating) {
             Text(if (state.historicalExporting) "Generando…" else "Generar JSON del día")
         }
-        OutlinedButton(onGenerateOverlapping, Modifier.fillMaxWidth(), enabled = !state.historicalExporting) {
+        OutlinedButton(onGenerateOverlapping, Modifier.fillMaxWidth(), enabled = !state.historicalExporting && !state.observationCalculating) {
             Text("Generar con consultas solapadas")
         }
+        OutlinedButton(onGenerateYesterday, Modifier.fillMaxWidth(), enabled = !state.historicalExporting && !state.observationCalculating) {
+            Text("Generar JSON de ayer")
+        }
+        Text("Ayer prepara también la observación desde los mismos eventos. No completa evidencia faltante.", color = Color(0xFFCBD5E1), style = MaterialTheme.typography.bodySmall)
         state.historicalError?.let { Text("Error: $it", color = MaterialTheme.colorScheme.error) }
         if (state.historicalJson != null) {
+            Text("Fecha del JSON: ${state.historicalDate} · ${state.historicalTimezone}", color = Color.White)
             Text(
                 if (state.historicalIncludesOverlaps) "JSON listo · incluye dos consultas solapadas" else "JSON listo · consulta diaria y estado previo",
                 color = Color(0xFF34D399),

@@ -24,11 +24,12 @@ object HistoricalJsonFileExporter {
     }
 
     fun fileName(date: LocalDate): String = "modera-historical-diagnostic-$date.json"
+    fun observationFileName(date: LocalDate): String = "modera-interactive-screen-observation-$date.json"
 
-    fun prepare(cacheDirectory: File, json: String, date: LocalDate): HistoricalJsonShareFile {
+    fun prepare(cacheDirectory: File, json: String, date: LocalDate, observation: Boolean = false): HistoricalJsonShareFile {
         val exportDirectory = File(cacheDirectory, CACHE_DIRECTORY)
         check(exportDirectory.exists() || exportDirectory.mkdirs()) { "Unable to create diagnostic cache directory" }
-        val file = File(exportDirectory, fileName(date))
+        val file = File(exportDirectory, if (observation) observationFileName(date) else fileName(date))
         file.writeBytes(json.toByteArray(Charsets.UTF_8))
         return HistoricalJsonShareFile(file = file, mimeType = MIME_TYPE)
     }

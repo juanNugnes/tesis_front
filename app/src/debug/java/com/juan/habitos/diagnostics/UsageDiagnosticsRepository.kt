@@ -74,25 +74,29 @@ class UsageDiagnosticsRepository(private val dataSource: AndroidDeviceUsageDataS
         profileId: String?,
         deviceId: String?,
         includeOverlappingRuns: Boolean,
-    ): String = withContext(Dispatchers.IO) {
-        val result = collectHistoricalDiagnostic(LocalDate.now(), profileId, deviceId, includeOverlappingRuns)
+        yesterday: Boolean = false,
+    ): DiagnosticExportSample = withContext(Dispatchers.IO) {
+        val day = DiagnosticExportDay.resolve(yesterday)
+        val result = collectHistoricalDiagnostic(day.date, profileId, deviceId, includeOverlappingRuns, day.zone)
         Log.d(
             TAG,
             "historicalDate=${result.localDate} runs=${result.collectorRuns.size} events=${result.collectorRuns.sumOf { it.eventCount }} overlap=$includeOverlappingRuns",
         )
-        HistoricalUsageDiagnosticJson.encode(result)
+        DiagnosticExportSample.from(result, includeObservation = yesterday)
     }
 
     suspend fun calculateInteractiveScreenObservation(
         profileId: String?,
         deviceId: String?,
     ): DailyDeviceInteractiveScreenObservation = withContext(Dispatchers.IO) {
+        val day = DiagnosticExportDay.resolve(yesterday = true)
         InteractiveScreenObservationCalculator.calculate(
             collectHistoricalDiagnostic(
-                date = LocalDate.now().minusDays(1),
+                date = day.date,
                 profileId = profileId,
                 deviceId = deviceId,
                 includeOverlappingRuns = false,
+                zoneId = day.zone,
             )
         )
     }
@@ -105,9 +109,10 @@ class UsageDiagnosticsRepository(private val dataSource: AndroidDeviceUsageDataS
         profileId: String?,
         deviceId: String?,
         includeOverlappingRuns: Boolean,
+        zoneId: ZoneId = ZoneId.systemDefault(),
     ) = DailyHistoricalUsageDiagnosticCollector(dataSource).collect(
         date = date,
-        zoneId = ZoneId.systemDefault(),
+        zoneId = zoneId,
         profileId = profileId,
         deviceId = deviceId,
         includeOverlappingRuns = includeOverlappingRuns,
