@@ -29,10 +29,12 @@ android {
         debug {
             buildConfigField("boolean", "DEMO_MODE", providers.gradleProperty("demoMode").orNull?.toBooleanStrictOrNull()?.toString() ?: "true")
             buildConfigField("boolean", "ADULT_MESSAGES_DEMO_MODE", providers.gradleProperty("adultMessagesDemoMode").orNull?.toBooleanStrictOrNull()?.toString() ?: "false")
+            buildConfigField("boolean", "AUTOMATIC_ACTIVITIES_DEMO_MODE", providers.gradleProperty("automaticActivitiesDemoMode").orNull?.toBooleanStrictOrNull()?.toString() ?: "false")
         }
         release {
             buildConfigField("boolean", "DEMO_MODE", "false")
             buildConfigField("boolean", "ADULT_MESSAGES_DEMO_MODE", "false")
+            buildConfigField("boolean", "AUTOMATIC_ACTIVITIES_DEMO_MODE", "false")
         }
     }
     buildFeatures { compose = true; buildConfig = true }

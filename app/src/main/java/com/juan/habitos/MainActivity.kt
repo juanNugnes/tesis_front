@@ -116,7 +116,28 @@ private inline fun <reified T : ViewModel> factory(crossinline create: () -> T) 
         composable("permissions") { var granted by rememberSaveable { mutableStateOf(emptySet<Int>()) }; val manager = remember { AndroidPermissionManager(app) }; PermissionsScreen(granted, { index -> manager.request(index); granted = granted + index }, { nav.navigate("preferencesIntro") }) }
         composable("preferencesIntro") { val profile by app.profileRepository.profile.collectAsStateWithLifecycle(initialValue = null); PreferencesOnboardingIntro(profile?.name.orEmpty(), { nav.navigate("preferencesOnboarding") }, { scope.launch { app.profileRepository.completeOnboarding(); nav.navigate("child") { popUpTo("profile") { inclusive = true } } } }) }
         composable("preferencesOnboarding") { val vm: ChildPreferencesViewModel = viewModel(factory = factory { ChildPreferencesViewModel(app.childPreferencesRepository, app.profileRepository, BuildConfig.DEMO_MODE) }); val state by vm.state.collectAsStateWithLifecycle(); ChildPreferencesScreen(state, vm::toggleInterest, vm::omitConsiderations, vm::selectNoConsiderations, vm::toggleConsideration, vm::considerationDuration, vm::considerationValidUntil, vm::toggleRestriction, vm::notes, { vm.save { scope.launch { app.profileRepository.completeOnboarding(); nav.navigate("child") { popUpTo("profile") { inclusive = true } } } } }, { nav.popBackStack() }) }
-        composable("child") { entry -> val vm: ChildViewModel = viewModel(factory = factory { ChildViewModel(app.profileRepository, app.usageRepository, app.activitySuggestionRepository) }); val state by vm.state.collectAsStateWithLifecycle(); val preferencesUpdated by entry.savedStateHandle.getStateFlow(PREFERENCES_UPDATED_KEY, false).collectAsStateWithLifecycle(); LaunchedEffect(Unit) { vm.refreshActivitySelectionCount() }; LaunchedEffect(preferencesUpdated) { if (preferencesUpdated) { entry.savedStateHandle[PREFERENCES_UPDATED_KEY] = false; vm.onPreferencesUpdated() } }; ChildHomeScreen(state, { nav.navigate("adultPin") }, vm::showAnotherActivity, vm::startActivity, vm::finishActivity, vm::loadActivitySuggestions, vm::retryActivitySelection) { nav.navigate(COMPLETE_PREFERENCES_PIN_ROUTE) } }
+        composable("child") { entry ->
+            val vm: ChildViewModel = viewModel(factory = factory { ChildViewModel(app.profileRepository, app.usageRepository, app.activitySuggestionRepository) })
+            val state by vm.state.collectAsStateWithLifecycle()
+            val preferencesUpdated by entry.savedStateHandle.getStateFlow(PREFERENCES_UPDATED_KEY, false).collectAsStateWithLifecycle()
+            LaunchedEffect(Unit) { vm.refreshActivitySelectionCount() }
+            LaunchedEffect(preferencesUpdated) {
+                if (preferencesUpdated) { entry.savedStateHandle[PREFERENCES_UPDATED_KEY] = false; vm.onPreferencesUpdated() }
+            }
+            // Read the actual selected profile, not ChildHomeUiState's initial placeholder.
+            val demoProfile = if (app.automaticActivitiesDemoEnabled) {
+                val profile by app.profileRepository.profile.collectAsStateWithLifecycle(initialValue = null)
+                profile
+            } else null
+            ChildHomeScreen(
+                state, { nav.navigate("adultPin") }, vm::showAnotherActivity, vm::startActivity, vm::finishActivity,
+                vm::loadActivitySuggestions, vm::retryActivitySelection,
+                onCompletePreferences = { nav.navigate(COMPLETE_PREFERENCES_PIN_ROUTE) },
+                automaticActivitiesContent = if (app.automaticActivitiesDemoEnabled && demoProfile?.id == state.profile.id) {
+                    demoProfile?.id?.let { id -> { AutomaticActivitiesDemoSection(id) } }
+                } else null,
+            )
+        }
         composable("adultPin") { val vm: PinViewModel = viewModel(factory = factory { PinViewModel(app.pinStore) }); val state by vm.state.collectAsStateWithLifecycle(); DisposableEffect(Unit) { vm.clear(); onDispose {} }; AdultPinScreen(state, { vm.digit(it, false) { nav.navigate("adult") { popUpTo("adultPin") { inclusive = true } } } }, vm::delete) { nav.popBackStack() } }
         composable(COMPLETE_PREFERENCES_PIN_ROUTE) { val vm: PinViewModel = viewModel(factory = factory { PinViewModel(app.pinStore) }); val state by vm.state.collectAsStateWithLifecycle(); DisposableEffect(Unit) { vm.clear(); onDispose {} }; AdultPinScreen(state, { vm.digit(it, false) { nav.navigate(PREFERENCES_FROM_CHILD_ROUTE) { popUpTo(COMPLETE_PREFERENCES_PIN_ROUTE) { inclusive = true } } } }, vm::delete) { nav.popBackStack() } }
         composable("adult") {

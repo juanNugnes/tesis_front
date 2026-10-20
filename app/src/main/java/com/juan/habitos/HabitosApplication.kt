@@ -93,6 +93,9 @@ class HabitosApplication : Application() {
     }
     val alertRepository by lazy { FakeAlertRepository() }
     val adultMessagesDemoEnabled: Boolean get() = BuildConfig.DEBUG && BuildConfig.ADULT_MESSAGES_DEMO_MODE
+    val automaticActivitiesDemoEnabled: Boolean get() = com.juan.habitos.ui.child.automaticActivitiesDemoEnabled(
+        BuildConfig.DEBUG, BuildConfig.AUTOMATIC_ACTIVITIES_DEMO_MODE,
+    )
     val adultMessagesRepository by lazy {
         com.juan.habitos.data.remote.adultMessagesRepositoryForMode(
             BuildConfig.DEMO_MODE, HabitsApiClient.adultMessagesApi, adultRequestAuthorization,

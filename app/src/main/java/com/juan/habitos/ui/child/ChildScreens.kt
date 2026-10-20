@@ -28,7 +28,7 @@ import kotlinx.coroutines.launch
 private val ChildCardColor = Color.White.copy(alpha = .11f)
 private val ChildBorderColor = Color.White.copy(alpha = .20f)
 
-@Composable fun ChildHomeScreen(state: ChildHomeUiState, onLock: () -> Unit, onAnotherActivity: () -> Unit, onStartActivity: () -> Unit, onFinishActivity: () -> Unit, onRetryActivity: () -> Unit, onRetrySelection: () -> Unit, onCompletePreferences: (() -> Unit)? = null) {
+@Composable fun ChildHomeScreen(state: ChildHomeUiState, onLock: () -> Unit, onAnotherActivity: () -> Unit, onStartActivity: () -> Unit, onFinishActivity: () -> Unit, onRetryActivity: () -> Unit, onRetrySelection: () -> Unit, onCompletePreferences: (() -> Unit)? = null, automaticActivitiesContent: (@Composable () -> Unit)? = null) {
     val gradient = Brush.verticalGradient(listOf(Color(0xFF5B21B6), Color(0xFF4F46E5), Color(0xFF2563EB)))
     val listState = rememberLazyListState()
     LaunchedEffect(state.showCompletionCelebration, state.completionCelebrationId) {
@@ -42,6 +42,7 @@ private val ChildBorderColor = Color.White.copy(alpha = .20f)
     ) {
         item { ChildHeader(state, onLock) }
         item { DaySceneCard(state.profile.avatar, state.chosenActivities ?: 0, state.showCompletionCelebration, state.completionCelebrationId) }
+        if (automaticActivitiesContent != null) item { automaticActivitiesContent() }
         item { DayUsageSummary(state.usage.currentMinutes, state.habitualUsageMinutes, state.usage.informationMessage) }
         item { ChildUsageDetails(state.usage.sessionCount, state.apps, state.applicationsStatus) }
         item { ActivitySuggestionCard(state.profile.avatar, state.activityState, state.selectionRegistrationFailed, onAnotherActivity, onStartActivity, onFinishActivity, onRetryActivity, onRetrySelection, onCompletePreferences) }
@@ -294,7 +295,7 @@ fun activityHistoryMessage(chosenActivities: Int?): String = when (chosenActivit
 
 @Composable fun ActivityHistory(chosenActivities: Int?) { Surface(color = Color(0xFFDAF5E3).copy(.96f), shape = RoundedCornerShape(22.dp), border = BorderStroke(1.dp, Color.White.copy(.5f))) { Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) { Text("🌱", fontSize = 25.sp); Spacer(Modifier.width(12.dp)); Text(activityHistoryMessage(chosenActivities), color = Color(0xFF24543A), fontWeight = FontWeight.Bold) } } }
 
-@Composable private fun ChildCard(containerColor: Color = ChildCardColor, borderColor: Color = ChildBorderColor, content: @Composable () -> Unit) { Card(colors = CardDefaults.cardColors(containerColor = containerColor), border = BorderStroke(1.dp, borderColor), shape = RoundedCornerShape(24.dp)) { Box(Modifier.fillMaxWidth().padding(18.dp)) { content() } } }
+@Composable internal fun ChildCard(containerColor: Color = ChildCardColor, borderColor: Color = ChildBorderColor, content: @Composable () -> Unit) { Card(colors = CardDefaults.cardColors(containerColor = containerColor), border = BorderStroke(1.dp, borderColor), shape = RoundedCornerShape(24.dp)) { Box(Modifier.fillMaxWidth().padding(18.dp)) { content() } } }
 private fun formatMinutesLong(minutes: Int): String = if (minutes >= 60) "${minutes / 60} h ${minutes % 60} min" else "$minutes min"
 
 @Composable fun AdultPinScreen(state: PinUiState, onDigit: (Int) -> Unit, onDelete: () -> Unit, onBack: () -> Unit) { Column(Modifier.fillMaxSize().background(AppColors.Surface).statusBarsPadding().padding(28.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) { Text("👤", color = AppColors.PurpleSoft, fontSize = 58.sp); Spacer(Modifier.height(22.dp)); Text("Panel del adulto", color = Color.White, fontSize = 27.sp, fontWeight = FontWeight.Bold); Text("Ingresá tu PIN de 4 dígitos", color = Color(0xFFCBD5E1)); Spacer(Modifier.height(30.dp)); PinDots(state.digits.length, state.error, emptyColor = Color(0xFF64748B), filledColor = AppColors.PurpleSoft); if (state.error) Text("PIN incorrecto. Intentá nuevamente.", color = MaterialTheme.colorScheme.error, fontSize = 13.sp, modifier = Modifier.padding(top = 10.dp)); Spacer(Modifier.height(30.dp)); NumericPinKeyboard(onDigit, onDelete, highContrastDark = true); Spacer(Modifier.height(28.dp)); TextButton(onBack) { Text("← Volver", color = Color(0xFFCBD5E1)) } } }
