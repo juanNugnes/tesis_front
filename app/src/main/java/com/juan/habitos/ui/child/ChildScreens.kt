@@ -15,10 +15,13 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.*
 import com.juan.habitos.domain.model.AppUsage
+import com.juan.habitos.R
 import com.juan.habitos.domain.model.UsageMetricStatus
 import com.juan.habitos.ui.components.*
 import com.juan.habitos.ui.state.*
@@ -289,11 +292,71 @@ private val celebrationBalloons = listOf(
 fun activityHistoryMessage(chosenActivities: Int?): String = when (chosenActivities) {
     null -> "Tus actividades de hoy aparecerán acá"
     0 -> "Hoy todavía no elegiste actividades"
-    1 -> "Hoy elegiste 1 actividad"
-    else -> "Hoy elegiste $chosenActivities actividades"
+    1 -> "actividad elegida hoy"
+    else -> "actividades elegidas hoy"
 }
 
-@Composable fun ActivityHistory(chosenActivities: Int?) { Surface(color = Color(0xFFDAF5E3).copy(.96f), shape = RoundedCornerShape(22.dp), border = BorderStroke(1.dp, Color.White.copy(.5f))) { Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) { Text("🌱", fontSize = 25.sp); Spacer(Modifier.width(12.dp)); Text(activityHistoryMessage(chosenActivities), color = Color(0xFF24543A), fontWeight = FontWeight.Bold) } } }
+internal data class ActivityHistoryPresentation(val count: Int?, val title: String, val description: String)
+
+internal fun activityHistoryPresentation(chosenActivities: Int?) = ActivityHistoryPresentation(
+    count = chosenActivities?.takeIf { it > 0 },
+    title = activityHistoryMessage(chosenActivities),
+    description = when (chosenActivities) {
+        null -> "Todavía no hay información disponible sobre las actividades elegidas."
+        0 -> "¡Cuando quieras, te voy a proponer una idea!"
+        1 -> "¡Qué lindo! Seguí sumando momentos diferentes."
+        else -> "¡Genial! Seguí explorando nuevas ideas."
+    },
+)
+
+@Composable fun ActivityHistory(chosenActivities: Int?) {
+    val presentation = activityHistoryPresentation(chosenActivities)
+    // Informational Surface: no onClick, interaction modifier, or navigation action.
+    Surface(color = Color(0xFFE2F7EF), shape = RoundedCornerShape(22.dp), border = BorderStroke(1.dp, Color(0xFFCFEBDD))) {
+        BoxWithConstraints(Modifier.fillMaxWidth().padding(14.dp)) {
+            val illustrationWidth = if (maxWidth < 280.dp) 64.dp else 80.dp
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Image(
+                    painter = painterResource(R.drawable.ic_activity_history_plant),
+                    contentDescription = null,
+                    modifier = Modifier.width(illustrationWidth).aspectRatio(96f / 112f),
+                )
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    ActivityHistoryHeading(presentation)
+                    Text(presentation.description, color = Color(0xFF497C66), fontSize = 14.sp, lineHeight = 20.sp)
+                }
+            }
+        }
+    }
+}
+
+@Composable private fun ActivityHistoryHeading(presentation: ActivityHistoryPresentation) {
+    val fontScale = LocalDensity.current.fontScale
+    BoxWithConstraints(Modifier.fillMaxWidth().semantics(mergeDescendants = true) {}) {
+        val badge: @Composable () -> Unit = {
+            presentation.count?.let { count ->
+                Surface(color = Color(0xFFBCE78B), shape = CircleShape) {
+                    Box(Modifier.defaultMinSize(minWidth = 44.dp, minHeight = 44.dp).padding(horizontal = 10.dp, vertical = 4.dp), contentAlignment = Alignment.Center) {
+                        Text(count.toString(), color = Color(0xFF174A34), fontSize = 28.sp, fontWeight = FontWeight.ExtraBold)
+                    }
+                }
+            }
+        }
+        val title: @Composable (Modifier) -> Unit = { modifier ->
+            Text(presentation.title, modifier, color = Color(0xFF174A34), fontSize = 18.sp, fontWeight = FontWeight.Bold, lineHeight = 24.sp)
+        }
+        if (presentation.count == null) title(Modifier)
+        else if (maxWidth >= 180.dp && fontScale <= 1.3f && presentation.count.toString().length <= 3) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                badge()
+                title(Modifier.weight(1f))
+            }
+        } else {
+            // Keep the informative horizontal card, but wrap its heading for narrow/large-text layouts.
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) { badge(); title(Modifier) }
+        }
+    }
+}
 
 @Composable internal fun ChildCard(containerColor: Color = ChildCardColor, borderColor: Color = ChildBorderColor, content: @Composable () -> Unit) { Card(colors = CardDefaults.cardColors(containerColor = containerColor), border = BorderStroke(1.dp, borderColor), shape = RoundedCornerShape(24.dp)) { Box(Modifier.fillMaxWidth().padding(18.dp)) { content() } } }
 private fun formatMinutesLong(minutes: Int): String = if (minutes >= 60) "${minutes / 60} h ${minutes % 60} min" else "$minutes min"

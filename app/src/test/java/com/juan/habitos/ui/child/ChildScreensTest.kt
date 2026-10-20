@@ -89,15 +89,39 @@ class ChildScreensTest {
     }
 
     @Test fun `one selection uses singular`() {
-        assertEquals("Hoy elegiste 1 actividad", activityHistoryMessage(1))
+        assertEquals("actividad elegida hoy", activityHistoryMessage(1))
     }
 
     @Test fun `multiple selections use plural with real count`() {
-        assertEquals("Hoy elegiste 4 actividades", activityHistoryMessage(4))
+        assertEquals("actividades elegidas hoy", activityHistoryMessage(4))
     }
 
     @Test fun `missing confirmed count shows neutral message`() {
         assertEquals("Tus actividades de hoy aparecerán acá", activityHistoryMessage(null))
+    }
+
+    @Test fun `activity history keeps missing count distinct from measured zero`() {
+        val missing = activityHistoryPresentation(null)
+        val zero = activityHistoryPresentation(0)
+        assertNull(missing.count)
+        assertNull(zero.count)
+        assertEquals("Tus actividades de hoy aparecerán acá", missing.title)
+        assertEquals("Todavía no hay información disponible sobre las actividades elegidas.", missing.description)
+        assertEquals("Hoy todavía no elegiste actividades", zero.title)
+        assertEquals("¡Cuando quieras, te voy a proponer una idea!", zero.description)
+    }
+
+    @Test fun `activity history exposes real positive count separately from dynamic copy`() {
+        val one = activityHistoryPresentation(1)
+        assertEquals(1, one.count)
+        assertEquals("actividad elegida hoy", one.title)
+        assertEquals("¡Qué lindo! Seguí sumando momentos diferentes.", one.description)
+        for (count in listOf(2, 4, 100, Int.MAX_VALUE)) {
+            val multiple = activityHistoryPresentation(count)
+            assertEquals(count, multiple.count)
+            assertEquals("actividades elegidas hoy", multiple.title)
+            assertEquals("¡Genial! Seguí explorando nuevas ideas.", multiple.description)
+        }
     }
 
     @Test fun `eligibility unknown shows preferences message and action when navigation is available`() {
