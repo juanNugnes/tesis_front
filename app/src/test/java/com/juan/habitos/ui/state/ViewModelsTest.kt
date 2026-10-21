@@ -276,6 +276,53 @@ class ViewModelsTest {
         assertEquals(5, vm.state.value.chosenActivities)
     }
     @Test fun `another idea rotates through backend activities and wraps to first`() = runTest(dispatcher) { val vm = ChildViewModel(TestProfileRepo(), TestUsage(), TestActivitySuggestions()); advanceUntilIdle(); val first = (vm.state.value.activityState as ActivityState.Suggested).activity; vm.showAnotherActivity(); assertEquals("activity-2", (vm.state.value.activityState as ActivityState.Suggested).activity.activityId); vm.showAnotherActivity(); assertEquals("activity-3", (vm.state.value.activityState as ActivityState.Suggested).activity.activityId); vm.showAnotherActivity(); assertEquals(first, (vm.state.value.activityState as ActivityState.Suggested).activity) }
+    @Test fun `complete instructions remain accessible after start and repeated reading never duplicates selection`() = runTest(dispatcher) {
+        val description = "Materiales:\n- Papel.\n- Lápices.\n\nPasos:\n" +
+            (1..50).joinToString("\n") { "$it. Explorá una idea con calma y respetá esta consigna completa." }
+        val repo = TestActivitySuggestions().apply {
+            values = listOf(values.first().copy(id = "social_create_together_01", title = "Crear en compañía", description = description))
+        }
+        val vm = ChildViewModel(TestProfileRepo(), TestUsage(), repo)
+        vm.refreshActivitySelectionCount()
+        advanceUntilIdle()
+        val suggested = (vm.state.value.activityState as ActivityState.Suggested).activity
+        assertEquals(description, suggested.description)
+        repeat(10) { assertEquals(description, (vm.state.value.activityState as ActivityState.Suggested).activity.description) }
+        assertTrue(repo.selections.isEmpty())
+        assertEquals(2, vm.state.value.chosenActivities)
+        vm.startActivity()
+        advanceUntilIdle()
+        val running = vm.state.value
+        repeat(20) {
+            assertEquals(suggested, (vm.state.value.activityState as ActivityState.Running).activity)
+            vm.startActivity() // A repeated tap while already running is not a new selection.
+            vm.showAnotherActivity() // Cannot replace the running activity.
+        }
+        advanceUntilIdle()
+        assertEquals(running, vm.state.value)
+        assertEquals(1, repo.suggestionCalls)
+        assertEquals(1, repo.selections.size)
+        assertEquals("social_create_together_01", repo.selections.single().activityId)
+        assertEquals(3, vm.state.value.chosenActivities)
+        assertFalse(vm.state.value.showCompletionCelebration)
+    }
+
+    @Test fun `old plain descriptions and unchanged IDs remain available throughout activity lifecycle`() = runTest(dispatcher) {
+        val repo = TestActivitySuggestions().apply {
+            values = listOf(values.first().copy(id = "quiet_prepare_01", description = "Una consigna anterior sin materiales ni pasos separados."))
+        }
+        val vm = ChildViewModel(TestProfileRepo(), TestUsage(), repo)
+        advanceUntilIdle()
+        val before = (vm.state.value.activityState as ActivityState.Suggested).activity
+        vm.startActivity()
+        advanceUntilIdle()
+        assertEquals(before, (vm.state.value.activityState as ActivityState.Running).activity)
+        vm.finishActivity()
+        advanceUntilIdle()
+        assertEquals(before, (vm.state.value.activityState as ActivityState.Suggested).activity)
+        assertEquals("quiet_prepare_01", repo.selections.single().activityId)
+        assertEquals(1, repo.selections.size)
+    }
     @Test fun `single backend activity remains selected when asking for another idea`() = runTest(dispatcher) { val repo = TestActivitySuggestions().apply { values = values.take(1) }; val vm = ChildViewModel(TestProfileRepo(), TestUsage(), repo); advanceUntilIdle(); val first = (vm.state.value.activityState as ActivityState.Suggested).activity; vm.showAnotherActivity(); assertEquals(first, (vm.state.value.activityState as ActivityState.Suggested).activity) }
     @Test fun `eligibility unknown maps to preferences required`() = runTest(dispatcher) { val repo = TestActivitySuggestions(emptyList()).apply { reason = "eligibility_unknown" }; val vm = ChildViewModel(TestProfileRepo(), TestUsage(), repo); advanceUntilIdle(); assertEquals(ActivityState.PreferencesRequired, vm.state.value.activityState) }
     @Test fun `no eligible activities maps to neutral unavailable state`() = runTest(dispatcher) { val repo = TestActivitySuggestions(emptyList()).apply { reason = "no_eligible_activities" }; val vm = ChildViewModel(TestProfileRepo(), TestUsage(), repo); advanceUntilIdle(); assertEquals(ActivityState.NoEligibleActivities, vm.state.value.activityState) }

@@ -1,5 +1,6 @@
 package com.juan.habitos.data.remote
 
+import com.google.gson.Gson
 import com.juan.habitos.domain.model.DeviceCredentials
 import com.juan.habitos.domain.model.Profile
 import com.juan.habitos.domain.model.ActivitySelection
@@ -80,6 +81,38 @@ private fun suggestionHttpException(code: Int) = HttpException(
 )
 
 class ActivitySuggestionRepositoryTest {
+    @Test fun `multiline instructions survive JSON decoding and DTO mapping without trimming or truncation`() = runTest {
+        // Transport fixture, not a literal copy of the Analytics catalogue.
+        val description = "  Materiales:\r\n- Música si querés.\r\n\r\nPodés reproducir música con el celular y dejarlo apoyado en un lugar seguro.\n\nConsignas:\n" +
+            (1..60).joinToString("\n") { "$it. Leé esta consigna completa y seguí explorando a tu manera, sin apurarte." } + "\n\n  "
+        val dto = suggestionDto(1).copy(activityId = "movement_dance_01", description = description, mayRequireDeviceInteraction = true)
+        val gson = Gson()
+        val decoded = gson.fromJson(gson.toJson(ActivitySuggestionsResponseDto("offer-long", "voluntary", listOf(dto))), ActivitySuggestionsResponseDto::class.java)
+        val handler = SuggestionApiHandler().apply { response = decoded }
+        val result = repository(handler).suggestions().activities.single()
+        assertTrue(description.length > 4_000)
+        assertEquals(description, decoded.activities.single().description)
+        assertEquals(description, result.description)
+        assertEquals("movement_dance_01", result.id)
+        assertTrue(result.mayRequireDeviceInteraction)
+    }
+
+    @Test fun `current and historical IDs are preserved on suggestions and selection without aliases`() = runTest {
+        val ids = listOf("movement_dance_01", "social_create_together_01", "quiet_story_ending_01", "social_help_01", "quiet_prepare_01")
+        for (id in ids) {
+            val handler = SuggestionApiHandler().apply {
+                response = ActivitySuggestionsResponseDto("offer-$id", "voluntary", listOf(suggestionDto(1).copy(activityId = id, description = "Una consigna anterior, sin formato adicional.")))
+            }
+            val repo = repository(handler)
+            val activity = repo.suggestions().activities.single()
+            assertEquals(id, activity.id)
+            assertEquals("Una consigna anterior, sin formato adicional.", activity.description)
+            repo.registerSelection(ActivitySelection("selection-$id", "offer-$id", activity.id, 10L))
+            val sent = handler.calls.last().second[2] as ActivitySelectionRequest
+            assertEquals(id, sent.activityId)
+        }
+    }
+
     @Test fun `response with activities uses current profile Device bearer voluntary context and keeps at most three`() = runTest {
         val handler = SuggestionApiHandler().apply {
             response = ActivitySuggestionsResponseDto("offer-1", "voluntary", (1..4).map(::suggestionDto))
