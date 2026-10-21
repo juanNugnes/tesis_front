@@ -29,21 +29,41 @@ internal data class AutomaticActivitiesDemoState(
     val scenario: AutomaticDemoScenario? = null,
     val rejections: Int = 0,
     val paused: Boolean = false,
+    val dialogVisible: Boolean = false,
 )
 
 /**
- * Manual, in-memory presentation script, NOT an eligibility/policy engine.
+ * In-memory presentation script with one initial demo prompt, NOT an eligibility/policy engine.
  * No repository, API, preferences, persistent history, timer, or real measurement is available here.
  * Each scenario is a separate fictional opportunity; switching skips context, never phone time.
- * Only the current offer and at most six lifecycle events are kept. Reset/process death clears it.
+ * Only the current offer and at most six lifecycle events are kept. Reset clears the demonstration;
+ * the initial-entry guard remains until the activity session ends. Nothing is persisted to disk.
  */
 internal class AutomaticActivitiesDemoViewModel(val profileId: String) : ViewModel() {
     init { require(profileId.isNotBlank()) }
     private val identity = MessageDigest.getInstance("SHA-256").digest(profileId.toByteArray(Charsets.UTF_8))
         .joinToString("") { "%02x".format(it) }
     private var sequence = 0L
+    private var initialEntryHandled = false
     private val mutableState = MutableStateFlow(AutomaticActivitiesDemoState(profileId))
     val state = mutableState.asStateFlow()
+
+    /** Once per activity session/profile, not on construction or every route re-entry. */
+    fun enterExperience() {
+        if (initialEntryHandled) return
+        initialEntryHandled = true
+        if (state.value.scenario == null && state.value.offer == null && !state.value.paused) simulate(AutomaticDemoScenario.DAYTIME)
+    }
+
+    fun dismissDialog(offerId: String) {
+        if (state.value.offer?.id == offerId) mutableState.value = state.value.copy(dialogVisible = false)
+    }
+
+    fun reopenDialog() {
+        if (state.value.offer?.stage in listOf(AutomaticDemoStage.GENERATED, AutomaticDemoStage.PRESENTED, AutomaticDemoStage.SELECTED, AutomaticDemoStage.STARTED)) {
+            mutableState.value = state.value.copy(dialogVisible = true)
+        }
+    }
 
     fun simulate(scenario: AutomaticDemoScenario) {
         val previous = state.value
@@ -67,7 +87,7 @@ internal class AutomaticActivitiesDemoViewModel(val profileId: String) : ViewMod
             )
             AutomaticDemoScenario.INELIGIBLE, AutomaticDemoScenario.WAITING -> null
         }
-        mutableState.value = previous.copy(offer = offer, scenario = scenario)
+        mutableState.value = previous.copy(offer = offer, scenario = scenario, dialogVisible = offer != null)
     }
 
     fun presented(offerId: String) = transition(offerId, AutomaticDemoStage.GENERATED, AutomaticDemoStage.PRESENTED, AutomaticDemoEvent.PRESENTED)
@@ -81,7 +101,7 @@ internal class AutomaticActivitiesDemoViewModel(val profileId: String) : ViewMod
         val count = (previous.rejections + 1).coerceAtMost(2)
         mutableState.value = previous.copy(
             offer = previous.offer.copy(stage = AutomaticDemoStage.REJECTED, events = previous.offer.events + AutomaticDemoEvent.REJECTED),
-            rejections = count, paused = count == 2,
+            rejections = count, paused = count == 2, dialogVisible = false,
         )
     }
 
@@ -89,10 +109,14 @@ internal class AutomaticActivitiesDemoViewModel(val profileId: String) : ViewMod
         val previous = state.value
         val offer = previous.offer ?: return
         if (offer.id != id || offer.stage != from) return
-        mutableState.value = previous.copy(offer = offer.copy(stage = to, events = offer.events + event))
+        mutableState.value = previous.copy(
+            offer = offer.copy(stage = to, events = offer.events + event),
+            dialogVisible = if (to == AutomaticDemoStage.COMPLETED) false else previous.dialogVisible,
+        )
     }
 
     fun reset() {
+        // Keep initialEntryHandled: reset/recomposition/navigation must not auto-generate again.
         // Do not reuse IDs: a late callback from before reset must never affect a new offer.
         mutableState.value = AutomaticActivitiesDemoState(profileId)
     }

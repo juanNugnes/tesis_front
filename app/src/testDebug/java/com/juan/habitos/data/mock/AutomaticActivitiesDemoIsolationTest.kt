@@ -58,6 +58,9 @@ class AutomaticActivitiesDemoIsolationTest {
             val before = child.state.value
             val demo = AutomaticActivitiesDemoViewModel("child")
             store.put("demo", demo)
+            demo.enterExperience()
+            val initialId = demo.state.value.offer!!.id
+            demo.presented(initialId); demo.dismissDialog(initialId); demo.enterExperience(); demo.reopenDialog()
             for (scenario in AutomaticDemoScenario.entries) {
                 demo.reset()
                 demo.simulate(scenario)

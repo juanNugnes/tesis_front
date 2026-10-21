@@ -78,6 +78,15 @@ private fun httpException(code: Int) = HttpException(
 )
 
 class MonitoringConsentRepositoryTest {
+    @Test fun `new notice version uses unchanged backend contract and historical version remains readable`() = runTest {
+        val handler = ConsentApiHandler().apply { granted = consentDto("ACTIVE").copy(privacyNoticeVersion = "1.1") }
+        val repository = RemoteMonitoringConsentRepository(handler.api(), AdultRequestAuthorization(TestAdultCredentialStore()))
+        assertEquals("1.0", repository.getCurrentConsent("profile-1")?.privacyNoticeVersion)
+        val consent = repository.grantConsent("profile-1", "1.1", setOf("USAGE_MONITORING"))
+        assertEquals("1.1", consent.privacyNoticeVersion)
+        val request = handler.calls.last().second[2] as ConsentGrantRequest
+        assertTrue(Gson().toJson(request).contains("\"privacy_notice_version\":\"1.1\""))
+    }
     @Test fun `verification and current consent use adult bearer and map exact backend states`() = runTest {
         val handler = ConsentApiHandler()
         val repository = RemoteMonitoringConsentRepository(

@@ -134,9 +134,12 @@ private inline fun <reified T : ViewModel> factory(crossinline create: () -> T) 
                 vm::loadActivitySuggestions, vm::retryActivitySelection,
                 onCompletePreferences = { nav.navigate(COMPLETE_PREFERENCES_PIN_ROUTE) },
                 automaticActivitiesContent = if (app.automaticActivitiesDemoEnabled && demoProfile?.id == state.profile.id) {
-                    demoProfile?.id?.let { id -> { AutomaticActivitiesDemoSection(id) } }
+                    demoProfile?.id?.let { id -> { AutomaticActivitiesDemoSection(id, controls = true) } }
                 } else null,
             )
+            if (app.automaticActivitiesDemoEnabled && demoProfile?.id == state.profile.id) {
+                demoProfile?.id?.let { AutomaticActivitiesDemoSection(it) }
+            }
         }
         composable("adultPin") { val vm: PinViewModel = viewModel(factory = factory { PinViewModel(app.pinStore) }); val state by vm.state.collectAsStateWithLifecycle(); DisposableEffect(Unit) { vm.clear(); onDispose {} }; AdultPinScreen(state, { vm.digit(it, false) { nav.navigate("adult") { popUpTo("adultPin") { inclusive = true } } } }, vm::delete) { nav.popBackStack() } }
         composable(COMPLETE_PREFERENCES_PIN_ROUTE) { val vm: PinViewModel = viewModel(factory = factory { PinViewModel(app.pinStore) }); val state by vm.state.collectAsStateWithLifecycle(); DisposableEffect(Unit) { vm.clear(); onDispose {} }; AdultPinScreen(state, { vm.digit(it, false) { nav.navigate(PREFERENCES_FROM_CHILD_ROUTE) { popUpTo(COMPLETE_PREFERENCES_PIN_ROUTE) { inclusive = true } } } }, vm::delete) { nav.popBackStack() } }
@@ -278,7 +281,12 @@ private inline fun <reified T : ViewModel> factory(crossinline create: () -> T) 
                         nav.navigate("adultAuth") { popUpTo(popUpRoute) { inclusive = true } }
                     }
                 }
-                MonitoringConsentScreen(state, vm::grant, vm::requestRevoke, vm::confirmRevoke, vm::cancelRevoke) { nav.popBackStack() }
+                DisposableEffect(vm) {
+                    vm.clearAcceptance()
+                    onDispose { vm.clearAcceptance() }
+                }
+                MonitoringConsentScreen(state, vm::grant, vm::requestRevoke, vm::confirmRevoke, vm::cancelRevoke,
+                    vm::setAcceptance, vm::showDataTreatmentInformation, vm::hideDataTreatmentInformation) { nav.popBackStack() }
             }
         }
         composable("linkedDevices") {

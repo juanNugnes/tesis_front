@@ -52,7 +52,7 @@ private class TestMonitoringConsentRepository(
         failure?.let { throw it }
         grantedVersion = privacyNoticeVersion
         grantedPurposes = purposes
-        return activeConsent().also { current = it }
+        return activeConsent().copy(privacyNoticeVersion = privacyNoticeVersion).also { current = it }
     }
 
     override suspend fun revokeConsent(profileId: String, consentId: String): MonitoringConsent {
@@ -114,6 +114,9 @@ class MonitoringConsentViewModelTest {
 
         assertEquals(1, repository.currentCalls)
         assertNull(viewModel.state.value.consent)
+        assertFalse(viewModel.state.value.explicitlyAccepted)
+        assertFalse(viewModel.state.value.canGrant)
+        viewModel.setAcceptance(true)
         assertTrue(viewModel.state.value.canGrant)
     }
 
@@ -123,12 +126,15 @@ class MonitoringConsentViewModelTest {
         val viewModel = MonitoringConsentViewModel(repository, "profile-1", demoMode = false) { resumedProfiles += it }
         advanceUntilIdle()
 
+        viewModel.setAcceptance(true)
         viewModel.grant()
         viewModel.grant()
         advanceUntilIdle()
 
         assertEquals(1, repository.grantCalls)
         assertEquals(PRIVACY_NOTICE_VERSION, repository.grantedVersion)
+        assertEquals("1.1", repository.grantedVersion)
+        assertEquals("1.1", viewModel.state.value.consent?.privacyNoticeVersion)
         assertEquals(setOf("USAGE_MONITORING"), repository.grantedPurposes)
         assertEquals(listOf("profile-1"), resumedProfiles)
         assertEquals(2, repository.verificationCalls)
@@ -155,6 +161,9 @@ class MonitoringConsentViewModelTest {
         assertEquals(2, repository.currentCalls)
         assertFalse(viewModel.state.value.showRevokeConfirmation)
         assertTrue(viewModel.state.value.monitoringRevoked)
+        assertFalse(viewModel.state.value.canGrant)
+        assertFalse(viewModel.state.value.explicitlyAccepted)
+        viewModel.setAcceptance(true)
         assertTrue(viewModel.state.value.canGrant)
     }
 
@@ -189,5 +198,121 @@ class MonitoringConsentViewModelTest {
         assertEquals(0, repository.verificationCalls)
         assertEquals(0, repository.currentCalls)
         assertFalse(viewModel.state.value.loading)
+    }
+
+    @Test fun `direct grant without accepting notice never submits or resumes synchronization`() = runTest(dispatcher) {
+        val repository = TestMonitoringConsentRepository()
+        var resumed = false
+        val viewModel = MonitoringConsentViewModel(repository, "profile-1", false) { resumed = true }
+        viewModel.setAcceptance(true) // Loading cannot pre-authorize acceptance.
+        advanceUntilIdle()
+        viewModel.grant()
+        advanceUntilIdle()
+        assertEquals(0, repository.grantCalls)
+        assertFalse(resumed)
+        assertFalse(viewModel.state.value.explicitlyAccepted)
+    }
+
+    @Test fun `unchecking and leaving screen require a new voluntary acceptance`() = runTest(dispatcher) {
+        val repository = TestMonitoringConsentRepository()
+        val viewModel = MonitoringConsentViewModel(repository, "profile-1", false)
+        advanceUntilIdle()
+        viewModel.setAcceptance(true)
+        assertTrue(viewModel.state.value.canGrant)
+        viewModel.setAcceptance(false)
+        assertFalse(viewModel.state.value.canGrant)
+        viewModel.setAcceptance(true)
+        viewModel.clearAcceptance() // Same operation used on route entry/disposal.
+        viewModel.grant()
+        advanceUntilIdle()
+        assertFalse(viewModel.state.value.explicitlyAccepted)
+        assertEquals(0, repository.grantCalls)
+        val reentered = MonitoringConsentViewModel(repository, "profile-1", false)
+        advanceUntilIdle()
+        assertFalse(reentered.state.value.explicitlyAccepted)
+        assertFalse(reentered.state.value.canGrant)
+    }
+
+    @Test fun `old active consent retains version and cannot be silently replaced`() = runTest(dispatcher) {
+        val repository = TestMonitoringConsentRepository(current = activeConsent())
+        val viewModel = MonitoringConsentViewModel(repository, "profile-1", false)
+        advanceUntilIdle()
+        viewModel.setAcceptance(true); viewModel.grant(); viewModel.refresh()
+        advanceUntilIdle()
+        assertEquals("1.0", viewModel.state.value.consent?.privacyNoticeVersion)
+        assertEquals(0, repository.grantCalls)
+        assertTrue(viewModel.state.value.monitoringEnabled)
+        assertFalse(viewModel.state.value.explicitlyAccepted)
+    }
+
+    @Test fun `information remains available with active consent and never grants or revokes`() = runTest(dispatcher) {
+        val repository = TestMonitoringConsentRepository(current = activeConsent())
+        val viewModel = MonitoringConsentViewModel(repository, "profile-1", false)
+        advanceUntilIdle()
+        val reads = repository.verificationCalls + repository.currentCalls
+        viewModel.showDataTreatmentInformation()
+        assertTrue(viewModel.state.value.showDataTreatmentInformation)
+        assertFalse(viewModel.state.value.explicitlyAccepted)
+        viewModel.hideDataTreatmentInformation()
+        assertFalse(viewModel.state.value.showDataTreatmentInformation)
+        assertEquals(reads, repository.verificationCalls + repository.currentCalls)
+        assertEquals(0, repository.grantCalls)
+        assertEquals(0, repository.revokeCalls)
+    }
+
+    @Test fun `acceptance cannot bypass missing pending or rejected representative verification`() = runTest(dispatcher) {
+        for (status in listOf(null, RepresentativeVerificationStatus.PENDING, RepresentativeVerificationStatus.REJECTED)) {
+            val repository = TestMonitoringConsentRepository(status?.let(::verification))
+            val viewModel = MonitoringConsentViewModel(repository, "profile-1", false)
+            advanceUntilIdle()
+            viewModel.setAcceptance(true); viewModel.grant()
+            advanceUntilIdle()
+            assertFalse(viewModel.state.value.canGrant)
+            assertFalse(viewModel.state.value.explicitlyAccepted)
+            assertEquals(0, repository.grantCalls)
+        }
+    }
+
+    @Test fun `revoked old consent requires fresh acceptance for version 1_1`() = runTest(dispatcher) {
+        val repository = TestMonitoringConsentRepository(current = activeConsent().copy(status = MonitoringConsentStatus.REVOKED))
+        val viewModel = MonitoringConsentViewModel(repository, "profile-1", false)
+        advanceUntilIdle()
+        viewModel.grant()
+        advanceUntilIdle()
+        assertEquals(0, repository.grantCalls)
+        assertEquals("1.0", viewModel.state.value.consent?.privacyNoticeVersion)
+        viewModel.setAcceptance(true); viewModel.grant()
+        advanceUntilIdle()
+        assertEquals(1, repository.grantCalls)
+        assertEquals("1.1", viewModel.state.value.consent?.privacyNoticeVersion)
+        assertFalse(viewModel.state.value.explicitlyAccepted)
+    }
+
+    @Test fun `authorization failure clears acceptance and prevents resubmission`() = runTest(dispatcher) {
+        val repository = TestMonitoringConsentRepository()
+        val viewModel = MonitoringConsentViewModel(repository, "profile-1", false)
+        advanceUntilIdle()
+        viewModel.setAcceptance(true)
+        repository.failure = AdultAuthorizationException()
+        viewModel.grant()
+        advanceUntilIdle()
+        assertFalse(viewModel.state.value.explicitlyAccepted)
+        assertFalse(viewModel.state.value.canGrant)
+        viewModel.setAcceptance(true); viewModel.grant()
+        advanceUntilIdle()
+        assertEquals(1, repository.grantCalls)
+    }
+
+    @Test fun `grant is disabled while submitting and acceptance is not inherited after reload`() = runTest(dispatcher) {
+        val repository = TestMonitoringConsentRepository()
+        val viewModel = MonitoringConsentViewModel(repository, "profile-1", false)
+        advanceUntilIdle()
+        viewModel.setAcceptance(true); viewModel.grant()
+        assertTrue(viewModel.state.value.submitting)
+        viewModel.setAcceptance(true)
+        assertFalse(viewModel.state.value.explicitlyAccepted)
+        assertFalse(viewModel.state.value.canGrant)
+        advanceUntilIdle()
+        assertFalse(viewModel.state.value.explicitlyAccepted)
     }
 }

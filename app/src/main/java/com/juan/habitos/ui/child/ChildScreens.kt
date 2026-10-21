@@ -45,12 +45,12 @@ private val ChildBorderColor = Color.White.copy(alpha = .20f)
     ) {
         item { ChildHeader(state, onLock) }
         item { DaySceneCard(state.profile.avatar, state.chosenActivities ?: 0, state.showCompletionCelebration, state.completionCelebrationId) }
-        if (automaticActivitiesContent != null) item { automaticActivitiesContent() }
         item { DayUsageSummary(state.usage.currentMinutes, state.habitualUsageMinutes, state.usage.informationMessage) }
         item { ChildUsageDetails(state.usage.sessionCount, state.apps, state.applicationsStatus) }
         item { ActivitySuggestionCard(state.profile.avatar, state.activityState, state.selectionRegistrationFailed, onAnotherActivity, onStartActivity, onFinishActivity, onRetryActivity, onRetrySelection, onCompletePreferences) }
         if (state.periodUsage.isNotEmpty()) item { DayPeriodUsageCard(state.periodUsage) }
         item { ActivityHistory(state.chosenActivities) }
+        if (automaticActivitiesContent != null) item { automaticActivitiesContent() }
         item { Spacer(Modifier.navigationBarsPadding()) }
     }
 }

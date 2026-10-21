@@ -15,7 +15,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-const val PRIVACY_NOTICE_VERSION = "1.0"
+const val PRIVACY_NOTICE_VERSION = "1.1"
 private const val USAGE_MONITORING_PURPOSE = "USAGE_MONITORING"
 
 data class MonitoringConsentUiState(
@@ -27,11 +27,16 @@ data class MonitoringConsentUiState(
     val showRevokeConfirmation: Boolean = false,
     val errorMessage: String? = null,
     val adultAuthenticationRequired: Boolean = false,
+    val explicitlyAccepted: Boolean = false,
+    val authorizationDenied: Boolean = false,
+    val showDataTreatmentInformation: Boolean = false,
 ) {
     val monitoringEnabled: Boolean get() = consent?.status == MonitoringConsentStatus.ACTIVE
     val monitoringRevoked: Boolean get() = consent?.status == MonitoringConsentStatus.REVOKED
-    val canGrant: Boolean get() =
-        !loading && !submitting && verificationStatus == RepresentativeVerificationStatus.APPROVED && !monitoringEnabled
+    val canAcceptNotice: Boolean get() =
+        !loading && !submitting && !adultAuthenticationRequired && !authorizationDenied && !verificationMissing &&
+            verificationStatus == RepresentativeVerificationStatus.APPROVED && !monitoringEnabled
+    val canGrant: Boolean get() = canAcceptNotice && explicitlyAccepted
     val canRevoke: Boolean get() = !loading && !submitting && monitoringEnabled
 }
 
@@ -56,9 +61,17 @@ class MonitoringConsentViewModel(
         }
     }
 
+    fun setAcceptance(accepted: Boolean) {
+        if (_state.value.canAcceptNotice) _state.update { it.copy(explicitlyAccepted = accepted) }
+    }
+
+    fun clearAcceptance() { _state.update { it.copy(explicitlyAccepted = false) } }
+    fun showDataTreatmentInformation() { _state.update { it.copy(showDataTreatmentInformation = true) } }
+    fun hideDataTreatmentInformation() { _state.update { it.copy(showDataTreatmentInformation = false) } }
+
     fun grant() {
         if (!_state.value.canGrant) return
-        _state.update { it.copy(submitting = true, errorMessage = null) }
+        _state.update { it.copy(submitting = true, errorMessage = null, explicitlyAccepted = false) }
         viewModelScope.launch {
             try {
                 repository.grantConsent(
@@ -111,7 +124,7 @@ class MonitoringConsentViewModel(
     }
 
     private suspend fun load(fallbackConsent: MonitoringConsent? = null) {
-        _state.update { it.copy(loading = true, errorMessage = null) }
+        _state.update { it.copy(loading = true, errorMessage = null, explicitlyAccepted = false) }
         try {
             val verification = repository.getRepresentativeVerification(profileId)
             if (verification == null) {
@@ -135,6 +148,7 @@ class MonitoringConsentViewModel(
                     verificationMissing = false,
                     consent = currentConsent ?: fallbackConsent,
                     adultAuthenticationRequired = false,
+                    authorizationDenied = false,
                 )
             }
         } catch (exception: CancellationException) {
@@ -154,6 +168,8 @@ class MonitoringConsentViewModel(
                     else -> fallbackMessage
                 },
                 adultAuthenticationRequired = exception is AdultAuthenticationRequiredException,
+                authorizationDenied = exception is AdultAuthorizationException,
+                explicitlyAccepted = false,
             )
         }
     }
