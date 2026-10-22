@@ -128,8 +128,8 @@ internal fun shouldShowApplicationExpansion(applicationCount: Int): Boolean = ap
 internal fun childSessionSummary(sessionCount: Int?): String = when (sessionCount) {
     null -> "Todavía no hay información sobre tus momentos de uso"
     0 -> "Hoy no se registraron momentos de uso"
-    1 -> "Hoy usaste el celular en 1 momento"
-    else -> "Hoy usaste el celular en $sessionCount momentos"
+    1 -> "¡Hoy agarraste el celu 1 vez! 📱"
+    else -> "¡Hoy agarraste el celu $sessionCount veces! 📱"
 }
 
 @Composable private fun ChildApplicationRow(app: AppUsage) {

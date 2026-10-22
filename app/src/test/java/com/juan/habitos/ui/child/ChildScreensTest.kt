@@ -80,8 +80,10 @@ class ChildScreensTest {
 
     @Test fun `friendly session summary preserves missing and measured states`() {
         assertEquals("Todavía no hay información sobre tus momentos de uso", childSessionSummary(null))
-        assertEquals("Hoy usaste el celular en 1 momento", childSessionSummary(1))
-        assertEquals("Hoy usaste el celular en 8 momentos", childSessionSummary(8))
+        assertEquals("Hoy no se registraron momentos de uso", childSessionSummary(0))
+        assertEquals("¡Hoy agarraste el celu 1 vez! 📱", childSessionSummary(1))
+        assertEquals("¡Hoy agarraste el celu 2 veces! 📱", childSessionSummary(2))
+        assertEquals("¡Hoy agarraste el celu 8 veces! 📱", childSessionSummary(8))
     }
 
     @Test fun `zero selections shows not selected message`() {
