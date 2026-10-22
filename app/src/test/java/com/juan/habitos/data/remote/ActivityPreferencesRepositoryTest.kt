@@ -85,6 +85,35 @@ private class FakeActivityPreferencesApi : HabitsApi {
 }
 
 class ActivityPreferencesRepositoryTest {
+    @Test fun `bound preferences use selected profile after adult login and never send to a changed profile`() = runTest {
+        val local = FakeChildPreferencesStore()
+        val selected = FakeActivityProfileStore(Profile("Niño", "🌿", 9, id = "selected-child"))
+        val api = FakeActivityPreferencesApi()
+        val credentials = TestAdultCredentialStore("new-adult-session")
+        val repo = CachedChildPreferencesRepository(local, selected, api, AdultRequestAuthorization(credentials), expectedProfileId = "selected-child")
+        repo.refresh()
+        repo.update(ChildPreferences(interests = setOf(ChildInterest.MUSIC)))
+        assertEquals("selected-child", api.requestedId)
+        assertEquals("Bearer new-adult-session", api.authorization)
+        selected.profile.value = Profile("Otro", "🌿", 8, id = "other-child")
+        try { repo.update(ChildPreferences()); fail() } catch (error: com.juan.habitos.domain.repository.ProfileFormException) {
+            assertEquals(com.juan.habitos.domain.repository.ProfileFormFailure.PROFILE_CHANGED, error.reason)
+        }
+        assertEquals(1, api.putCalls)
+        assertEquals("selected-child", api.requestedId)
+    }
+
+    @Test fun `preferences response from another profile is rejected without overwriting local selections`() = runTest {
+        val original = ChildPreferences(interests = setOf(ChildInterest.MUSIC))
+        val local = FakeChildPreferencesStore(original)
+        val selected = FakeActivityProfileStore(Profile("Niño", "🌿", 9, id = "selected-child"))
+        val api = FakeActivityPreferencesApi().apply { response = ActivityPreferencesDto(profileId = "other-child") }
+        val repo = CachedChildPreferencesRepository(local, selected, api, AdultRequestAuthorization(TestAdultCredentialStore("adult")), expectedProfileId = "selected-child")
+        try { repo.refresh(); fail() } catch (error: com.juan.habitos.domain.repository.ProfileFormException) {
+            assertEquals(com.juan.habitos.domain.repository.ProfileFormFailure.PROFILE_CHANGED, error.reason)
+        }
+        assertEquals(original, local.preferences.value)
+    }
     private fun repository(
         local: ChildPreferencesLocalStore,
         profileStore: ProfileLocalStore,

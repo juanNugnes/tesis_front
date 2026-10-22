@@ -288,6 +288,9 @@ class AdultProfileLinkCodeViewModel(
 
 data class ChildPreferencesUiState(
     val childName: String = "",
+    val profileId: String? = null,
+    val age: Int? = null,
+    val simulatedScreenHabits: ParentalScreenTimeSelections = ParentalScreenTimeSelections(),
     val preferences: ChildPreferences = ChildPreferences(),
     val today: LocalDate = LocalDate.now(),
     val loaded: Boolean = false,
@@ -298,7 +301,9 @@ data class ChildPreferencesUiState(
     val dirty: Boolean = false,
     val deviceAuthenticationRequired: Boolean = false,
     val adultAuthenticationRequired: Boolean = false,
+    val originalPreferences: ChildPreferences? = null,
 ) {
+    val hasChanges: Boolean get() = originalPreferences != null && preferences != originalPreferences
     val valid: Boolean get() = preferences.considerations.values.all { preference ->
         preference.durationType != ConsiderationDuration.TEMPORARY ||
             preference.validUntil?.let { !it.isBefore(today) } == true
@@ -306,31 +311,62 @@ data class ChildPreferencesUiState(
 }
 class ChildPreferencesViewModel(
     private val repository: ChildPreferencesRepository,
-    profileRepository: ProfileRepository,
+    private val profileRepository: ProfileRepository,
     private val demoMode: Boolean,
     private val currentDate: () -> LocalDate = LocalDate::now,
 ) : ViewModel() {
     private val _state = MutableStateFlow(ChildPreferencesUiState(today = currentDate())); val state = _state.asStateFlow()
     init {
-        viewModelScope.launch { profileRepository.profile.filterNotNull().collect { profile -> _state.update { it.copy(childName = profile.name) } } }
+        viewModelScope.launch { profileRepository.profile.filterNotNull().collect { profile -> _state.update { it.copy(
+            childName = profile.name, profileId = profile.id, age = profile.age,
+            simulatedScreenHabits = if (it.profileId == profile.id) it.simulatedScreenHabits else ParentalScreenTimeSelections(),
+        ) } } }
         viewModelScope.launch {
             val cached = repository.preferences.first()
-            _state.update { it.copy(preferences = cached, loaded = true, dirty = false) }
+            _state.update { it.copy(preferences = cached, originalPreferences = cached, loaded = true, dirty = false) }
             if (!demoMode) {
                 _state.update { it.copy(refreshing = true, errorMessage = null) }
                 try {
                     val remote = repository.refresh()
-                    _state.update { current -> current.copy(preferences = if (current.dirty) current.preferences else remote, refreshing = false) }
+                    _state.update { current -> current.copy(preferences = if (current.dirty) current.preferences else remote, originalPreferences = remote, refreshing = false) }
                 } catch (exception: CancellationException) {
                     throw exception
                 } catch (exception: Exception) {
                     _state.update { it.copy(
                         refreshing = false,
-                        errorMessage = when (exception) { is DeviceAuthenticationRequiredException -> "Este dispositivo necesita volver a vincularse."; is AdultAuthenticationRequiredException -> "La sesión adulta venció. Iniciá sesión nuevamente."; else -> "No pudimos actualizar las preferencias. Podés seguir usando los datos guardados." },
+                        errorMessage = when (exception) { is DeviceAuthenticationRequiredException -> "Este dispositivo necesita volver a vincularse."; is AdultAuthenticationRequiredException -> "La sesión adulta venció. Iniciá sesión nuevamente."; is AdultAuthorizationException -> "Esta cuenta adulta no tiene permiso para acceder a las preferencias de este perfil."; is ProfileFormException -> exception.message; else -> "No pudimos actualizar las preferencias. Revisá tu conexión e intentá nuevamente." },
                         deviceAuthenticationRequired = exception is DeviceAuthenticationRequiredException,
                         adultAuthenticationRequired = exception is AdultAuthenticationRequiredException,
                     ) }
                 }
+            }
+        }
+    }
+    /** Demonstration only: never changes dirty/saved, persistence payloads or recommendations. */
+    fun simulateScreenHabits(selections: ParentalScreenTimeSelections) {
+        _state.update { it.copy(simulatedScreenHabits = selections) }
+    }
+    /** Reauthentication keeps the same form instance and its unsaved edits. */
+    fun refreshPreservingEdits() {
+        if (state.value.refreshing || state.value.submitting) return
+        _state.update { it.copy(refreshing = true, saved = false, errorMessage = null) }
+        viewModelScope.launch {
+            try {
+                profileRepository.refresh()
+                val remote = repository.refresh()
+                _state.update { it.copy(preferences = if (it.dirty) it.preferences else remote,
+                    originalPreferences = remote, loaded = true, refreshing = false,
+                    adultAuthenticationRequired = false, deviceAuthenticationRequired = false) }
+            } catch (exception: CancellationException) { throw exception }
+            catch (exception: Exception) {
+                _state.update { it.copy(refreshing = false, errorMessage = when (exception) {
+                    is AdultAuthenticationRequiredException -> "Tu sesión adulta venció. Volvé a iniciar sesión."
+                    is AdultAuthorizationException -> "Esta cuenta adulta no tiene permiso para acceder a las preferencias de este perfil."
+                    is DeviceAuthenticationRequiredException -> "Este dispositivo necesita volver a vincularse."
+                    is ProfileFormException -> exception.message.orEmpty()
+                    else -> "No pudimos actualizar las preferencias. Revisá tu conexión e intentá nuevamente."
+                }, adultAuthenticationRequired = exception is AdultAuthenticationRequiredException,
+                    deviceAuthenticationRequired = exception is DeviceAuthenticationRequiredException) }
             }
         }
     }
@@ -369,7 +405,7 @@ class ChildPreferencesViewModel(
     }
     fun save(onSaved: () -> Unit = {}) {
         val current = state.value
-        if (!current.loaded || !current.valid || current.submitting || current.refreshing) return
+        if (!current.loaded || !current.valid || current.submitting || current.refreshing || current.adultAuthenticationRequired || current.deviceAuthenticationRequired) return
         _state.update { it.copy(submitting = true, saved = false, errorMessage = null) }
         viewModelScope.launch {
             try {
@@ -379,7 +415,9 @@ class ChildPreferencesViewModel(
                 } else {
                     repository.update(current.preferences)
                 }
-                _state.update { it.copy(preferences = saved, submitting = false, saved = true, dirty = false) }
+                _state.update { it.copy(preferences = if (it.preferences == current.preferences) saved else it.preferences,
+                    originalPreferences = saved, submitting = false, saved = true,
+                    dirty = it.preferences != current.preferences) }
                 onSaved()
             } catch (exception: CancellationException) {
                 throw exception
@@ -387,7 +425,7 @@ class ChildPreferencesViewModel(
                 _state.update { it.copy(
                     submitting = false,
                     saved = false,
-                    errorMessage = when (exception) { is DeviceAuthenticationRequiredException -> "Este dispositivo necesita volver a vincularse."; is AdultAuthenticationRequiredException -> "La sesión adulta venció. Iniciá sesión nuevamente."; else -> "No pudimos guardar las preferencias. Intentá nuevamente." },
+                    errorMessage = when (exception) { is DeviceAuthenticationRequiredException -> "Este dispositivo necesita volver a vincularse."; is AdultAuthenticationRequiredException -> "La sesión adulta venció. Iniciá sesión nuevamente."; is AdultAuthorizationException -> "Esta cuenta adulta no tiene permiso para guardar las preferencias de este perfil."; is ProfileFormException -> exception.message; else -> "No pudimos guardar las preferencias. Intentá nuevamente." },
                     deviceAuthenticationRequired = exception is DeviceAuthenticationRequiredException,
                     adultAuthenticationRequired = exception is AdultAuthenticationRequiredException,
                 ) }

@@ -10,6 +10,8 @@ import com.juan.habitos.domain.repository.ChildPreferencesLocalStore
 import com.juan.habitos.domain.repository.ChildPreferencesRepository
 import com.juan.habitos.domain.repository.ProfileLocalStore
 import com.juan.habitos.domain.repository.DeviceCredentialStore
+import com.juan.habitos.domain.repository.ProfileFormException
+import com.juan.habitos.domain.repository.ProfileFormFailure
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import java.time.LocalDate
@@ -19,6 +21,8 @@ class CachedChildPreferencesRepository(
     private val profileStore: ProfileLocalStore,
     private val api: HabitsApi,
     private val authorization: RequestAuthorization,
+    private val expectedProfileId: String? = null,
+    private val diagnostics: ProfileFormDiagnostics = ProfileFormDiagnostics(),
 ) : ChildPreferencesRepository {
     constructor(local: ChildPreferencesLocalStore, profileStore: ProfileLocalStore, api: HabitsApi, credentialStore: DeviceCredentialStore) :
         this(local, profileStore, api, DeviceRequestAuthorization(credentialStore))
@@ -28,25 +32,44 @@ class CachedChildPreferencesRepository(
 
     override suspend fun refresh(): ChildPreferences {
         val cached = local.preferences.first()
-        val profileId = profileStore.profile.first()?.id ?: return cached
+        val profileId = checkedProfileId() ?: return cached
         val remote = authorization.execute { header ->
-            api.getActivityPreferences(profileId, header)
+            request(profileId, ProfileFormOperation.PREFERENCES_READ) { api.getActivityPreferences(profileId, header) }
         }.toDomainPreferences()
         local.save(remote)
         return remote
     }
 
     override suspend fun update(preferences: ChildPreferences): ChildPreferences {
-        val profileId = profileStore.profile.first()?.id
+        val profileId = checkedProfileId()
         if (profileId == null) {
             local.save(preferences)
             return preferences
         }
         val remote = authorization.execute { header ->
-            api.updateActivityPreferences(profileId, header, preferences.toActivityPreferencesRequest())
+            request(profileId, ProfileFormOperation.PREFERENCES_SAVE) { api.updateActivityPreferences(profileId, header, preferences.toActivityPreferencesRequest()) }
         }.toDomainPreferences()
         local.save(remote)
         return remote
+    }
+
+    private suspend fun checkedProfileId(): String? {
+        val current = profileStore.profile.first()?.id
+        if (expectedProfileId != null) {
+            diagnostics.profileMatch(current == expectedProfileId)
+            if (current != expectedProfileId) throw ProfileFormException(ProfileFormFailure.PROFILE_CHANGED)
+        }
+        return current
+    }
+
+    private suspend fun request(profileId: String, operation: ProfileFormOperation, call: suspend () -> ActivityPreferencesDto): ActivityPreferencesDto {
+        val dto = try { profileFormRequest(operation, diagnostics, call) }
+        catch (exception: ProfileFormException) {
+            if (exception.reason == ProfileFormFailure.UNCLASSIFIED_NOT_FOUND) verifyFormProfile(api, authorization, profileId, diagnostics)
+            throw exception
+        }
+        if (dto.profileId != null && dto.profileId != profileId) throw ProfileFormException(ProfileFormFailure.PROFILE_CHANGED)
+        return dto
     }
 }
 

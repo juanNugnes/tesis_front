@@ -14,6 +14,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.juan.habitos.domain.model.*
 import com.juan.habitos.ui.state.ChildPreferencesUiState
+import com.juan.habitos.ui.state.PreferencesFormUiState
 import com.juan.habitos.ui.state.ProfileScheduleUiState
 import com.juan.habitos.ui.theme.*
 import java.time.LocalDate
@@ -25,6 +26,7 @@ private val interestLabels = linkedMapOf(
     ChildInterest.BUILD to "Construir o armar cosas", ChildInterest.WRITE to "Escribir",
     ChildInterest.IMAGINE_ACT to "Imaginar o representar historias",
 )
+internal const val CHILD_CONSIDERATIONS_QUESTION = "¿Tu hijo/a tiene alguna dificultad de movimiento, visual, auditiva o sensibilidad a los sonidos que debamos considerar?"
 private val considerationLabels = linkedMapOf(
     ChildConsideration.UPPER_BODY_MOBILITY to "Brazos/manos",
     ChildConsideration.LOWER_BODY_MOBILITY to "Piernas",
@@ -108,21 +110,38 @@ private fun formatProfileTime(value: String?): String? {
     onConsiderationDuration: (ChildConsideration, ConsiderationDuration) -> Unit,
     onConsiderationValidUntil: (ChildConsideration, LocalDate) -> Unit,
     onRestriction: (ActivityRestriction) -> Unit, onNotes: (String) -> Unit, onSave: () -> Unit, onBack: () -> Unit,
+    onSimulatedScreenHabits: (ParentalScreenTimeSelections) -> Unit,
+    formState: PreferencesFormUiState? = null,
+    onLogin: () -> Unit = {},
+    onRetry: () -> Unit = {},
 ) {
     val preferences = state.preferences
     val snackbar = remember { SnackbarHostState() }
     var datePickerFor by remember { mutableStateOf<ChildConsideration?>(null) }
-    LaunchedEffect(state.saved) { if (state.saved) snackbar.showSnackbar("Preferencias actualizadas") }
-    LaunchedEffect(state.errorMessage) { state.errorMessage?.let { snackbar.showSnackbar(it) } }
+    LaunchedEffect(state.saved) { if (state.saved && formState == null) snackbar.showSnackbar("Preferencias actualizadas") }
+    LaunchedEffect(state.errorMessage) { if (formState == null) state.errorMessage?.let { snackbar.showSnackbar(it) } }
     Scaffold(snackbarHost = { SnackbarHost(snackbar) }, containerColor = AppColors.Surface) { padding ->
         LazyColumn(Modifier.fillMaxSize().padding(padding).statusBarsPadding(), contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             item { Row(verticalAlignment = Alignment.CenterVertically) { IconButton(onBack) { Text("←", color = Color.White, fontSize = 24.sp) }; Column { Text("Preferencias y necesidades", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold); Text("Contanos un poco más sobre ${state.childName} para adaptar mejor las actividades sugeridas.", color = Color(0xFFCBD5E1), fontSize = 13.sp, lineHeight = 19.sp) } } }
             if (state.refreshing) item { LinearProgressIndicator(Modifier.fillMaxWidth()) }
+            if (formState != null) {
+                if (formState.authenticationRequired) item {
+                    Column {
+                        Text("Tu sesión adulta venció. Tus cambios siguen en el formulario.", color = Color(0xFFFCA5A5))
+                        TextButton(onLogin) { Text("Iniciar sesión como adulto", color = AppColors.PurpleSoft) }
+                    }
+                } else if (state.errorMessage != null) item {
+                    Column {
+                        Text(state.errorMessage, color = Color(0xFFFCA5A5))
+                        TextButton(onRetry, enabled = !state.refreshing && !formState.saving) { Text("Reintentar consulta", color = AppColors.PurpleSoft) }
+                    }
+                }
+            }
             item { Text("Esta información es opcional y podés cambiarla cuando quieras.", color = Color(0xFF94A3B8), fontSize = 13.sp) }
             item { FormSection("¿Qué cosas disfruta hacer ${state.childName}?", "Podés elegir más de una.") { SelectableOptions(interestLabels, preferences.interests, onInterest) } }
-            item { FormSection("¿Hay alguna consideración que debamos tener en cuenta al sugerir actividades?", "Podés seleccionar más de una opción.") {
+            item { FormSection(CHILD_CONSIDERATIONS_QUESTION, "Podés seleccionar más de una opción.") {
                 SelectableOptions(considerationLabels, preferences.considerations.keys, onConsideration)
-                SingleChoice("Ninguna", preferences.considerationsAnswered && preferences.considerations.isEmpty(), onNoConsiderations)
+                SingleChoice("Ninguna", preferences.considerationsAnswered && preferences.considerations.isEmpty(), onClick = onNoConsiderations)
                 TextButton(onOmitConsiderations) { Text(if (preferences.considerationsAnswered) "Omitir esta pregunta" else "Pregunta omitida", color = Color(0xFFCBD5E1)) }
             } }
             considerationLabels.forEach { (type, label) -> preferences.considerations[type]?.let { preference ->
@@ -140,14 +159,22 @@ private fun formatProfileTime(value: String?): String? {
                 item { FormSection("¿Hay algún tipo de actividad que convenga evitar?") { val noteLimit = if (preferences.additionalNotes.orEmpty().length > 240) 500 else 240; SelectableOptions(restrictionLabels, preferences.activitiesToAvoid, onRestriction); OutlinedTextField(preferences.additionalNotes.orEmpty(), onNotes, Modifier.fillMaxWidth(), label = { Text("Otro aspecto a tener en cuenta (opcional)") }, supportingText = { Text("${preferences.additionalNotes.orEmpty().length}/$noteLimit") }, minLines = 2, maxLines = 4, colors = darkTextFieldColors()) } }
             }
             item { Surface(color = AppColors.Purple.copy(.12f), shape = RoundedCornerShape(14.dp)) { Text("🔒  Esta información se utiliza únicamente para adaptar las actividades sugeridas.", Modifier.padding(14.dp), color = Color(0xFFCBD5E1), fontSize = 13.sp, lineHeight = 18.sp) } }
-            item { Button(onSave, Modifier.fillMaxWidth().height(54.dp), enabled = state.loaded && state.valid && !state.submitting && !state.refreshing, colors = ButtonDefaults.buttonColors(containerColor = AppColors.Purple), shape = RoundedCornerShape(14.dp)) { Text(if (state.submitting) "Guardando…" else "Guardar cambios", fontWeight = FontWeight.Bold) } }
+            item {
+                ParentalScreenTimeSection(state.age, state.simulatedScreenHabits,
+                    { onSimulatedScreenHabits(state.simulatedScreenHabits.copy(sex = it)) },
+                    { onSimulatedScreenHabits(state.simulatedScreenHabits.copy(weekday = it)) },
+                    { onSimulatedScreenHabits(state.simulatedScreenHabits.copy(weekend = it)) },
+                )
+            }
+            formState?.message?.let { message -> item { Text(message, color = AppColors.PurpleSoft) } }
+            item { Button(onSave, Modifier.fillMaxWidth().height(54.dp), enabled = formState?.canSave ?: (state.loaded && state.valid && !state.submitting && !state.refreshing), colors = ButtonDefaults.buttonColors(containerColor = AppColors.Purple), shape = RoundedCornerShape(14.dp)) { Text(if (state.submitting || formState?.saving == true) "Guardando…" else "Guardar cambios", fontWeight = FontWeight.Bold) } }
             item { Spacer(Modifier.navigationBarsPadding()) }
         }
     }
     datePickerFor?.let { type -> val picker = rememberDatePickerState(initialSelectedDateMillis = (preferences.considerations[type]?.validUntil ?: state.today).toEpochDay().times(86_400_000)); DatePickerDialog(onDismissRequest = { datePickerFor = null }, confirmButton = { TextButton({ picker.selectedDateMillis?.let { onConsiderationValidUntil(type, LocalDate.ofEpochDay(it / 86_400_000)) }; datePickerFor = null }) { Text("Aceptar") } }, dismissButton = { TextButton({ datePickerFor = null }) { Text("Cancelar") } }) { DatePicker(picker) } }
 }
 
-@Composable private fun FormSection(title: String, subtitle: String? = null, content: @Composable ColumnScope.() -> Unit) { Card(colors = CardDefaults.cardColors(containerColor = AppColors.Card), border = BorderStroke(1.dp, AppColors.Divider), shape = RoundedCornerShape(18.dp)) { Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) { Text(title, color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.Bold); subtitle?.let { Text(it, color = Color(0xFF94A3B8), fontSize = 13.sp) }; content() } } }
+@Composable internal fun FormSection(title: String, subtitle: String? = null, content: @Composable ColumnScope.() -> Unit) { Card(colors = CardDefaults.cardColors(containerColor = AppColors.Card), border = BorderStroke(1.dp, AppColors.Divider), shape = RoundedCornerShape(18.dp)) { Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) { Text(title, color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.Bold); subtitle?.let { Text(it, color = Color(0xFF94A3B8), fontSize = 13.sp) }; content() } } }
 @Composable private fun <T> SelectableOptions(options: Map<T, String>, selected: Set<T>, onToggle: (T) -> Unit) { options.forEach { (value, label) -> val checked = value in selected; Surface(onClick = { onToggle(value) }, color = if (checked) AppColors.Purple.copy(.22f) else AppColors.Surface, border = BorderStroke(1.dp, if (checked) AppColors.PurpleSoft else AppColors.Divider), shape = RoundedCornerShape(13.dp)) { Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) { Text(if (checked) "✓" else "○", color = if (checked) AppColors.PurpleSoft else Color(0xFF94A3B8), fontWeight = FontWeight.Bold); Spacer(Modifier.width(10.dp)); Text(label, color = Color.White, fontSize = 14.sp) } } } }
-@Composable private fun SingleChoice(label: String, selected: Boolean, onClick: () -> Unit) { Surface(onClick = onClick, color = if (selected) AppColors.Purple.copy(.22f) else AppColors.Surface, border = BorderStroke(1.dp, if (selected) AppColors.PurpleSoft else AppColors.Divider), shape = RoundedCornerShape(13.dp)) { Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { RadioButton(selected, onClick); Text(label, color = Color.White) } } }
+@Composable internal fun SingleChoice(label: String, selected: Boolean, enabled: Boolean = true, onClick: () -> Unit) { Surface(onClick = onClick, enabled = enabled, color = if (selected) AppColors.Purple.copy(.22f) else AppColors.Surface, border = BorderStroke(1.dp, if (selected) AppColors.PurpleSoft else AppColors.Divider), shape = RoundedCornerShape(13.dp)) { Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { RadioButton(selected, onClick = null, enabled = enabled); Spacer(Modifier.width(8.dp)); Text(label, color = Color.White) } } }
 @Composable private fun darkTextFieldColors() = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White, focusedBorderColor = AppColors.PurpleSoft, unfocusedBorderColor = AppColors.Divider, focusedLabelColor = AppColors.PurpleSoft, unfocusedLabelColor = Color(0xFF94A3B8), focusedSupportingTextColor = Color(0xFF94A3B8), unfocusedSupportingTextColor = Color(0xFF94A3B8))

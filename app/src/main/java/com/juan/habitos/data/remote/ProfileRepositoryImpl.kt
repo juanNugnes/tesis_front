@@ -13,6 +13,7 @@ class CachedProfileRepository(
     private val api: HabitsApi,
     private val authorization: RequestAuthorization,
     private val bootstrapStore: DeviceCredentialStore? = null,
+    private val formDiagnostics: ProfileFormDiagnostics = ProfileFormDiagnostics(),
 ) : ProfileRepository {
     constructor(local: ProfileLocalStore, api: HabitsApi, credentialStore: DeviceCredentialStore) :
         this(local, api, DeviceRequestAuthorization(credentialStore), credentialStore)
@@ -35,7 +36,7 @@ class CachedProfileRepository(
         val cached = local.profile.first() ?: return null
         val profileId = cached.id ?: return cached
         val remote = authorization.execute { header ->
-            api.getProfile(profileId, header)
+            profileFormRequest(ProfileFormOperation.PROFILE_READ, formDiagnostics) { api.getProfile(profileId, header) }
         }.toDomain(cached)
         local.save(remote)
         return remote

@@ -19,6 +19,7 @@ import com.juan.habitos.data.remote.RemoteMonitoringConsentRepository
 import com.juan.habitos.data.remote.RemoteAdultDeviceRepository
 import com.juan.habitos.data.remote.AdultUsageRepository
 import com.juan.habitos.data.remote.DeviceUsageRepository
+import com.juan.habitos.data.remote.ProfileFormDiagnostics
 import com.juan.habitos.data.remote.UsageSyncCoordinator
 import com.juan.habitos.data.sync.UsageWorkController
 import com.juan.habitos.data.sync.WorkManagerUsageWorkScheduler
@@ -37,9 +38,21 @@ class HabitosApplication : Application() {
     private val adultRequestAuthorization by lazy { AdultRequestAuthorization(deviceSessionRepository) }
     private val deviceRequestAuthorization by lazy { DeviceRequestAuthorization(localDeviceIdentityStore) }
     val habitsApi by lazy { HabitsApiClient.api }
+    // Temporary debug-only metadata. No actual profile IDs, bodies, emails, tokens or headers.
+    private val profileFormDiagnostics by lazy { ProfileFormDiagnostics { metadata ->
+        if (BuildConfig.DEBUG) android.util.Log.i("ModeraProfileForm", metadata)
+    } }
+    val parentalScreenTimeRepository by lazy {
+        com.juan.habitos.data.remote.RemoteParentalScreenTimeRepository(HabitsApiClient.parentalScreenTimeApi, adultRequestAuthorization, profileFormDiagnostics)
+    }
     private val usageApi by lazy { HabitsApiClient.usageApi }
-    val profileRepository by lazy { CachedProfileRepository(localProfileStore, habitsApi, localDeviceIdentityStore) }
-    val adultProfileRepository by lazy { CachedProfileRepository(localProfileStore, habitsApi, adultRequestAuthorization) }
+    val profileRepository by lazy { CachedProfileRepository(localProfileStore, habitsApi, deviceRequestAuthorization, localDeviceIdentityStore, profileFormDiagnostics) }
+    val adultProfileRepository by lazy { CachedProfileRepository(localProfileStore, habitsApi, adultRequestAuthorization, formDiagnostics = profileFormDiagnostics) }
+    fun preferencesForProfile(profileId: String, adultActor: Boolean) = CachedChildPreferencesRepository(
+        localChildPreferencesStore, localProfileStore, habitsApi,
+        if (adultActor) adultRequestAuthorization else deviceRequestAuthorization,
+        expectedProfileId = profileId, diagnostics = profileFormDiagnostics,
+    )
     val childPreferencesRepository by lazy { CachedChildPreferencesRepository(localChildPreferencesStore, localProfileStore, habitsApi, localDeviceIdentityStore) }
     val adultPreferencesRepository by lazy { CachedChildPreferencesRepository(localChildPreferencesStore, localProfileStore, habitsApi, adultRequestAuthorization) }
     val profileContextRepository by lazy { CachedProfileContextRepository(localProfileContextStore, localProfileStore, habitsApi, remoteEnabled = !BuildConfig.DEMO_MODE, authorization = adultRequestAuthorization) }

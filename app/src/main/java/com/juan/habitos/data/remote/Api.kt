@@ -279,6 +279,10 @@ data class UsageDto(val profileId: String, val currentMinutes: Int, val expected
 data class AnalysisDto(val profileId: String, val summary: String)
 
 interface HabitsApi {
+    @GET("api/v1/profiles/{profileId}/experimental-pmum/latest")
+    suspend fun latestParentalScreenTime(@Path("profileId") profileId: String, @Header("Authorization") authorization: String): ParentalScreenTimeReviewDto = error("Not implemented")
+    @POST("api/v1/profiles/{profileId}/experimental-pmum/responses")
+    suspend fun saveParentalScreenTime(@Path("profileId") profileId: String, @Header("Authorization") authorization: String, @Body request: ParentalScreenTimeRequest): ParentalScreenTimeReviewDto = error("Not implemented")
     @POST("api/v1/auth/adult/otp/request") suspend fun requestAdultOtp(@Body request: AdultOtpRequest): AdultOtpRequestResponse
     @POST("api/v1/auth/adult/otp/verify") suspend fun verifyAdultOtp(@Body request: AdultOtpVerifyRequest): AdultAccessTokenDto
     @GET("api/v1/auth/adult/me") suspend fun getAdultMe(@Header("Authorization") authorization: String): AdultDto
@@ -353,6 +357,13 @@ interface HabitsApi {
 }
 
 object HabitsApiClient {
+    // Explicit null answers, and no automatic retry of non-idempotent revision-creating POSTs.
+    val parentalScreenTimeApi: HabitsApi by lazy {
+        Retrofit.Builder().baseUrl(BuildConfig.API_BASE_URL)
+            .client(okhttp3.OkHttpClient.Builder().retryOnConnectionFailure(false).build())
+            .addConverterFactory(GsonConverterFactory.create(GsonBuilder().serializeNulls().create()))
+            .build().create(HabitsApi::class.java)
+    }
     val adultMessagesApi: AdultMessagesApi by lazy {
         Retrofit.Builder()
             .baseUrl(BuildConfig.API_BASE_URL)

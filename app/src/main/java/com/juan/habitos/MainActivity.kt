@@ -18,7 +18,6 @@ import androidx.navigation.navOptions
 import androidx.navigation.compose.*
 import com.juan.habitos.domain.model.DeviceMode
 import com.juan.habitos.domain.model.DeviceSession
-import com.juan.habitos.diagnostics.UsageDiagnosticsLauncher
 import com.juan.habitos.permission.AndroidPermissionManager
 import com.juan.habitos.ui.adult.AdultDashboardScreen
 import com.juan.habitos.ui.adult.*
@@ -36,6 +35,8 @@ internal const val PREFERENCES_ROUTE = "preferencesAdult"
 internal const val PREFERENCES_ROUTE_PATTERN = "$PREFERENCES_ROUTE?returnToChild={returnToChild}"
 internal const val PREFERENCES_FROM_CHILD_ROUTE = "$PREFERENCES_ROUTE?returnToChild=true"
 internal const val PREFERENCES_UPDATED_KEY = "preferencesUpdated"
+internal const val PREFERENCES_REAUTH_ENTRY_KEY = "preferencesReauthEntry"
+internal const val PREFERENCES_REAUTHENTICATED_KEY = "preferencesReauthenticated"
 internal const val DEVICE_PROFILE_LINK_ROUTE = "deviceProfileLink"
 internal const val SAME_DEVICE_MONITORING_ROUTE = "sameDeviceMonitoring"
 
@@ -103,8 +104,15 @@ private inline fun <reified T : ViewModel> factory(crossinline create: () -> T) 
                 AdultVerificationScreen(state, vm::code, {
                     vm.verify {
                         scope.launch {
-                            val mode = app.deviceSessionRepository.session.first().mode
-                            nav.navigate(postAdultAuthenticationDestination(mode)) { popUpTo("adultAuth") { inclusive = true } }
+                            val returnEntryId = parent.savedStateHandle.get<String>(PREFERENCES_REAUTH_ENTRY_KEY)
+                            val preferencesEntry = if (returnEntryId != null) runCatching { nav.getBackStackEntry(PREFERENCES_ROUTE_PATTERN) }.getOrNull() else null
+                            if (preferencesEntry != null && preferencesEntry.id == returnEntryId) {
+                                preferencesEntry.savedStateHandle[PREFERENCES_REAUTHENTICATED_KEY] = true
+                                nav.popBackStack(PREFERENCES_ROUTE_PATTERN, false)
+                            } else {
+                                val mode = app.deviceSessionRepository.session.first().mode
+                                nav.navigate(postAdultAuthenticationDestination(mode)) { popUpTo("adultAuth") { inclusive = true } }
+                            }
                         }
                     }
                 }, { nav.popBackStack() })
@@ -115,7 +123,7 @@ private inline fun <reified T : ViewModel> factory(crossinline create: () -> T) 
         composable("createPin") { val vm: PinViewModel = viewModel(factory = factory { PinViewModel(app.pinStore) }); val state by vm.state.collectAsStateWithLifecycle(); CreatePinScreen(state, { vm.digit(it, true) { nav.navigate("permissions") } }, vm::delete) }
         composable("permissions") { var granted by rememberSaveable { mutableStateOf(emptySet<Int>()) }; val manager = remember { AndroidPermissionManager(app) }; PermissionsScreen(granted, { index -> manager.request(index); granted = granted + index }, { nav.navigate("preferencesIntro") }) }
         composable("preferencesIntro") { val profile by app.profileRepository.profile.collectAsStateWithLifecycle(initialValue = null); PreferencesOnboardingIntro(profile?.name.orEmpty(), { nav.navigate("preferencesOnboarding") }, { scope.launch { app.profileRepository.completeOnboarding(); nav.navigate("child") { popUpTo("profile") { inclusive = true } } } }) }
-        composable("preferencesOnboarding") { val vm: ChildPreferencesViewModel = viewModel(factory = factory { ChildPreferencesViewModel(app.childPreferencesRepository, app.profileRepository, BuildConfig.DEMO_MODE) }); val state by vm.state.collectAsStateWithLifecycle(); ChildPreferencesScreen(state, vm::toggleInterest, vm::omitConsiderations, vm::selectNoConsiderations, vm::toggleConsideration, vm::considerationDuration, vm::considerationValidUntil, vm::toggleRestriction, vm::notes, { vm.save { scope.launch { app.profileRepository.completeOnboarding(); nav.navigate("child") { popUpTo("profile") { inclusive = true } } } } }, { nav.popBackStack() }) }
+        composable("preferencesOnboarding") { val vm: ChildPreferencesViewModel = viewModel(factory = factory { ChildPreferencesViewModel(app.childPreferencesRepository, app.profileRepository, BuildConfig.DEMO_MODE) }); val state by vm.state.collectAsStateWithLifecycle(); ChildPreferencesScreen(state, vm::toggleInterest, vm::omitConsiderations, vm::selectNoConsiderations, vm::toggleConsideration, vm::considerationDuration, vm::considerationValidUntil, vm::toggleRestriction, vm::notes, { vm.save { scope.launch { app.profileRepository.completeOnboarding(); nav.navigate("child") { popUpTo("profile") { inclusive = true } } } } }, { nav.popBackStack() }, onSimulatedScreenHabits = vm::simulateScreenHabits) }
         composable("child") { entry ->
             val vm: ChildViewModel = viewModel(factory = factory { ChildViewModel(app.profileRepository, app.usageRepository, app.activitySuggestionRepository) })
             val state by vm.state.collectAsStateWithLifecycle()
@@ -133,9 +141,8 @@ private inline fun <reified T : ViewModel> factory(crossinline create: () -> T) 
                 state, { nav.navigate("adultPin") }, vm::showAnotherActivity, vm::startActivity, vm::finishActivity,
                 vm::loadActivitySuggestions, vm::retryActivitySelection,
                 onCompletePreferences = { nav.navigate(COMPLETE_PREFERENCES_PIN_ROUTE) },
-                automaticActivitiesContent = if (app.automaticActivitiesDemoEnabled && demoProfile?.id == state.profile.id) {
-                    demoProfile?.id?.let { id -> { AutomaticActivitiesDemoSection(id, controls = true) } }
-                } else null,
+                // MVP: do not compose developer controls in the child's activity list.
+                // The simulator and its dialog remain independent of real activities.
             )
             if (app.automaticActivitiesDemoEnabled && demoProfile?.id == state.profile.id) {
                 demoProfile?.id?.let { AutomaticActivitiesDemoSection(it) }
@@ -182,7 +189,7 @@ private inline fun <reified T : ViewModel> factory(crossinline create: () -> T) 
                         null -> null
                     },
                     onAdultLinkCode = if (session.mode == DeviceMode.CHILD) ({ nav.navigate("adultProfileLinkCode") }) else null,
-                    onUsageDiagnostics = if (BuildConfig.DEBUG && UsageDiagnosticsLauncher.isAvailable) ({ UsageDiagnosticsLauncher.open(app) }) else null,
+                    onUsageDiagnostics = null, // Hidden in the MVP UI, including DEBUG builds.
                     onBack = { nav.popBackStack() },
                 )
             }
@@ -213,12 +220,33 @@ private inline fun <reified T : ViewModel> factory(crossinline create: () -> T) 
             val session by app.deviceSessionRepository.session.collectAsStateWithLifecycle(initialValue = DeviceSession())
             val mode = session.mode ?: return@composable
             val adultActor = mode == DeviceMode.ADULT
-            val preferencesRepository = if (adultActor) app.adultPreferencesRepository else app.childPreferencesRepository
             val profileRepository = if (adultActor) app.adultProfileRepository else app.profileRepository
-            val vm: ChildPreferencesViewModel = viewModel(key = "profile-preferences-$mode", factory = factory { ChildPreferencesViewModel(preferencesRepository, profileRepository, BuildConfig.DEMO_MODE) })
+            val profile by profileRepository.profile.collectAsStateWithLifecycle(initialValue = null)
+            val selectedProfile = profile ?: return@composable
+            val preferencesRepository = remember(mode, selectedProfile.id) {
+                selectedProfile.id?.let { app.preferencesForProfile(it, adultActor) }
+                    ?: if (adultActor) app.adultPreferencesRepository else app.childPreferencesRepository
+            }
+            val vm: ChildPreferencesViewModel = viewModel(key = "profile-preferences-$mode-${selectedProfile.id}", factory = factory { ChildPreferencesViewModel(preferencesRepository, profileRepository, BuildConfig.DEMO_MODE) })
             val state by vm.state.collectAsStateWithLifecycle()
-            LaunchedEffect(state.adultAuthenticationRequired) { if (state.adultAuthenticationRequired) nav.navigate("adultAuth") { popUpTo("adult") { inclusive = true } } }
-            ChildPreferencesScreen(state, vm::toggleInterest, vm::omitConsiderations, vm::selectNoConsiderations, vm::toggleConsideration, vm::considerationDuration, vm::considerationValidUntil, vm::toggleRestriction, vm::notes, { vm.save { if (returnToChild) { nav.getBackStackEntry("child").savedStateHandle[PREFERENCES_UPDATED_KEY] = true; nav.popBackStack("child", false) } } }, { nav.popBackStack() })
+            // Screen habits are a local demonstration in the shared form, not a remote PMUM source.
+            val formVm: PreferencesFormViewModel = viewModel(key = "preferences-form-$mode-${selectedProfile.id}", factory = factory { PreferencesFormViewModel(vm, null) })
+            val formState by formVm.state.collectAsStateWithLifecycle()
+            val reauthenticated by entry.savedStateHandle.getStateFlow(PREFERENCES_REAUTHENTICATED_KEY, false).collectAsStateWithLifecycle()
+            LaunchedEffect(reauthenticated) {
+                if (reauthenticated) {
+                    formVm.refresh()
+                    entry.savedStateHandle[PREFERENCES_REAUTHENTICATED_KEY] = false
+                }
+            }
+            ChildPreferencesScreen(state, vm::toggleInterest, vm::omitConsiderations, vm::selectNoConsiderations, vm::toggleConsideration, vm::considerationDuration, vm::considerationValidUntil, vm::toggleRestriction, vm::notes,
+                { formVm.save { if (returnToChild) { nav.getBackStackEntry("child").savedStateHandle[PREFERENCES_UPDATED_KEY] = true; nav.popBackStack("child", false) } } },
+                { nav.popBackStack() }, onSimulatedScreenHabits = vm::simulateScreenHabits, formState = formState,
+                onLogin = {
+                    nav.navigate("adultAuth") { launchSingleTop = true }
+                    nav.getBackStackEntry("adultAuth").savedStateHandle[PREFERENCES_REAUTH_ENTRY_KEY] = entry.id
+                }, onRetry = formVm::refresh,
+            )
         }
         composable("profileContexts") {
             val session by app.deviceSessionRepository.session.collectAsStateWithLifecycle(initialValue = DeviceSession())

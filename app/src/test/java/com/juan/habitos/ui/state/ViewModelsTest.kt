@@ -12,6 +12,8 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import com.juan.habitos.ui.adult.profileScheduleSummary
+import com.juan.habitos.data.remote.*
+import java.lang.reflect.Proxy
 
 private class TestProfileRepo : ProfileRepository {
     override val profile = MutableStateFlow<Profile?>(null)
@@ -126,6 +128,301 @@ private class TestPreferencesRepo(initial: ChildPreferences = ChildPreferences()
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class ViewModelsTest {
+    @Test fun `onboarding and panel send only real preferences and never call experimental PMUM`() = runTest(dispatcher) {
+        for (onboarding in listOf(true, false)) {
+            val calls = mutableListOf<String>()
+            var captured: ActivityPreferencesRequest? = null
+            val api = Proxy.newProxyInstance(HabitsApi::class.java.classLoader, arrayOf(HabitsApi::class.java)) { _, method, args ->
+                calls += method.name
+                when (method.name) {
+                    "getActivityPreferences" -> {
+                        assertEquals("child", args[0])
+                        assertEquals(if (onboarding) "Bearer device-token" else "Bearer adult-token", args[1])
+                        ActivityPreferencesDto(profileId = "child")
+                    }
+                    "updateActivityPreferences" -> {
+                        assertEquals("child", args[0])
+                        assertEquals(if (onboarding) "Bearer device-token" else "Bearer adult-token", args[1])
+                        captured = args[2] as ActivityPreferencesRequest
+                        ActivityPreferencesDto(profileId = "child", interests = captured!!.interests)
+                    }
+                    else -> error("Unexpected API operation: ${method.name}")
+                }
+            } as HabitsApi
+            val profiles = TestProfileRepo().apply { profile.value = Profile("Niño", "🌿", 9, id = "child") }
+            val authorization = if (onboarding) DeviceRequestAuthorization(TestDeviceCredentialStore())
+                else AdultRequestAuthorization(TestAdultCredentialStore())
+            val repo = CachedChildPreferencesRepository(TestPreferencesRepo(), profiles, api, authorization, expectedProfileId = "child")
+            val vm = ChildPreferencesViewModel(repo, profiles, false)
+            val panel = if (onboarding) null else PreferencesFormViewModel(vm, null)
+            advanceUntilIdle()
+            assertEquals(9, vm.state.value.age)
+            for (sex in ParentalSexChoice.entries) {
+                vm.simulateScreenHabits(vm.state.value.simulatedScreenHabits.copy(sex = sex))
+                assertEquals(sex, vm.state.value.simulatedScreenHabits.sex)
+            }
+            for (time in ParentalTimeChoice.entries) {
+                vm.simulateScreenHabits(vm.state.value.simulatedScreenHabits.copy(weekday = time, weekend = time))
+                assertEquals(time, vm.state.value.simulatedScreenHabits.weekday)
+                assertEquals(time, vm.state.value.simulatedScreenHabits.weekend)
+            }
+            advanceUntilIdle()
+            assertFalse(vm.state.value.hasChanges)
+            assertFalse(vm.state.value.dirty)
+            assertFalse(vm.state.value.saved)
+            assertEquals(listOf("getActivityPreferences"), calls)
+            panel?.let { assertFalse(it.state.value.canSave); assertFalse(it.state.value.authenticationRequired) }
+            vm.toggleInterest(ChildInterest.MUSIC)
+            advanceUntilIdle()
+            var continued = false
+            if (onboarding) vm.save { continued = true } else panel!!.save { continued = true }
+            advanceUntilIdle()
+            assertTrue(continued)
+            assertEquals(listOf("getActivityPreferences", "updateActivityPreferences"), calls)
+            assertEquals(listOf("MUSIC"), captured!!.interests)
+            val json = com.google.gson.Gson().toJsonTree(captured).asJsonObject
+            assertEquals(setOf("interests", "considerations_answered", "considerations", "activities_to_avoid"), json.keySet())
+            assertTrue(vm.state.value.saved)
+            assertFalse(vm.state.value.hasChanges)
+            assertEquals(ParentalSexChoice.UNAVAILABLE, vm.state.value.simulatedScreenHabits.sex)
+            panel?.let { assertEquals("Preferencias de actividades guardadas.", it.state.value.message) }
+        }
+    }
+
+    @Test fun `simulation is optional does not persist and is independent of real preference validation`() = runTest(dispatcher) {
+        val repo = TestPreferencesRepo()
+        val profiles = TestProfileRepo().apply { profile.value = Profile("Niño", "🌿", 9, id = "child") }
+        val vm = ChildPreferencesViewModel(repo, profiles, false)
+        advanceUntilIdle()
+        assertEquals(ParentalScreenTimeSelections(), vm.state.value.simulatedScreenHabits)
+        vm.toggleInterest(ChildInterest.STORIES)
+        vm.save(); advanceUntilIdle()
+        assertTrue(vm.state.value.saved) // No simulated question was required.
+        vm.simulateScreenHabits(ParentalScreenTimeSelections(ParentalSexChoice.FEMALE, ParentalTimeChoice.ONE_TWO, ParentalTimeChoice.SEVEN_PLUS))
+        assertTrue(vm.state.value.saved)
+        assertFalse(vm.state.value.hasChanges)
+        val reopened = ChildPreferencesViewModel(repo, profiles, false)
+        advanceUntilIdle()
+        assertEquals(ParentalScreenTimeSelections(), reopened.state.value.simulatedScreenHabits)
+        assertEquals(setOf(ChildInterest.STORIES), reopened.state.value.preferences.interests)
+        profiles.profile.value = Profile("Otro", "🌿", 8, id = "other")
+        advanceUntilIdle()
+        assertEquals(ParentalScreenTimeSelections(), vm.state.value.simulatedScreenHabits)
+        assertEquals(1, repo.updateCalls)
+    }
+
+    @Test fun `simulated options remain editable without an adult session and do not trigger authentication`() = runTest(dispatcher) {
+        val repo = TestPreferencesRepo()
+        val vm = ChildPreferencesViewModel(repo, TestProfileRepo(), false)
+        val panel = PreferencesFormViewModel(vm, null)
+        advanceUntilIdle()
+        vm.simulateScreenHabits(ParentalScreenTimeSelections(ParentalSexChoice.MALE, ParentalTimeChoice.UNDER_ONE, null))
+        advanceUntilIdle()
+        assertFalse(panel.state.value.authenticationRequired)
+        assertFalse(panel.state.value.canSave)
+        assertNull(vm.state.value.errorMessage)
+        assertEquals(0, repo.updateCalls)
+        assertEquals(1, repo.refreshCalls)
+        panel.save(); advanceUntilIdle()
+        assertEquals(0, repo.updateCalls)
+    }
+    @Test fun `PMUM routing failure keeps pending answers without repeating successful preferences`() = runTest(dispatcher) {
+        val preferencesRepo = TestPreferencesRepo()
+        val parentalRepo = TestParentalScreenTimeRepository().apply { readFailure = ProfileFormException(ProfileFormFailure.ENDPOINT_UNAVAILABLE) }
+        val vm = ChildPreferencesViewModel(preferencesRepo, TestProfileRepo(), false)
+        val habits = ParentalScreenTimeViewModel(parentalRepo, "child", 9)
+        val form = PreferencesFormViewModel(vm, habits)
+        advanceUntilIdle()
+        vm.toggleInterest(ChildInterest.MUSIC); habits.sex(ParentalSexChoice.FEMALE)
+        advanceUntilIdle(); form.save(); advanceUntilIdle()
+        assertEquals("Preferencias guardadas. Hábitos de pantallas pendientes.", form.state.value.message)
+        assertEquals(1, preferencesRepo.updateCalls)
+        assertTrue(parentalRepo.writes.isEmpty())
+        form.save(); advanceUntilIdle()
+        assertEquals(1, preferencesRepo.updateCalls)
+        assertTrue(parentalRepo.writes.isEmpty())
+        assertEquals(ParentalSexChoice.FEMALE, habits.state.value.selections.sex)
+        parentalRepo.readFailure = null
+        form.save(); advanceUntilIdle()
+        assertEquals(1, preferencesRepo.updateCalls)
+        assertEquals(1, parentalRepo.writes.size)
+    }
+    @Test fun `unified form only saves modified domains and ignores reverted preferences`() = runTest(dispatcher) {
+        val preferencesRepo = TestPreferencesRepo()
+        val parentalRepo = TestParentalScreenTimeRepository()
+        val vm = ChildPreferencesViewModel(preferencesRepo, TestProfileRepo(), demoMode = false)
+        val habits = ParentalScreenTimeViewModel(parentalRepo, "child", 9)
+        val form = PreferencesFormViewModel(vm, habits)
+        advanceUntilIdle()
+        form.save(); advanceUntilIdle()
+        assertFalse(form.state.value.canSave)
+        vm.toggleInterest(ChildInterest.MUSIC); vm.toggleInterest(ChildInterest.MUSIC)
+        advanceUntilIdle(); form.save(); advanceUntilIdle()
+        assertEquals(0, preferencesRepo.updateCalls)
+        assertTrue(parentalRepo.writes.isEmpty())
+        vm.toggleInterest(ChildInterest.STORIES)
+        advanceUntilIdle(); form.save(); advanceUntilIdle()
+        assertEquals(1, preferencesRepo.updateCalls)
+        assertTrue(parentalRepo.writes.isEmpty())
+        habits.weekday(ParentalTimeChoice.ONE_TWO)
+        advanceUntilIdle(); form.save(); form.save(); advanceUntilIdle()
+        assertEquals(1, preferencesRepo.updateCalls)
+        assertEquals(1, parentalRepo.writes.size)
+        assertEquals("Cambios guardados.", form.state.value.message)
+        form.save(); advanceUntilIdle()
+        assertEquals(1, parentalRepo.writes.size)
+    }
+
+    @Test fun `unified form retains successful preferences and retries only failed habits`() = runTest(dispatcher) {
+        val preferencesRepo = TestPreferencesRepo()
+        val parentalRepo = TestParentalScreenTimeRepository().apply { saveFailure = java.io.IOException("offline") }
+        val vm = ChildPreferencesViewModel(preferencesRepo, TestProfileRepo(), false)
+        val habits = ParentalScreenTimeViewModel(parentalRepo, "child", 9)
+        val form = PreferencesFormViewModel(vm, habits)
+        advanceUntilIdle()
+        vm.toggleInterest(ChildInterest.MUSIC); habits.sex(ParentalSexChoice.FEMALE)
+        advanceUntilIdle(); form.save(); form.save(); advanceUntilIdle()
+        assertEquals("Preferencias guardadas. Hábitos de pantallas pendientes.", form.state.value.message)
+        assertEquals(1, preferencesRepo.updateCalls)
+        assertEquals(1, parentalRepo.writes.size)
+        parentalRepo.saveFailure = null
+        form.save(); advanceUntilIdle()
+        assertEquals(1, preferencesRepo.updateCalls)
+        assertEquals(2, parentalRepo.writes.size)
+        assertEquals(1, parentalRepo.records["child"]!!.revision)
+        assertEquals("Cambios guardados.", form.state.value.message)
+    }
+
+    @Test fun `unified form reconciles lost response without duplicating persisted PMUM revision`() = runTest(dispatcher) {
+        val preferencesRepo = TestPreferencesRepo()
+        val parentalRepo = TestParentalScreenTimeRepository().apply { saveFailure = java.io.IOException("response lost"); persistBeforeFailure = true }
+        val vm = ChildPreferencesViewModel(preferencesRepo, TestProfileRepo(), false)
+        val habits = ParentalScreenTimeViewModel(parentalRepo, "child", 9)
+        val form = PreferencesFormViewModel(vm, habits)
+        advanceUntilIdle()
+        habits.weekend(ParentalTimeChoice.SEVEN_PLUS)
+        advanceUntilIdle(); form.save(); advanceUntilIdle()
+        form.save(); advanceUntilIdle()
+        assertEquals(1, parentalRepo.writes.size)
+        assertEquals(2, parentalRepo.reads.size)
+        assertEquals(0, preferencesRepo.updateCalls)
+        assertFalse(form.state.value.canSave)
+        assertEquals("Cambios guardados.", form.state.value.message)
+    }
+
+    @Test fun `unified form retains successful habits and retries only failed preferences`() = runTest(dispatcher) {
+        val preferencesRepo = TestPreferencesRepo()
+        val parentalRepo = TestParentalScreenTimeRepository()
+        val vm = ChildPreferencesViewModel(preferencesRepo, TestProfileRepo(), false)
+        val habits = ParentalScreenTimeViewModel(parentalRepo, "child", 9)
+        val form = PreferencesFormViewModel(vm, habits)
+        advanceUntilIdle()
+        preferencesRepo.failure = java.io.IOException("offline")
+        vm.toggleInterest(ChildInterest.MUSIC); habits.weekday(ParentalTimeChoice.THREE_FOUR)
+        advanceUntilIdle(); form.save(); advanceUntilIdle()
+        assertEquals("Hábitos de pantallas guardados. Preferencias pendientes.", form.state.value.message)
+        assertEquals(1, parentalRepo.writes.size)
+        preferencesRepo.failure = null
+        form.save(); advanceUntilIdle()
+        assertEquals(1, parentalRepo.writes.size)
+        assertEquals(2, preferencesRepo.updateCalls)
+        assertFalse(form.state.value.canSave)
+    }
+
+    @Test fun `expired adult session blocks both writes and reauthentication reload preserves unsaved answers`() = runTest(dispatcher) {
+        val preferencesRepo = TestPreferencesRepo()
+        val parentalRepo = TestParentalScreenTimeRepository().apply { readFailure = AdultAuthenticationRequiredException() }
+        val profiles = TestProfileRepo().apply { profile.value = Profile("Niño", "🌿", 9, id = "child") }
+        val vm = ChildPreferencesViewModel(preferencesRepo, profiles, false)
+        val habits = ParentalScreenTimeViewModel(parentalRepo, "child", 9)
+        val form = PreferencesFormViewModel(vm, habits)
+        advanceUntilIdle()
+        vm.toggleInterest(ChildInterest.MUSIC); habits.sex(ParentalSexChoice.FEMALE)
+        habits.weekend(ParentalTimeChoice.SEVEN_PLUS)
+        advanceUntilIdle(); form.save(); advanceUntilIdle()
+        assertTrue(form.state.value.authenticationRequired)
+        assertFalse(form.state.value.canSave)
+        assertEquals(0, preferencesRepo.updateCalls)
+        assertTrue(parentalRepo.writes.isEmpty())
+        parentalRepo.readFailure = null
+        parentalRepo.records["child"] = ParentalScreenTimeRecord("old", "child", 1, 9, ParentalScreenTimeAnswers(1, 1, 1))
+        preferencesRepo.refreshedPreferences = ChildPreferences(interests = setOf(ChildInterest.STORIES))
+        form.refresh(); advanceUntilIdle()
+        assertFalse(form.state.value.authenticationRequired)
+        assertEquals("child", habits.state.value.profileId)
+        assertEquals(setOf(ChildInterest.MUSIC), vm.state.value.preferences.interests)
+        assertEquals(ParentalSexChoice.FEMALE, habits.state.value.selections.sex)
+        assertEquals(ParentalTimeChoice.SEVEN_PLUS, habits.state.value.selections.weekend)
+        assertTrue(form.state.value.canSave)
+        form.save(); advanceUntilIdle()
+        assertEquals(1, preferencesRepo.updateCalls)
+        assertEquals(1, parentalRepo.writes.size)
+    }
+
+    @Test fun `401 from preferences stops subsequent POST and retained changes save after login`() = runTest(dispatcher) {
+        val preferencesRepo = TestPreferencesRepo()
+        val parentalRepo = TestParentalScreenTimeRepository()
+        val vm = ChildPreferencesViewModel(preferencesRepo, TestProfileRepo(), false)
+        val habits = ParentalScreenTimeViewModel(parentalRepo, "child", 9)
+        val form = PreferencesFormViewModel(vm, habits)
+        advanceUntilIdle()
+        vm.toggleInterest(ChildInterest.MUSIC); habits.sex(ParentalSexChoice.MALE)
+        preferencesRepo.failure = AdultAuthenticationRequiredException()
+        advanceUntilIdle(); form.save(); advanceUntilIdle()
+        assertTrue(form.state.value.authenticationRequired)
+        assertTrue(parentalRepo.writes.isEmpty())
+        form.save(); advanceUntilIdle()
+        assertEquals(1, preferencesRepo.updateCalls)
+        preferencesRepo.failure = null
+        form.refresh(); advanceUntilIdle(); form.save(); advanceUntilIdle()
+        assertEquals(1, parentalRepo.writes.size)
+        assertFalse(vm.state.value.hasChanges)
+    }
+
+    @Test fun `unified demo preferences save locally and never create parental responses`() = runTest(dispatcher) {
+        val repo = TestPreferencesRepo()
+        val vm = ChildPreferencesViewModel(repo, TestProfileRepo(), true)
+        val form = PreferencesFormViewModel(vm, null)
+        advanceUntilIdle()
+        vm.toggleInterest(ChildInterest.MUSIC)
+        advanceUntilIdle(); form.save(); advanceUntilIdle()
+        assertEquals(0, repo.updateCalls)
+        assertEquals(0, repo.refreshCalls)
+        assertEquals(setOf(ChildInterest.MUSIC), repo.preferences.value.interests)
+        assertFalse(form.state.value.canSave)
+    }
+    @Test fun `preferences and parental answers save and retry independently without losing successful data`() = runTest(dispatcher) {
+        val profiles = TestProfileRepo().apply { profile.value = Profile("Niño", "🦊", 9, id = "child") }
+        val preferencesRepo = TestPreferencesRepo()
+        val parentalRepo = TestParentalScreenTimeRepository().apply { readFailure = java.io.IOException("PMUM offline") }
+        val preferences = ChildPreferencesViewModel(preferencesRepo, profiles, false)
+        val parental = ParentalScreenTimeViewModel(parentalRepo, "child", 9)
+        advanceUntilIdle()
+        preferences.toggleInterest(ChildInterest.DRAW_CREATE); preferences.save(); advanceUntilIdle()
+        assertTrue(preferences.state.value.saved)
+        assertEquals(1, preferencesRepo.updateCalls)
+        assertTrue(parentalRepo.writes.isEmpty())
+        parentalRepo.readFailure = null
+        parental.refresh(); advanceUntilIdle()
+        parentalRepo.saveFailure = java.io.IOException("lost response")
+        parental.sex(ParentalSexChoice.MALE); parental.save(); advanceUntilIdle()
+        assertTrue(preferences.state.value.saved)
+        assertEquals(setOf(ChildInterest.DRAW_CREATE), preferencesRepo.preferences.value.interests)
+        parentalRepo.saveFailure = null
+        parental.refresh(); advanceUntilIdle(); parental.save(); advanceUntilIdle()
+        val savedParental = parental.state.value.record
+        assertNotNull(savedParental)
+        assertEquals(1, preferencesRepo.updateCalls)
+        val parentalPosts = parentalRepo.writes.size
+        preferencesRepo.failure = java.io.IOException("preferences offline")
+        preferences.toggleInterest(ChildInterest.MUSIC); preferences.save(); advanceUntilIdle()
+        assertFalse(preferences.state.value.saved)
+        assertEquals(savedParental, parental.state.value.record)
+        preferencesRepo.failure = null
+        preferences.save(); advanceUntilIdle()
+        assertTrue(preferences.state.value.saved)
+        assertEquals(parentalPosts, parentalRepo.writes.size)
+    }
     private val dispatcher = StandardTestDispatcher()
     @Before fun setup() { Dispatchers.setMain(dispatcher) }
     @After fun tearDown() { Dispatchers.resetMain() }
