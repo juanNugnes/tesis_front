@@ -159,10 +159,14 @@ internal fun childSessionSummary(sessionCount: Int?): String = when (sessionCoun
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text("Tus aplicaciones de hoy", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
             Surface(color = Color.White.copy(.08f), shape = RoundedCornerShape(14.dp)) {
-                Row(Modifier.padding(horizontal = 12.dp, vertical = 9.dp), verticalAlignment = Alignment.CenterVertically) {
+                Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text("◷", color = Color(0xFFFFE08A), fontSize = 18.sp)
                     Spacer(Modifier.width(8.dp))
-                    Text(childSessionSummary(sessionCount), color = Color.White.copy(.82f), fontSize = 13.sp)
+                    Text(
+                        childSessionSummary(sessionCount), modifier = Modifier.weight(1f),
+                        color = Color.White.copy(.82f), fontSize = 16.sp, fontWeight = FontWeight.Medium,
+                        lineHeight = 22.sp, softWrap = true,
+                    )
                 }
             }
             applicationsStateMessage(sortedApps, applicationsStatus)?.let { message ->
