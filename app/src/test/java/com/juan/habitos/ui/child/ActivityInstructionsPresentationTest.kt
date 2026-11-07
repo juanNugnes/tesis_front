@@ -2,6 +2,8 @@ package com.juan.habitos.ui.child
 
 import com.juan.habitos.ui.state.ActivityState
 import com.juan.habitos.ui.state.SuggestedActivityUiModel
+import com.juan.habitos.ui.state.activityEmoji
+import com.juan.habitos.ui.state.professionalActivityEmojiById
 import org.junit.Assert.*
 import org.junit.Test
 
@@ -19,6 +21,49 @@ class ActivityInstructionsPresentationTest {
         assertEquals("Materiales", materials.heading)
         assertTrue(materials.text.contains("Papel y lápices."))
         assertEquals(listOf("1", "2", "3"), result.blocks.filterIsInstance<InstructionBlock.Step>().map { it.number })
+        assertTrue(result.supportsStepNavigation)
+    }
+
+    @Test fun `professional activities with three or four steps keep every complete instruction`() {
+        for (stepCount in 3..4) {
+            val materials = "Hoja, lápiz y marcadores opcionales (si tenés ganas de usarlos)."
+            val instructions = (1..stepCount).map { number ->
+                "Consigna $number con un ejemplo completo: podés elegir la variante $number o inventar otra."
+            }
+            val source = "Materiales: $materials\n\nPasos:\n" +
+                instructions.mapIndexed { index, text -> "${index + 1}. $text" }.joinToString("\n")
+
+            val result = parse(source)
+
+            assertEquals(materials, result.contexts.single().text.trim())
+            assertEquals(instructions, result.steps.map { it.text.trim() })
+            assertEquals(stepCount, result.steps.size)
+        }
+    }
+
+    @Test fun `analytics needs prefix becomes materials card before immediate numbered steps`() {
+        val source = "Necesitás: Una pelota blanda o un par de medias enrolladas.\n" +
+            "1. Buscá un lugar seguro.\n" +
+            "2. Hacé rodar la pelota por el piso.\n" +
+            "3. Elegí el movimiento que puedas hacer."
+
+        val result = parse(source)
+
+        assertTrue(result.supportsStepNavigation)
+        assertEquals("Materiales", result.contexts.single().heading)
+        assertEquals("Una pelota blanda o un par de medias enrolladas.", result.contexts.single().text.trim())
+        assertEquals(listOf("1", "2", "3"), result.steps.map { it.number })
+    }
+
+    @Test fun `analytics no materials sentence stays complete in materials card`() {
+        val materials = "No necesitás materiales. La música es opcional. Si la usás, dejá el celular apoyado."
+        val source = "$materials\n1. Mové las manos.\n2. Sumá otro movimiento.\n3. Repetí la secuencia."
+
+        val result = parse(source)
+
+        assertTrue(result.supportsStepNavigation)
+        assertEquals(materials, result.contexts.single().text.trim())
+        assertEquals(3, result.steps.size)
     }
 
     @Test fun `steps without materials do not fabricate a materials block`() {
@@ -82,6 +127,7 @@ class ActivityInstructionsPresentationTest {
         for (source in listOf("Elegí colores y creá un dibujo libre.", "## Consigna\n• Primero dibujá.\n• Después pintá.", "", "   \n\t", "[1] Una idea\n[2] Otra idea")) {
             val result = parse(source)
             assertFalse(result.structured)
+            assertFalse(result.supportsStepNavigation)
             assertEquals(listOf(InstructionBlock.Prose(source)), result.blocks)
         }
     }
@@ -129,5 +175,65 @@ class ActivityInstructionsPresentationTest {
         repeat(5) { parse(running.activity.description) }
         assertEquals(activity, running.activity)
         assertEquals("original-id", running.activity.activityId)
+    }
+
+    @Test fun `step navigation advances retreats clamps at boundaries and reports progress`() {
+        val initial = ActivityStepNavigation("activity-a", stepCount = 4)
+        assertEquals("Paso 1 de 4", initial.progressLabel)
+        assertFalse(initial.canGoBack)
+        assertEquals(initial, initial.previous())
+
+        val third = initial.next().next()
+        assertEquals(2, third.currentStepIndex)
+        assertEquals("Paso 3 de 4", third.progressLabel)
+        assertTrue(third.canGoBack)
+        assertTrue(third.canGoForward)
+        assertEquals(1, third.previous().currentStepIndex)
+
+        val last = third.next()
+        assertEquals("Paso 4 de 4", last.progressLabel)
+        assertFalse(last.canGoForward)
+        assertEquals(last, last.next())
+    }
+
+    @Test fun `changing activity resets visual progress without touching activity content`() {
+        val current = ActivityStepNavigation("activity-a", 4).next().next()
+        assertEquals(current, current.resetFor("activity-a", 4))
+
+        val replacement = current.resetFor("activity-b", 3)
+        assertEquals("activity-b", replacement.activityId)
+        assertEquals(3, replacement.stepCount)
+        assertEquals(0, replacement.currentStepIndex)
+        assertEquals("Paso 1 de 3", replacement.progressLabel)
+    }
+
+    @Test fun `professional catalog maps all sixteen activity ids to specific visuals`() {
+        val expected = mapOf(
+            "movement_dance_01" to "🎵",
+            "movement_sequence_01" to "👋",
+            "movement_ball_01" to "⚽",
+            "creative_character_story_01" to "🎭",
+            "creative_animal_01" to "🐾",
+            "creative_favorite_01" to "🖍️",
+            "reading_choose_01" to "📖",
+            "reading_favorite_01" to "📕",
+            "free_play_nearby_01" to "🧸",
+            "free_play_build_01" to "🧱",
+            "free_play_story_01" to "🪆",
+            "social_play_01" to "🧑‍🤝‍🧑",
+            "social_conversation_story_01" to "💬",
+            "social_create_together_01" to "🤝",
+            "quiet_story_ending_01" to "🔀",
+            "quiet_draw_01" to "✏️",
+        )
+        assertEquals(16, professionalActivityEmojiById.size)
+        assertEquals(expected, professionalActivityEmojiById)
+        expected.forEach { (activityId, emoji) -> assertEquals(emoji, activityEmoji(activityId)) }
+    }
+
+    @Test fun `unknown and retired activities use neutral visual instead of category inference`() {
+        for (activityId in listOf("future_activity_01", "social_help_01", "quiet_prepare_01", "")) {
+            assertEquals("✨", activityEmoji(activityId))
+        }
     }
 }

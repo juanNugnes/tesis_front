@@ -573,6 +573,21 @@ class ViewModelsTest {
         assertEquals(5, vm.state.value.chosenActivities)
     }
     @Test fun `another idea rotates through backend activities and wraps to first`() = runTest(dispatcher) { val vm = ChildViewModel(TestProfileRepo(), TestUsage(), TestActivitySuggestions()); advanceUntilIdle(); val first = (vm.state.value.activityState as ActivityState.Suggested).activity; vm.showAnotherActivity(); assertEquals("activity-2", (vm.state.value.activityState as ActivityState.Suggested).activity.activityId); vm.showAnotherActivity(); assertEquals("activity-3", (vm.state.value.activityState as ActivityState.Suggested).activity.activityId); vm.showAnotherActivity(); assertEquals(first, (vm.state.value.activityState as ActivityState.Suggested).activity) }
+    @Test fun `activity id visual stays identical when suggestion starts running`() = runTest(dispatcher) {
+        val repo = TestActivitySuggestions().apply {
+            values = listOf(values.first().copy(id = "movement_ball_01", title = "Jugá con una pelota", category = "MOVEMENT"))
+        }
+        val vm = ChildViewModel(TestProfileRepo(), TestUsage(), repo)
+        advanceUntilIdle()
+
+        val suggested = (vm.state.value.activityState as ActivityState.Suggested).activity
+        assertEquals("⚽", suggested.emoji)
+
+        vm.startActivity()
+        val running = (vm.state.value.activityState as ActivityState.Running).activity
+        assertEquals(suggested.emoji, running.emoji)
+        assertEquals(suggested, running)
+    }
     @Test fun `complete instructions remain accessible after start and repeated reading never duplicates selection`() = runTest(dispatcher) {
         val description = "Materiales:\n- Papel.\n- Lápices.\n\nPasos:\n" +
             (1..50).joinToString("\n") { "$it. Explorá una idea con calma y respetá esta consigna completa." }
