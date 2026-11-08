@@ -444,6 +444,7 @@ data class SuggestedActivityUiModel(
     val emoji: String,
     val title: String,
     val description: String,
+    val category: String = "",
 )
 sealed interface ActivityState {
     data object Loading : ActivityState
@@ -611,9 +612,10 @@ class ChildViewModel(
 
     private fun ActivitySuggestion.toUiModel() = SuggestedActivityUiModel(
         activityId = id,
-        emoji = "✨",
+        emoji = activityEmoji(id),
         title = title,
         description = description,
+        category = category,
     )
 
     private companion object {
@@ -622,6 +624,28 @@ class ChildViewModel(
         const val TECHNICAL_ACTIVITY_MESSAGE = "No pudimos cargar una actividad en este momento. Intentá nuevamente."
     }
 }
+
+/** Visuales del catálogo profesional de Analytics en el commit 831d433. */
+internal val professionalActivityEmojiById: Map<String, String> = mapOf(
+    "movement_dance_01" to "🎵",
+    "movement_sequence_01" to "👋",
+    "movement_ball_01" to "⚽",
+    "creative_character_story_01" to "🎭",
+    "creative_animal_01" to "🐾",
+    "creative_favorite_01" to "🖍️",
+    "reading_choose_01" to "📖",
+    "reading_favorite_01" to "📕",
+    "free_play_nearby_01" to "🧸",
+    "free_play_build_01" to "🧱",
+    "free_play_story_01" to "🪆",
+    "social_play_01" to "🧑‍🤝‍🧑",
+    "social_conversation_story_01" to "💬",
+    "social_create_together_01" to "🤝",
+    "quiet_story_ending_01" to "🔀",
+    "quiet_draw_01" to "✏️",
+)
+
+internal fun activityEmoji(activityId: String): String = professionalActivityEmojiById[activityId] ?: "✨"
 
 data class AdultAppUsageUiModel(val name: String, val packageName: String, val icon: String, val minutes: Int)
 data class CategoryUsageUiModel(val name: String, val percentage: Int)

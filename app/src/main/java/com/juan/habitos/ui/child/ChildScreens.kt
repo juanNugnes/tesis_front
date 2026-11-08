@@ -7,6 +7,8 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.*
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.PhoneAndroid
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -226,16 +228,33 @@ fun activityUnavailablePresentation(state: ActivityState, navigationAvailable: B
     is ActivityState.Suggested -> Column(verticalArrangement = Arrangement.spacedBy(13.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) { Text(avatar, Modifier.graphicsLayer { scaleX = avatarScale.value; scaleY = avatarScale.value }, fontSize = 25.sp); Spacer(Modifier.width(8.dp)); Text("Tengo una idea para vos", color = Color(0xFFFFE08A), fontWeight = FontWeight.Bold, fontSize = 15.sp) }
         Text("¿Querés hacer algo diferente?", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
-        Surface(color = Color.White.copy(.12f), shape = RoundedCornerShape(18.dp), border = BorderStroke(1.dp, Color.White.copy(.16f))) { Column(Modifier.fillMaxWidth().padding(18.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) { Text(currentState.activity.emoji, fontSize = 39.sp); Text(currentState.activity.title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 17.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center); ActivityInstructions(currentState.activity.description) } }
+        Text(currentState.activity.title, Modifier.fillMaxWidth(), color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp, lineHeight = 27.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+        ActivityInstructions(currentState.activity.activityId, currentState.activity.emoji, currentState.activity.description)
         Button(onClick = { react(); onStart() }, modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFF7F5FF), contentColor = AppColors.PurpleUi), shape = RoundedCornerShape(14.dp)) { Text("Empezar actividad", fontWeight = FontWeight.Bold) }
         TextButton(onClick = { react(); scope.launch { refreshRotation.snapTo(0f); refreshRotation.animateTo(360f, tween(320, easing = FastOutSlowInEasing)); refreshRotation.snapTo(0f) }; onAnotherIdea() }, modifier = Modifier.align(Alignment.CenterHorizontally)) { Text("🔄", Modifier.graphicsLayer { rotationZ = refreshRotation.value }, color = Color(0xFFFFE08A)); Spacer(Modifier.width(7.dp)); Text("Otra idea", color = Color(0xFFFFE08A), fontWeight = FontWeight.Bold) }
         if (selectionRegistrationFailed) SelectionRetry(onRetrySelection)
     }
     is ActivityState.Running -> Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) { Text(avatar, Modifier.graphicsLayer { scaleX = avatarScale.value; scaleY = avatarScale.value }, fontSize = 28.sp); Spacer(Modifier.width(8.dp)); Text("Actividad en curso", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp) }
-        Text(currentState.activity.emoji, fontSize = 42.sp)
         Text(currentState.activity.title, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
-        ActivityInstructions(currentState.activity.description)
+        ActivityInstructions(currentState.activity.activityId, currentState.activity.emoji, currentState.activity.description)
+        activityRunningMessage(currentState)?.let { message ->
+            // Split only this fixed UI message, never the activity's description or steps.
+            val (headline, clarification) = message.split(". ", limit = 2)
+            Row(
+                Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.Top,
+            ) {
+                Icon(Icons.Outlined.PhoneAndroid, contentDescription = null,
+                    modifier = Modifier.padding(top = 2.dp).size(20.dp), tint = Color(0xFFB9F6D1))
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                    Text("$headline.", color = Color(0xFFB9F6D1), fontSize = 15.sp,
+                        fontWeight = FontWeight.SemiBold, lineHeight = 21.sp, softWrap = true)
+                    Text("$clarification.", color = Color.White.copy(.82f), fontSize = 14.sp,
+                        lineHeight = 20.sp, softWrap = true)
+                }
+            }
+        }
         Button(onClick = { react(); onFinish() }, modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFF7F5FF), contentColor = AppColors.PurpleUi), shape = RoundedCornerShape(14.dp)) { Text("Finalizar actividad", fontWeight = FontWeight.Bold) }
         if (selectionRegistrationFailed) SelectionRetry(onRetrySelection)
     }
@@ -246,22 +265,6 @@ fun activityUnavailablePresentation(state: ActivityState, navigationAvailable: B
         Text("No pudimos guardar tu elección.", Modifier.weight(1f), color = Color.White.copy(.68f), fontSize = 12.sp)
         TextButton(onClick = onRetry) { Text("Reintentar", color = Color(0xFFFFE08A), fontSize = 12.sp) }
     }
-}
-
-/** Render the exact backend text, including legacy prose, materials, blank lines and numbered steps.
- * No parsing, summary, line limit or fixed height; ChildHomeScreen's LazyColumn handles scrolling.
- * Reading/scrolling invokes no activity callbacks and remains available in Running.
- */
-@Composable private fun ActivityInstructions(description: String) {
-    Text(
-        text = description,
-        modifier = Modifier.fillMaxWidth(),
-        color = Color.White.copy(.88f),
-        fontSize = 16.sp,
-        lineHeight = 24.sp,
-        textAlign = androidx.compose.ui.text.style.TextAlign.Start,
-        softWrap = true,
-    )
 }
 
 private data class CelebrationParticle(val xFraction: Float, val size: Dp, val travel: Dp, val color: Color, val rotation: Float)
