@@ -155,7 +155,7 @@ private inline fun <reified T : ViewModel> factory(crossinline create: () -> T) 
             val mode = session.mode ?: return@composable
             val profileRepository = if (mode == DeviceMode.ADULT) app.adultProfileRepository else app.profileRepository
             val usageRepository = if (mode == DeviceMode.ADULT) app.adultUsageRepository else app.usageRepository
-            val vm: AdultViewModel = viewModel(key = "adult-dashboard-$mode", factory = factory { AdultViewModel(profileRepository, usageRepository, app.alertRepository) })
+            val vm: AdultViewModel = viewModel(key = "adult-dashboard-$mode", factory = factory { AdultViewModel(profileRepository, usageRepository, app.alertRepository, app.alertsDemoEnabled) })
             val state by vm.state.collectAsStateWithLifecycle()
             val messagesVm: AdultMessagesViewModel = viewModel(key = "adult-messages-$mode", factory = factory { AdultMessagesViewModel(profileRepository, app.adultMessagesRepository, BuildConfig.DEMO_MODE || app.adultMessagesDemoEnabled) })
             val messages by messagesVm.state.collectAsStateWithLifecycle()

@@ -100,7 +100,26 @@ data class Alert(
     val description: String,
     val detail: String,
     val recommendation: String,
+    val periods: String = "",
+    val evaluatedAt: String? = null,
+    val measurement: String = "",
+    val limitation: String = "",
+    val origin: AlertOrigin = AlertOrigin.UNSPECIFIED,
+    val displayStatus: AlertDisplayStatus = AlertDisplayStatus.ACTIVE,
+    val displaySection: AlertDisplaySection = AlertDisplaySection.ACTIVE,
 )
+enum class AlertOrigin { UNSPECIFIED, DEMO_FICTITIOUS }
+enum class AlertDisplaySection { ACTIVE, REVIEW }
+enum class AlertDisplayStatus {
+    ACTIVE,
+    INSUFFICIENT_WITH_PRIOR,
+    INSUFFICIENT_WITHOUT_PRIOR,
+    WITHDRAWN,
+    CORRECTED_CONTINUES,
+    EVALUATED_NO_PATTERN,
+    NOT_EVALUATED,
+    NOT_ENABLED,
+}
 enum class DashboardPeriod { TODAY, WEEK }
 
 enum class ChildInterest { DRAW_CREATE, STORIES, MUSIC, GAMES_CHALLENGES, OUTDOORS, MOVEMENT, BUILD, WRITE, IMAGINE_ACT }

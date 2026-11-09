@@ -14,8 +14,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.*
 import com.juan.habitos.domain.model.Alert
+import com.juan.habitos.domain.model.AlertDisplayStatus
+import com.juan.habitos.domain.model.AlertOrigin
 import com.juan.habitos.domain.model.AppUsage
 import com.juan.habitos.domain.model.DashboardPeriod
+import com.juan.habitos.data.mock.ALERTS_DEMO_CARD_LABEL
+import com.juan.habitos.data.mock.ALERTS_DEMO_HEADER
+import com.juan.habitos.data.mock.activeAlerts
+import com.juan.habitos.data.mock.reviewAlerts
 import com.juan.habitos.ui.components.MetricCard
 import com.juan.habitos.ui.components.rememberApplicationVisualPresentation
 import com.juan.habitos.ui.state.*
@@ -56,7 +62,11 @@ private val tabs = listOf("📊\nRESUMEN", "📱\nAPPS", "🌙\nNOCTURNO", "🧠
                 1 -> AppsScreen(state.appsTab)
                 2 -> NightScreen(state.nightTab)
                 ANALYSIS_TAB -> AttentionScreen(state.attentionTab, messages, onRetryMessages, onMessagesSignIn, focusedMessageId, focusedMessageVersion)
-                ALERTS_TAB -> AlertsScreen(state.alerts, adultMessageDemoAlert(messages)) { target ->
+                ALERTS_TAB -> AlertsScreen(
+                    alerts = state.alerts,
+                    alertsDemo = state.alertsDemo,
+                    demoAlert = adultMessageAlertForAlertsTab(state.alertsDemo, adultMessageDemoAlert(messages)),
+                ) { target ->
                     openAdultMessageDemoAlert(target,
                         selectMessage = { id, version -> focusedMessageId = id; focusedMessageVersion = version },
                         selectTab = { tab = it },
@@ -271,16 +281,59 @@ internal fun adultMessageSummaryTitle(state: AdultMessagesUiState): String? =
 @Composable private fun NightMetricCard(label: String, value: String) { Card(colors = CardDefaults.cardColors(containerColor = AppColors.Card), border = BorderStroke(1.dp, AppColors.Divider), shape = RoundedCornerShape(16.dp)) { Column(Modifier.fillMaxWidth().heightIn(min = 112.dp).padding(16.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) { Text(label.uppercase(), color = Color(0xFF94A3B8), fontSize = 11.sp, fontWeight = FontWeight.Bold); Text(value, color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold) } } }
 private fun formatMinutes(minutes: Int): String = if (minutes >= 60) "${minutes / 60} h ${minutes % 60} min" else "$minutes min"
 
-@Composable private fun AlertsScreen(alerts: List<Alert>, demoAlert: AdultMessageDemoAlert?, onOpenMessage: (AdultMessageDemoAlert) -> Unit) {
+@Composable private fun AlertsScreen(
+    alerts: List<Alert>,
+    alertsDemo: Boolean,
+    demoAlert: AdultMessageDemoAlert?,
+    onOpenMessage: (AdultMessageDemoAlert) -> Unit,
+) {
+    val active = activeAlerts(alerts)
+    val review = reviewAlerts(alerts)
+    var showReview by rememberSaveable { mutableStateOf(false) }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         item {
             Text("Alertas", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
-            Text("Situaciones identificadas a partir del historial de uso", color = Color(0xFF94A3B8), fontSize = 13.sp)
+            Text(
+                when {
+                    alertsDemo -> ALERTS_DEMO_HEADER
+                    demoAlert != null -> "Esta pantalla incluye ejemplos de demostración"
+                    else -> "Información disponible para este perfil"
+                },
+                color = if (alertsDemo || demoAlert != null) AppColors.PurpleSoft else Color(0xFF94A3B8),
+                fontSize = 13.sp,
+                fontWeight = if (alertsDemo || demoAlert != null) FontWeight.Bold else FontWeight.Normal,
+            )
+        }
+        if (alertsDemo) item {
+            AlertInformationCard("Demostración local", "Estos ejemplos son ficticios. No fueron generados por el dispositivo ni por Analytics en producción.")
         }
         if (demoAlert != null) item(key = demoAlert.alert.id) {
             AlertCard(demoAlert.alert) { onOpenMessage(demoAlert) }
         }
-        alerts.forEach { alert -> item(key = alert.id) { AlertCard(alert) } }
+        active.forEach { alert -> item(key = alert.id) { AlertCard(alert) } }
+        if (!alertsDemo && active.isEmpty()) item {
+            AlertInformationCard(
+                "Alertas con datos reales",
+                "Las familias de avisos todavía no están habilitadas con datos reales. No hay evaluaciones verificadas para mostrar.",
+            )
+        }
+        if (alertsDemo && review.isNotEmpty()) {
+            item {
+                HorizontalDivider(color = AppColors.Divider)
+                Spacer(Modifier.height(2.dp))
+                Text("Otros estados para revisión", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                Text("Escenarios alternativos; no son avisos activos adicionales.", color = Color(0xFF94A3B8), fontSize = 13.sp)
+                Spacer(Modifier.height(10.dp))
+                OutlinedButton(
+                    onClick = { showReview = !showReview },
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                    border = BorderStroke(1.dp, AppColors.PurpleSoft),
+                ) {
+                    Text(if (showReview) "Ocultar estados de ejemplo" else "Revisar estados de ejemplo (${review.size})")
+                }
+            }
+            if (showReview) review.forEach { alert -> item(key = alert.id) { AlertCard(alert) } }
+        }
         item { Spacer(Modifier.navigationBarsPadding()) }
     }
 }
@@ -291,19 +344,60 @@ private fun formatMinutes(minutes: Int): String = if (minutes >= 60) "${minutes 
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Surface(color = AppColors.Purple.copy(alpha = .18f), shape = RoundedCornerShape(10.dp)) { Text(alert.icon, Modifier.padding(9.dp), fontSize = 22.sp) }
                 Spacer(Modifier.width(10.dp))
-                Text(alert.type, color = AppColors.PurpleSoft, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                    Text(alert.type, color = AppColors.PurpleSoft, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    if (alert.origin == AlertOrigin.DEMO_FICTITIOUS) {
+                        Surface(color = Color(0xFF3B2D68), shape = RoundedCornerShape(50)) {
+                            Text(ALERTS_DEMO_CARD_LABEL, Modifier.padding(horizontal = 9.dp, vertical = 4.dp), color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+            alertStatusLabel(alert.displayStatus)?.let { status ->
+                Text(status, color = Color(0xFFFBBF24), fontSize = 12.sp, fontWeight = FontWeight.Bold)
             }
             Text(alert.title, color = Color.White, fontSize = 19.sp, fontWeight = FontWeight.Bold, lineHeight = 24.sp)
             Text(alert.description, color = Color(0xFFCBD5E1), fontSize = 14.sp, lineHeight = 21.sp)
             if (alert.detail.isNotBlank()) Surface(color = AppColors.Surface, shape = RoundedCornerShape(12.dp), border = BorderStroke(1.dp, AppColors.Divider)) {
                 Text(alert.detail, Modifier.fillMaxWidth().padding(14.dp), color = Color(0xFFE2E8F0), fontSize = 13.sp, lineHeight = 20.sp)
             }
+            if (alert.periods.isNotBlank()) AlertDetail("PERÍODOS", alert.periods)
+            alert.evaluatedAt?.let { AlertDetail("EVALUADO", it) }
+            if (alert.measurement.isNotBlank()) AlertDetail("QUÉ SE MIDE", alert.measurement)
+            if (alert.limitation.isNotBlank()) AlertDetail("LÍMITES", alert.limitation)
             if (alert.recommendation.isNotBlank()) {
                 HorizontalDivider(color = AppColors.Divider)
-                Text("RECOMENDACIÓN", color = Color(0xFF94A3B8), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                Text("SUGERENCIA", color = Color(0xFF94A3B8), fontSize = 11.sp, fontWeight = FontWeight.Bold)
                 Text(alert.recommendation, color = Color(0xFFCBD5E1), fontSize = 14.sp, lineHeight = 21.sp)
             }
             if (onClick != null) Text("Ver análisis →", color = AppColors.PurpleSoft, fontWeight = FontWeight.Bold)
         }
     }
+}
+
+@Composable private fun AlertDetail(label: String, text: String) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(label, color = Color(0xFF94A3B8), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+        Text(text, color = Color(0xFFCBD5E1), fontSize = 13.sp, lineHeight = 19.sp)
+    }
+}
+
+@Composable private fun AlertInformationCard(title: String, text: String) {
+    Surface(color = AppColors.Card, shape = RoundedCornerShape(16.dp), border = BorderStroke(1.dp, AppColors.Divider)) {
+        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+            Text(title, color = Color.White, fontWeight = FontWeight.Bold)
+            Text(text, color = Color(0xFFCBD5E1), fontSize = 13.sp, lineHeight = 19.sp)
+        }
+    }
+}
+
+internal fun alertStatusLabel(status: AlertDisplayStatus): String? = when (status) {
+    AlertDisplayStatus.ACTIVE -> null
+    AlertDisplayStatus.INSUFFICIENT_WITH_PRIOR -> "DATOS INSUFICIENTES · HABÍA UN AVISO PREVIO"
+    AlertDisplayStatus.INSUFFICIENT_WITHOUT_PRIOR -> "DATOS INSUFICIENTES · SIN AVISO PREVIO"
+    AlertDisplayStatus.WITHDRAWN -> "CORREGIDO · AVISO RETIRADO"
+    AlertDisplayStatus.CORRECTED_CONTINUES -> "CORREGIDO · EL CAMBIO CONTINÚA RESPALDADO"
+    AlertDisplayStatus.EVALUATED_NO_PATTERN -> "EVALUADO · SIN CAMBIO CONFIRMADO"
+    AlertDisplayStatus.NOT_EVALUATED -> "NO EVALUADO"
+    AlertDisplayStatus.NOT_ENABLED -> "NO HABILITADO CON DATOS REALES"
 }

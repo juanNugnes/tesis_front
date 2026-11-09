@@ -689,6 +689,7 @@ data class AdultDashboardUiState(
     val usage: DailyUsage = DailyUsage(null, null, null),
     val apps: List<AppUsage> = emptyList(),
     val alerts: List<Alert> = emptyList(),
+    val alertsDemo: Boolean = false,
     val appsTab: AdultAppsTabUiState = AdultAppsTabUiState(),
     val nightTab: AdultNightTabUiState = AdultNightTabUiState(),
     val attentionTab: AdultAttentionTabUiState = AdultAttentionTabUiState(),
@@ -700,8 +701,13 @@ internal fun formatLastNightActivity(instant: Instant?, timezone: String?): Stri
     return DateTimeFormatter.ofPattern("HH:mm").format(instant.atZone(zone))
 }
 
-class AdultViewModel(profileRepo: ProfileRepository, private val usageRepo: UsageRepository, private val alertRepo: AlertRepository) : ViewModel() {
-    private val _state = MutableStateFlow(AdultDashboardUiState()); val state = _state.asStateFlow()
+class AdultViewModel(
+    profileRepo: ProfileRepository,
+    private val usageRepo: UsageRepository,
+    private val alertRepo: AlertRepository,
+    alertsDemo: Boolean = false,
+) : ViewModel() {
+    private val _state = MutableStateFlow(AdultDashboardUiState(alertsDemo = alertsDemo)); val state = _state.asStateFlow()
     private var requestId = 0
     private var observedProfile = false
     init {

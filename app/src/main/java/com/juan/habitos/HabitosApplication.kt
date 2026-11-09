@@ -104,7 +104,8 @@ class HabitosApplication : Application() {
         if (BuildConfig.DEMO_MODE) FakeUsageRepository()
         else AdultUsageRepository(localProfileStore, usageApi, adultRequestAuthorization)
     }
-    val alertRepository by lazy { FakeAlertRepository() }
+    val alertsDemoEnabled: Boolean get() = com.juan.habitos.data.mock.alertsDemoEnabled(BuildConfig.DEBUG, BuildConfig.ALERTS_DEMO_MODE)
+    val alertRepository by lazy { alertRepositoryForMode(BuildConfig.DEBUG, BuildConfig.ALERTS_DEMO_MODE) }
     val adultMessagesDemoEnabled: Boolean get() = BuildConfig.DEBUG && BuildConfig.ADULT_MESSAGES_DEMO_MODE
     val automaticActivitiesDemoEnabled: Boolean get() = com.juan.habitos.ui.child.automaticActivitiesDemoEnabled(
         BuildConfig.DEBUG, BuildConfig.AUTOMATIC_ACTIVITIES_DEMO_MODE,

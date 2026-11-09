@@ -7,6 +7,11 @@ internal const val ADULT_MESSAGES_DEMO_LABEL = "Ejemplo de demostración · Dato
 
 internal data class AdultMessageDemoAlert(val alert: Alert, val cardId: String, val version: Int)
 
+internal fun adultMessageAlertForAlertsTab(
+    alertsDemo: Boolean,
+    messageAlert: AdultMessageDemoAlert?,
+): AdultMessageDemoAlert? = messageAlert.takeUnless { alertsDemo }
+
 internal fun openAdultMessageDemoAlert(
     target: AdultMessageDemoAlert,
     selectMessage: (String, Int) -> Unit,
