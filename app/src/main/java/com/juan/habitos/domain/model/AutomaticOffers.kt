@@ -2,9 +2,11 @@ package com.juan.habitos.domain.model
 
 data class AutomaticOfferActivity(
     val id: String,
-    val title: String?,
-    val description: String?,
-    val category: String?,
+    val title: String,
+    val description: String,
+    val category: String,
+    val materials: List<String>? = null,
+    val steps: List<String>? = null,
 )
 
 data class PendingAutomaticOffer(

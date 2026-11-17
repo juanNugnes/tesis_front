@@ -4,6 +4,7 @@ import com.juan.habitos.data.device.*
 import com.juan.habitos.data.local.AutomaticOfferOpportunityStore
 import com.juan.habitos.domain.model.*
 import com.juan.habitos.domain.repository.ActivitySuggestionRepository
+import com.google.gson.Gson
 import java.io.IOException
 import java.lang.reflect.Proxy
 import java.time.ZoneId
@@ -16,6 +17,43 @@ import retrofit2.HttpException
 import retrofit2.Response
 
 class AutomaticOffersTest {
+    @Test fun `definitive backend JSON preserves complete catalog content and tolerates metadata`() {
+        val description = "Materiales: hoja y lápiz.\nPasos:\n1. Dibujá sin apuro."
+        val json = """{
+          "outcome":"offer_available","request_id":"request-1","replayed":false,
+          "coordinator_offer_id":"coordinator-1","activity_offer_id":"activity-offer-1","channel":"overlay",
+          "offer":{"offer_id":"coordinator-1","activities_offered":["draw-1"],"unknown_offer_field":true,
+            "selection":{"status":"selected","unknown_selector_field":"accepted","activities":[{
+              "activity_id":"draw-1","title":"Dibujar","description":${Gson().toJson(description)},
+              "category":"creative","materials":["Hoja","Lápiz"],"steps":["Elegí un lugar","Dibujá"],
+              "future_metadata":{"version":2}
+            }]}}
+        }"""
+
+        val decoded = Gson().fromJson(json, AutomaticOpportunityResponseDto::class.java)
+        val activity = decoded.offer!!.selection!!.activities.single()
+        assertEquals("selected", decoded.offer!!.selection!!.status)
+        assertEquals(description, activity.description)
+        assertEquals(listOf("Hoja", "Lápiz"), activity.materials)
+        assertEquals(listOf("Elegí un lugar", "Dibujá"), activity.steps)
+    }
+
+    @Test fun `activity content incomplete discard closes opportunity without presentation`() = runTest {
+        val store = Store(evidence())
+        var presentations = 0
+        val api = api { name, args ->
+            if (name != "postAutomaticOpportunity") error(name)
+            AutomaticOpportunityResponseDto(
+                outcome = "discarded",
+                requestId = (args[2] as AutomaticOpportunityRequest).requestId,
+                reason = "activity_content_incomplete",
+            )
+        }
+        AutomaticOfferSyncCoordinator(api, DeviceAuth(), store, onOfferAvailable = { presentations++ }).synchronize()
+        assertTrue(store.pending().isEmpty())
+        assertNull(store.pendingOffer())
+        assertEquals(0, presentations)
+    }
     @Test fun `definitive response is removed while retryable response remains queued`() = runTest {
         val definitiveStore = Store(evidence())
         val definitive = api { name, _ ->
@@ -63,7 +101,7 @@ class AutomaticOffersTest {
         assertTrue(store.pending().isEmpty())
     }
 
-    @Test fun `offer response is persisted without inventing missing presentation fields`() = runTest {
+    @Test fun `offer response maps selection activities and preserves activity offer id`() = runTest {
         val store = Store(evidence(gameActive = true))
         val api = api { name, args ->
             if (name != "postAutomaticOpportunity") error(name)
@@ -71,7 +109,11 @@ class AutomaticOffersTest {
                 "offer_available", (args[2] as AutomaticOpportunityRequest).requestId,
                 coordinatorOfferId = "coordinator-1", activityOfferId = "activity-offer-1", channel = "overlay",
                 offer = CoordinatorOfferDto("coordinator-1", listOf("activity-1"), AutomaticOfferSelectionDto(
-                    listOf(AutomaticOfferActivityDto("activity-1", "Respirar")),
+                    listOf(AutomaticOfferActivityDto(
+                        "activity-1", "Respirar", "Materiales: ninguno.\nPasos: respiración lenta.", "quiet",
+                        materials = listOf("Un lugar cómodo"), steps = listOf("Sentate", "Respirá despacio"),
+                    )),
+                    status = "selected",
                 )),
             )
         }
@@ -79,7 +121,11 @@ class AutomaticOffersTest {
 
         val offer = requireNotNull(store.pendingOffer())
         assertEquals("Respirar", offer.activities.single().title)
-        assertNull(offer.activities.single().description)
+        assertEquals("Materiales: ninguno.\nPasos: respiración lenta.", offer.activities.single().description)
+        assertEquals("quiet", offer.activities.single().category)
+        assertEquals(listOf("Un lugar cómodo"), offer.activities.single().materials)
+        assertEquals(listOf("Sentate", "Respirá despacio"), offer.activities.single().steps)
+        assertEquals("activity-offer-1", offer.activityOfferId)
         assertEquals("overlay", offer.channel)
         assertTrue(store.pending().isEmpty())
     }
@@ -132,7 +178,7 @@ class AutomaticOffersTest {
     )
     private fun offerFixture() = PendingAutomaticOffer(
         "profile", "request", "coordinator-1", "activity-offer-1", "overlay",
-        listOf(AutomaticOfferActivity("activity-1", "Respirar", null, null)),
+        listOf(AutomaticOfferActivity("activity-1", "Respirar", "Respirá", "quiet")),
     )
 
     private class Store(vararg initial: InteractiveOpportunityEvidence) : AutomaticOfferOpportunityStore {

@@ -850,7 +850,7 @@ class ViewModelsTest {
         val voluntary = TestActivitySuggestions()
         val automatic = TestAutomaticOffers(PendingAutomaticOffer(
             "profile", "request", "coordinator", "automatic-offer", "overlay",
-            listOf(AutomaticOfferActivity("activity-1", "Respirar", null, null)),
+            listOf(AutomaticOfferActivity("activity-1", "Respirar", "", "")),
         ))
         val vm = ChildViewModel(TestProfileRepo(), TestUsage(), voluntary, selectionId = { "selection" }, nowEpochMillis = { 10L }, automaticOfferRepository = automatic)
         advanceUntilIdle()
@@ -863,7 +863,7 @@ class ViewModelsTest {
     @Test fun `automatic offer without backend presentation text remains pending and is not displayed`() = runTest(dispatcher) {
         val automatic = TestAutomaticOffers(PendingAutomaticOffer(
             "profile", "request", "coordinator", "automatic-offer", "overlay",
-            listOf(AutomaticOfferActivity("activity-1", null, null, null)),
+            listOf(AutomaticOfferActivity("activity-1", "", "", "")),
         ))
         val vm = ChildViewModel(TestProfileRepo(), TestUsage(), TestActivitySuggestions(), automaticOfferRepository = automatic)
         advanceUntilIdle()

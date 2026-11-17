@@ -32,11 +32,17 @@ data class AutomaticOpportunityRequest(
 
 data class AutomaticOfferActivityDto(
     @SerializedName("activity_id") val activityId: String,
-    val title: String? = null,
-    val description: String? = null,
-    val category: String? = null,
+    val title: String,
+    val description: String,
+    val category: String,
+    val materials: List<String>? = null,
+    val steps: List<String>? = null,
 )
-data class AutomaticOfferSelectionDto(val activities: List<AutomaticOfferActivityDto> = emptyList())
+data class AutomaticOfferSelectionDto(
+    val activities: List<AutomaticOfferActivityDto>,
+    // Catalog selector state is metadata, never evidence of a child's selection.
+    val status: String? = null,
+)
 data class CoordinatorOfferDto(
     @SerializedName("offer_id") val offerId: String,
     @SerializedName("activities_offered") val activitiesOffered: List<String> = emptyList(),
@@ -117,11 +123,14 @@ class AutomaticOfferSyncCoordinator(
                     val coordinatorId = requireNotNull(response.coordinatorOfferId)
                     val activityOfferId = requireNotNull(response.activityOfferId)
                     val channel = requireNotNull(response.channel)
-                    val details = response.offer?.selection?.activities.orEmpty().associateBy { it.activityId }
-                    val ids = response.offer?.activitiesOffered.orEmpty()
+                    val activities = requireNotNull(response.offer?.selection).activities
+                    require(activities.size in 1..3)
                     store.savePendingOffer(PendingAutomaticOffer(
                         evidence.profileId, response.requestId, coordinatorId, activityOfferId, channel,
-                        ids.map { id -> details[id].let { AutomaticOfferActivity(id, it?.title, it?.description, it?.category) } },
+                        activities.map { activity -> AutomaticOfferActivity(
+                            activity.idOrThrow(), activity.title, activity.description, activity.category,
+                            activity.materials, activity.steps,
+                        ) },
                     ))
                     onOfferAvailable()
                     store.complete(intervalId)
@@ -141,6 +150,8 @@ class AutomaticOfferSyncCoordinator(
     }
 
     private fun stableRequestId(intervalId: String) = "opportunity-${UUID.nameUUIDFromBytes(intervalId.toByteArray(Charsets.UTF_8))}"
+
+    private fun AutomaticOfferActivityDto.idOrThrow(): String = activityId.also { require(it.isNotBlank()) }
 }
 
 class RemoteAutomaticOfferRepository(
