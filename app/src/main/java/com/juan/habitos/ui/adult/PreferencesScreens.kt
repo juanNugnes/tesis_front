@@ -15,7 +15,9 @@ import androidx.compose.ui.unit.sp
 import com.juan.habitos.domain.model.*
 import com.juan.habitos.ui.state.ChildPreferencesUiState
 import com.juan.habitos.ui.state.PreferencesFormUiState
+import com.juan.habitos.ui.state.ParentalScreenTimeUiState
 import com.juan.habitos.ui.state.ProfileScheduleUiState
+import com.juan.habitos.ui.state.AutomaticOfferSettingsUiState
 import com.juan.habitos.ui.theme.*
 import java.time.LocalDate
 
@@ -112,8 +114,16 @@ private fun formatProfileTime(value: String?): String? {
     onRestriction: (ActivityRestriction) -> Unit, onNotes: (String) -> Unit, onSave: () -> Unit, onBack: () -> Unit,
     onSimulatedScreenHabits: (ParentalScreenTimeSelections) -> Unit,
     formState: PreferencesFormUiState? = null,
+    parentalScreenTimeState: ParentalScreenTimeUiState? = null,
+    onParentalSex: (ParentalSexChoice?) -> Unit = {},
+    onParentalWeekday: (ParentalTimeChoice?) -> Unit = {},
+    onParentalWeekend: (ParentalTimeChoice?) -> Unit = {},
     onLogin: () -> Unit = {},
     onRetry: () -> Unit = {},
+    automaticOfferSettings: AutomaticOfferSettingsUiState? = null,
+    onAutomaticOffersEnabled: (Boolean) -> Unit = {},
+    onSharedPhone: (Boolean) -> Unit = {},
+    onSaveAutomaticOfferSettings: () -> Unit = {},
 ) {
     val preferences = state.preferences
     val snackbar = remember { SnackbarHostState() }
@@ -160,12 +170,35 @@ private fun formatProfileTime(value: String?): String? {
             }
             item { Surface(color = AppColors.Purple.copy(.12f), shape = RoundedCornerShape(14.dp)) { Text("🔒  Esta información se utiliza únicamente para adaptar las actividades sugeridas.", Modifier.padding(14.dp), color = Color(0xFFCBD5E1), fontSize = 13.sp, lineHeight = 18.sp) } }
             item {
-                ParentalScreenTimeSection(state.age, state.simulatedScreenHabits,
-                    { onSimulatedScreenHabits(state.simulatedScreenHabits.copy(sex = it)) },
-                    { onSimulatedScreenHabits(state.simulatedScreenHabits.copy(weekday = it)) },
-                    { onSimulatedScreenHabits(state.simulatedScreenHabits.copy(weekend = it)) },
+                val screenTime = parentalScreenTimeState
+                val selections = screenTime?.selections ?: state.simulatedScreenHabits
+                ParentalScreenTimeSection(state.age, selections,
+                    { if (screenTime == null) onSimulatedScreenHabits(selections.copy(sex = it)) else onParentalSex(it) },
+                    { if (screenTime == null) onSimulatedScreenHabits(selections.copy(weekday = it)) else onParentalWeekday(it) },
+                    { if (screenTime == null) onSimulatedScreenHabits(selections.copy(weekend = it)) else onParentalWeekend(it) },
+                    persistedState = screenTime,
                 )
             }
+            automaticOfferSettings?.let { automatic -> item {
+                FormSection("Ofertas automáticas", "Se evalúan después de un período continuo de uso. La configuración se guarda por separado.") {
+                    if (automatic.loading) LinearProgressIndicator(Modifier.fillMaxWidth())
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Text("Habilitar ofertas automáticas", Modifier.weight(1f), color = Color.White)
+                        Switch(automatic.automaticEnabled, onAutomaticOffersEnabled, enabled = automatic.loaded && !automatic.saving)
+                    }
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Text("Este teléfono es compartido", Modifier.weight(1f), color = Color.White)
+                        Switch(automatic.sharedPhone, onSharedPhone, enabled = automatic.loaded && !automatic.saving)
+                    }
+                    automatic.error?.let { Text(it, color = Color(0xFFFCA5A5), fontSize = 13.sp) }
+                    if (automatic.saved) Text("Configuración de ofertas automáticas guardada.", color = AppColors.PurpleSoft, fontSize = 13.sp)
+                    Button(
+                        onSaveAutomaticOfferSettings,
+                        Modifier.fillMaxWidth(),
+                        enabled = automatic.loaded && automatic.hasChanges && !automatic.saving,
+                    ) { Text(if (automatic.saving) "Guardando…" else "Guardar ofertas automáticas") }
+                }
+            } }
             formState?.message?.let { message -> item { Text(message, color = AppColors.PurpleSoft) } }
             item { Button(onSave, Modifier.fillMaxWidth().height(54.dp), enabled = formState?.canSave ?: (state.loaded && state.valid && !state.submitting && !state.refreshing), colors = ButtonDefaults.buttonColors(containerColor = AppColors.Purple), shape = RoundedCornerShape(14.dp)) { Text(if (state.submitting || formState?.saving == true) "Guardando…" else "Guardar cambios", fontWeight = FontWeight.Bold) } }
             item { Spacer(Modifier.navigationBarsPadding()) }

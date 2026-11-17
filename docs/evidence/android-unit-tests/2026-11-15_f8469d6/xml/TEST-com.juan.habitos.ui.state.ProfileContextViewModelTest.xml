@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.juan.habitos.ui.state.ProfileContextViewModelTest" tests="11" skipped="0" failures="0" errors="0" timestamp="2026-11-16T00:15:30" hostname="DESKTOP-GEBU7OP" time="0.061">
+  <properties/>
+  <testcase name="get error keeps cached list and exposes friendly message" classname="com.juan.habitos.ui.state.ProfileContextViewModelTest" time="0.012"/>
+  <testcase name="post error keeps form and cached list for retry" classname="com.juan.habitos.ui.state.ProfileContextViewModelTest" time="0.007"/>
+  <testcase name="initial load shows cache then refreshes contexts and active ids" classname="com.juan.habitos.ui.state.ProfileContextViewModelTest" time="0.004"/>
+  <testcase name="end before start is rejected while null and same day are valid" classname="com.juan.habitos.ui.state.ProfileContextViewModelTest" time="0.006"/>
+  <testcase name="delete removes context only after repository success" classname="com.juan.habitos.ui.state.ProfileContextViewModelTest" time="0.005"/>
+  <testcase name="double submit is blocked synchronously" classname="com.juan.habitos.ui.state.ProfileContextViewModelTest" time="0.004"/>
+  <testcase name="put error keeps previous item and edit form" classname="com.juan.habitos.ui.state.ProfileContextViewModelTest" time="0.005"/>
+  <testcase name="create closes form and appends saved context" classname="com.juan.habitos.ui.state.ProfileContextViewModelTest" time="0.004"/>
+  <testcase name="delete error keeps item and allows retry" classname="com.juan.habitos.ui.state.ProfileContextViewModelTest" time="0.004"/>
+  <testcase name="edit replaces existing context instead of adding another" classname="com.juan.habitos.ui.state.ProfileContextViewModelTest" time="0.005"/>
+  <testcase name="demo initial load uses cache without remote refresh" classname="com.juan.habitos.ui.state.ProfileContextViewModelTest" time="0.004"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

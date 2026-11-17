@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.*
 import com.juan.habitos.domain.model.AppUsage
 import com.juan.habitos.R
 import com.juan.habitos.domain.model.UsageMetricStatus
+import com.juan.habitos.data.mock.DASHBOARD_DEMO_LABEL
 import com.juan.habitos.ui.components.*
 import com.juan.habitos.ui.state.*
 import com.juan.habitos.ui.theme.*
@@ -48,7 +49,7 @@ private val ChildBorderColor = Color.White.copy(alpha = .20f)
         item { ChildHeader(state, onLock) }
         item { DaySceneCard(state.profile.avatar, state.chosenActivities ?: 0, state.showCompletionCelebration, state.completionCelebrationId) }
         item { DayUsageSummary(state.usage.currentMinutes, state.habitualUsageMinutes, state.usage.informationMessage) }
-        item { ChildUsageDetails(state.usage.sessionCount, state.apps, state.applicationsStatus) }
+        item { ChildUsageDetails(state.usage.sessionCount, state.apps, state.applicationsStatus, state.dashboardDemoActive) }
         item { ActivitySuggestionCard(state.profile.avatar, state.activityState, state.selectionRegistrationFailed, onAnotherActivity, onStartActivity, onFinishActivity, onRetryActivity, onRetrySelection, onCompletePreferences) }
         if (state.periodUsage.isNotEmpty()) item { DayPeriodUsageCard(state.periodUsage) }
         item { ActivityHistory(state.chosenActivities) }
@@ -153,13 +154,21 @@ internal fun childSessionSummary(sessionCount: Int?): String = when (sessionCoun
     }
 }
 
-@Composable private fun ChildUsageDetails(sessionCount: Int?, apps: List<AppUsage>?, applicationsStatus: UsageMetricStatus) {
+@Composable private fun ChildUsageDetails(
+    sessionCount: Int?,
+    apps: List<AppUsage>?,
+    applicationsStatus: UsageMetricStatus,
+    dashboardDemoActive: Boolean,
+) {
     var showAll by rememberSaveable(apps?.size) { mutableStateOf(false) }
     val sortedApps = remember(apps) { apps?.sortedByDescending(AppUsage::minutes) }
     val displayedApps = remember(apps, showAll) { visibleApplications(apps.orEmpty(), showAll) }
     ChildCard {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text("Tus aplicaciones de hoy", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+            if (dashboardDemoActive) {
+                Text(DASHBOARD_DEMO_LABEL, color = Color(0xFFFFE08A), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            }
             Surface(color = Color.White.copy(.08f), shape = RoundedCornerShape(14.dp)) {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text("◷", color = Color(0xFFFFE08A), fontSize = 18.sp)

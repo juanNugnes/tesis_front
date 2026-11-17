@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.juan.habitos.data.remote.MonitoringConsentRepositoryTest" tests="8" skipped="0" failures="0" errors="0" timestamp="2026-11-16T00:15:28" hostname="DESKTOP-GEBU7OP" time="0.063">
+  <properties/>
+  <testcase name="grant sends version and only usage monitoring purpose with adult bearer" classname="com.juan.habitos.data.remote.MonitoringConsentRepositoryTest" time="0.017"/>
+  <testcase name="new notice version uses unchanged backend contract and historical version remains readable" classname="com.juan.habitos.data.remote.MonitoringConsentRepositoryTest" time="0.009"/>
+  <testcase name="adult 403 preserves credential and becomes controlled authorization error" classname="com.juan.habitos.data.remote.MonitoringConsentRepositoryTest" time="0.008"/>
+  <testcase name="verification and current consent use adult bearer and map exact backend states" classname="com.juan.habitos.data.remote.MonitoringConsentRepositoryTest" time="0.006"/>
+  <testcase name="404 means no verification or no active consent without inventing records" classname="com.juan.habitos.data.remote.MonitoringConsentRepositoryTest" time="0.006"/>
+  <testcase name="adult 401 clears only adult credential and preserves device state" classname="com.juan.habitos.data.remote.MonitoringConsentRepositoryTest" time="0.006"/>
+  <testcase name="repository rejects device authorization before any request" classname="com.juan.habitos.data.remote.MonitoringConsentRepositoryTest" time="0.001"/>
+  <testcase name="revoke uses profile consent and adult bearer and maps revoked response" classname="com.juan.habitos.data.remote.MonitoringConsentRepositoryTest" time="0.007"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

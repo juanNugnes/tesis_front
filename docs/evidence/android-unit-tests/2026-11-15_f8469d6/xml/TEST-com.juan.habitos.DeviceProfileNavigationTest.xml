@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.juan.habitos.DeviceProfileNavigationTest" tests="5" skipped="0" failures="0" errors="0" timestamp="2026-11-16T00:15:26" hostname="DESKTOP-GEBU7OP" time="0.005">
+  <properties/>
+  <testcase name="create profile choice opens existing onboarding" classname="com.juan.habitos.DeviceProfileNavigationTest" time="0.001"/>
+  <testcase name="stored profile never opens recovery choice" classname="com.juan.habitos.DeviceProfileNavigationTest" time="0.0"/>
+  <testcase name="adult OTP returns to same-device authorization only for a child device" classname="com.juan.habitos.DeviceProfileNavigationTest" time="0.002"/>
+  <testcase name="child device without profile opens create or link choice" classname="com.juan.habitos.DeviceProfileNavigationTest" time="0.001"/>
+  <testcase name="link profile choice opens temporary code screen" classname="com.juan.habitos.DeviceProfileNavigationTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

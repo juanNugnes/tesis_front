@@ -4,6 +4,7 @@ import android.app.AppOpsManager
 import android.app.usage.UsageEvents
 import android.app.usage.UsageStatsManager
 import android.content.Context
+import android.content.pm.ApplicationInfo
 import android.os.Build
 import android.os.Process
 import android.util.Log
@@ -28,6 +29,16 @@ class AndroidDeviceUsageDataSource(private val context: Context) : DeviceUsageDa
             appOps.checkOpNoThrow(AppOpsManager.OPSTR_GET_USAGE_STATS, Process.myUid(), context.packageName)
         }
         return mode == AppOpsManager.MODE_ALLOWED
+    }
+
+    /** Null means the foreground application cannot be established reliably. */
+    fun detectGameActive(run: UsageCollectorRun): Boolean? {
+        if (!run.successful) return null
+        val packageName = run.lastForegroundPackage() ?: return null
+        return runCatching {
+            val info = context.packageManager.getApplicationInfo(packageName, 0)
+            info.category == ApplicationInfo.CATEGORY_GAME
+        }.getOrNull()
     }
 
     fun query(fromMillis: Long, toMillis: Long): UsageDiagnosticSnapshot {

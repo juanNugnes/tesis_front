@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.juan.habitos.data.remote.AdultMessagesTest" tests="8" skipped="0" failures="0" errors="0" timestamp="2026-11-16T00:15:28" hostname="DESKTOP-GEBU7OP" time="0.073">
+  <properties/>
+  <testcase name="withdrawal and historical correction cannot resurrect old active version" classname="com.juan.habitos.data.remote.AdultMessagesTest" time="0.018"/>
+  <testcase name="demo does not request backend and real mode returns only backend content" classname="com.juan.habitos.data.remote.AdultMessagesTest" time="0.014"/>
+  <testcase name="request uses adult credential and exact selected profile" classname="com.juan.habitos.data.remote.AdultMessagesTest" time="0.01"/>
+  <testcase name="device authorization is rejected before making request" classname="com.juan.habitos.data.remote.AdultMessagesTest" time="0.001"/>
+  <testcase name="official fixture preserves text statistics identity and versions" classname="com.juan.habitos.data.remote.AdultMessagesTest" time="0.005"/>
+  <testcase name="foreign profile and duplicate versions are rejected" classname="com.juan.habitos.data.remote.AdultMessagesTest" time="0.012"/>
+  <testcase name="empty single multiple and unordered versions select one latest per identity" classname="com.juan.habitos.data.remote.AdultMessagesTest" time="0.005"/>
+  <testcase name="http and network failures stay errors and 401 clears adult session" classname="com.juan.habitos.data.remote.AdultMessagesTest" time="0.008"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

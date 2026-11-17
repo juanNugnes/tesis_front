@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.juan.habitos.data.device.LastNightActivityCalculatorTest" tests="6" skipped="0" failures="0" errors="0" timestamp="2026-11-16T00:15:27" hostname="DESKTOP-GEBU7OP" time="0.009">
+  <properties/>
+  <testcase name="no observed application closure is unavailable" classname="com.juan.habitos.data.device.LastNightActivityCalculatorTest" time="0.002"/>
+  <testcase name="application switch remains incomplete while newer application is open" classname="com.juan.habitos.data.device.LastNightActivityCalculatorTest" time="0.001"/>
+  <testcase name="open session never substitutes capture or interval end for observed activity" classname="com.juan.habitos.data.device.LastNightActivityCalculatorTest" time="0.001"/>
+  <testcase name="latest observed pause is a measured nighttime activity closure" classname="com.juan.habitos.data.device.LastNightActivityCalculatorTest" time="0.002"/>
+  <testcase name="application opened before bedtime can close inside the night window" classname="com.juan.habitos.data.device.LastNightActivityCalculatorTest" time="0.001"/>
+  <testcase name="pause after midnight is valid without inventing the missing resume" classname="com.juan.habitos.data.device.LastNightActivityCalculatorTest" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

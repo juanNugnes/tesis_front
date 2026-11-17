@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.juan.habitos.data.device.HistoricalUsageDiagnosticsTest" tests="8" skipped="0" failures="0" errors="0" timestamp="2026-11-16T00:15:26" hostname="DESKTOP-GEBU7OP" time="0.064">
+  <properties/>
+  <testcase name="daily bounds use local midnight and next midnight across DST" classname="com.juan.habitos.data.device.HistoricalUsageDiagnosticsTest" time="0.008"/>
+  <testcase name="previous state keeps real event and references its complete successful run" classname="com.juan.habitos.data.device.HistoricalUsageDiagnosticsTest" time="0.021"/>
+  <testcase name="overlapping queries retain duplicate event with distinct run identity" classname="com.juan.habitos.data.device.HistoricalUsageDiagnosticsTest" time="0.006"/>
+  <testcase name="permission null exception and successful empty query are different outcomes" classname="com.juan.habitos.data.device.HistoricalUsageDiagnosticsTest" time="0.002"/>
+  <testcase name="known and unknown event type names remain readable without dropping code" classname="com.juan.habitos.data.device.HistoricalUsageDiagnosticsTest" time="0.011"/>
+  <testcase name="all events are exported and original ordinal survives timestamp sort" classname="com.juan.habitos.data.device.HistoricalUsageDiagnosticsTest" time="0.001"/>
+  <testcase name="collector run generates unique id and preserves range collection and device context" classname="com.juan.habitos.data.device.HistoricalUsageDiagnosticsTest" time="0.001"/>
+  <testcase name="json keeps required fields nullability and no premature observation id" classname="com.juan.habitos.data.device.HistoricalUsageDiagnosticsTest" time="0.014"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

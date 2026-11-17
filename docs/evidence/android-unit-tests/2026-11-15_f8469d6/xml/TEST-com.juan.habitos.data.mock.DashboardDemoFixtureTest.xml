@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.juan.habitos.data.mock.DashboardDemoFixtureTest" tests="5" skipped="0" failures="0" errors="0" timestamp="2026-11-16T00:15:28" hostname="DESKTOP-GEBU7OP" time="0.026">
+  <properties/>
+  <testcase name="today summary applications and rest data share one consistent source" classname="com.juan.habitos.data.mock.DashboardDemoFixtureTest" time="0.007"/>
+  <testcase name="week and analysis values are derived from the simulated history" classname="com.juan.habitos.data.mock.DashboardDemoFixtureTest" time="0.007"/>
+  <testcase name="fixture contains four consistent weeks and only matches Santiago age eight" classname="com.juan.habitos.data.mock.DashboardDemoFixtureTest" time="0.001"/>
+  <testcase name="dashboard demo flag is debug only and disabled unless explicitly requested" classname="com.juan.habitos.data.mock.DashboardDemoFixtureTest" time="0.001"/>
+  <testcase name="local accompaniment message derives its metrics from the fixture" classname="com.juan.habitos.data.mock.DashboardDemoFixtureTest" time="0.01"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

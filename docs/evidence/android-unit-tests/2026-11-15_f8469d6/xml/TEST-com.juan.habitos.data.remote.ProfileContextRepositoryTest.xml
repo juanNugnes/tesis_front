@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.juan.habitos.data.remote.ProfileContextRepositoryTest" tests="10" skipped="0" failures="0" errors="0" timestamp="2026-11-16T00:15:29" hostname="DESKTOP-GEBU7OP" time="0.069">
+  <properties/>
+  <testcase name="update uses context id and replaces only matching cached item after success" classname="com.juan.habitos.data.remote.ProfileContextRepositoryTest" time="0.017"/>
+  <testcase name="refresh error preserves cache" classname="com.juan.habitos.data.remote.ProfileContextRepositoryTest" time="0.008"/>
+  <testcase name="all context types map explicitly in both directions" classname="com.juan.habitos.data.remote.ProfileContextRepositoryTest" time="0.001"/>
+  <testcase name="mapper preserves nullable fields and ISO single day and date ranges" classname="com.juan.habitos.data.remote.ProfileContextRepositoryTest" time="0.001"/>
+  <testcase name="active endpoint uses persisted profile id without local recalculation" classname="com.juan.habitos.data.remote.ProfileContextRepositoryTest" time="0.008"/>
+  <testcase name="create sends request and caches response only after success" classname="com.juan.habitos.data.remote.ProfileContextRepositoryTest" time="0.009"/>
+  <testcase name="missing profile id and demo mode never call api" classname="com.juan.habitos.data.remote.ProfileContextRepositoryTest" time="0.007"/>
+  <testcase name="delete uses both ids and removes cache only after success" classname="com.juan.habitos.data.remote.ProfileContextRepositoryTest" time="0.008"/>
+  <testcase name="context rejects Device principal before making a request" classname="com.juan.habitos.data.remote.ProfileContextRepositoryTest" time="0.004"/>
+  <testcase name="refresh with profile id calls api and replaces cache" classname="com.juan.habitos.data.remote.ProfileContextRepositoryTest" time="0.005"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.juan.habitos.data.remote.ProfileRepositoryTest" tests="15" skipped="0" failures="0" errors="0" timestamp="2026-11-16T00:15:29" hostname="DESKTOP-GEBU7OP" time="0.091">
+  <properties/>
+  <testcase name="profile detail deserializes backend field names and seconds" classname="com.juan.habitos.data.remote.ProfileRepositoryTest" time="0.004"/>
+  <testcase name="domain maps name avatar and selected schedules to create contract" classname="com.juan.habitos.data.remote.ProfileRepositoryTest" time="0.005"/>
+  <testcase name="update sends profile fields and replaces the local cache" classname="com.juan.habitos.data.remote.ProfileRepositoryTest" time="0.01"/>
+  <testcase name="basic profile update preserves id active schedules and legacy fields" classname="com.juan.habitos.data.remote.ProfileRepositoryTest" time="0.007"/>
+  <testcase name="refresh settings uses stored profile id normalizes seconds and updates cache" classname="com.juan.habitos.data.remote.ProfileRepositoryTest" time="0.007"/>
+  <testcase name="failed basic profile update preserves previous cache" classname="com.juan.habitos.data.remote.ProfileRepositoryTest" time="0.005"/>
+  <testcase name="create mapper never fabricates missing sleep end" classname="com.juan.habitos.data.remote.ProfileRepositoryTest" time="0.0"/>
+  <testcase name="update settings sends all exact fields and saves normalized response" classname="com.juan.habitos.data.remote.ProfileRepositoryTest" time="0.007"/>
+  <testcase name="create stores the remote response including id" classname="com.juan.habitos.data.remote.ProfileRepositoryTest" time="0.007"/>
+  <testcase name="settings without remote id stay local and never call api" classname="com.juan.habitos.data.remote.ProfileRepositoryTest" time="0.005"/>
+  <testcase name="adult profile and settings GET and PUT use only Adult bearer" classname="com.juan.habitos.data.remote.ProfileRepositoryTest" time="0.01"/>
+  <testcase name="basic profile update without remote id falls back to local cache" classname="com.juan.habitos.data.remote.ProfileRepositoryTest" time="0.005"/>
+  <testcase name="failed settings requests preserve previous cache" classname="com.juan.habitos.data.remote.ProfileRepositoryTest" time="0.005"/>
+  <testcase name="refresh uses stored id and replaces the local cache" classname="com.juan.habitos.data.remote.ProfileRepositoryTest" time="0.007"/>
+  <testcase name="remote failure never deletes the cached profile" classname="com.juan.habitos.data.remote.ProfileRepositoryTest" time="0.005"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

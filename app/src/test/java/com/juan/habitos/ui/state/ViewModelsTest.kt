@@ -104,6 +104,17 @@ private class TestActivitySuggestions(
         return selectionCountValue
     }
 }
+private class TestAutomaticOffers(initial: PendingAutomaticOffer?) : AutomaticOfferRepository {
+    override val pendingOffer = MutableStateFlow(initial)
+    var delivered = 0
+    val selections = mutableListOf<ActivitySelection>()
+    override fun refreshPendingOffer() = Unit
+    override suspend fun confirmDelivered(channel: String) { delivered++ }
+    override suspend fun registerSelection(selection: ActivitySelection) {
+        selections += selection
+        pendingOffer.value = null
+    }
+}
 private class TestPreferencesRepo(initial: ChildPreferences = ChildPreferences()) : ChildPreferencesRepository {
     override val preferences = MutableStateFlow(initial)
     var refreshedPreferences: ChildPreferences? = null
@@ -819,4 +830,45 @@ class ViewModelsTest {
     @Test fun `remote settings refresh failure keeps cached schedule`() = runTest(dispatcher) { val initial = Profile("Sofía", "🦋", 8, schoolStart = "08:00", schoolEnd = "12:30", sleepStart = "22:00", sleepEnd = "07:00", id = "profile-123"); val repo = TestProfileRepo().apply { profile.value = initial; settingsFailure = java.io.IOException("offline") }; val vm = ProfileScheduleViewModel(repo, demoMode = false); advanceUntilIdle(); assertEquals(initial, repo.profile.value); assertEquals("08:00", vm.state.value.profile?.schoolStart); assertNotNull(vm.state.value.errorMessage) }
     @Test fun `missing or rejected device JWT exposes relink state without deleting cache`() = runTest(dispatcher) { val initial = Profile("Sofía", "🦋", 8, schoolStart = "08:00", schoolEnd = "12:30", sleepStart = "22:00", sleepEnd = "07:00", id = "profile-123"); val repo = TestProfileRepo().apply { profile.value = initial; settingsFailure = DeviceAuthenticationRequiredException() }; val vm = ProfileScheduleViewModel(repo, demoMode = false); advanceUntilIdle(); assertEquals(initial, repo.profile.value); assertTrue(vm.state.value.deviceAuthenticationRequired); assertEquals("Este dispositivo necesita volver a vincularse.", vm.state.value.errorMessage) }
     @Test fun `schedule validation permits cross midnight and rejects equal bounds`() { val initial = Profile("Sofía", "🦋", 8, schoolStart = "08:00", schoolEnd = "12:30", sleepStart = "22:00", sleepEnd = "07:00"); assertTrue(ProfileScheduleUiState(initial).valid); assertFalse(ProfileScheduleUiState(initial.copy(schoolEnd = "08:00")).valid); assertFalse(ProfileScheduleUiState(initial.copy(sleepEnd = "22:00")).valid) }
+    @Test fun `automatic backend offer reuses child activity presentation and confirms overlay only on presentation`() = runTest(dispatcher) {
+        val automatic = TestAutomaticOffers(PendingAutomaticOffer(
+            "profile", "request", "coordinator", "automatic-offer", "overlay",
+            listOf(AutomaticOfferActivity("activity-1", "Respirar", "Respirá lentamente", "CALM")),
+        ))
+        val vm = ChildViewModel(TestProfileRepo(), TestUsage(), TestActivitySuggestions(), automaticOfferRepository = automatic)
+        advanceUntilIdle()
+        val suggested = vm.state.value.activityState as ActivityState.Suggested
+        assertEquals("Respirar", suggested.activity.title)
+        assertTrue(vm.state.value.automaticOffer)
+        assertEquals(0, automatic.delivered)
+        vm.confirmAutomaticOverlayPresented()
+        advanceUntilIdle()
+        assertEquals(1, automatic.delivered)
+    }
+
+    @Test fun `automatic selection uses existing selection model and automatic event repository`() = runTest(dispatcher) {
+        val voluntary = TestActivitySuggestions()
+        val automatic = TestAutomaticOffers(PendingAutomaticOffer(
+            "profile", "request", "coordinator", "automatic-offer", "overlay",
+            listOf(AutomaticOfferActivity("activity-1", "Respirar", null, null)),
+        ))
+        val vm = ChildViewModel(TestProfileRepo(), TestUsage(), voluntary, selectionId = { "selection" }, nowEpochMillis = { 10L }, automaticOfferRepository = automatic)
+        advanceUntilIdle()
+        vm.startActivity()
+        advanceUntilIdle()
+        assertEquals(ActivitySelection("selection", "automatic-offer", "activity-1", 10L), automatic.selections.single())
+        assertTrue(voluntary.selections.isEmpty())
+        assertFalse(vm.state.value.automaticOffer)
+    }
+    @Test fun `automatic offer without backend presentation text remains pending and is not displayed`() = runTest(dispatcher) {
+        val automatic = TestAutomaticOffers(PendingAutomaticOffer(
+            "profile", "request", "coordinator", "automatic-offer", "overlay",
+            listOf(AutomaticOfferActivity("activity-1", null, null, null)),
+        ))
+        val vm = ChildViewModel(TestProfileRepo(), TestUsage(), TestActivitySuggestions(), automaticOfferRepository = automatic)
+        advanceUntilIdle()
+        assertFalse(vm.state.value.automaticOffer)
+        assertEquals(0, automatic.delivered)
+        assertNotNull(automatic.pendingOffer.value)
+    }
 }

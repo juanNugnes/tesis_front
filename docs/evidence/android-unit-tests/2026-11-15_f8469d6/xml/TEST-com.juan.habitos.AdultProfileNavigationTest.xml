@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.juan.habitos.AdultProfileNavigationTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-11-16T00:15:26" hostname="DESKTOP-GEBU7OP" time="0.134">
+  <properties/>
+  <testcase name="profile data action opens edit profile route" classname="com.juan.habitos.AdultProfileNavigationTest" time="0.047"/>
+  <testcase name="return removes child panel and its viewmodels without duplicating profile list" classname="com.juan.habitos.AdultProfileNavigationTest" time="0.083"/>
+  <testcase name="opening a child panel preserves profile list in back stack" classname="com.juan.habitos.AdultProfileNavigationTest" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

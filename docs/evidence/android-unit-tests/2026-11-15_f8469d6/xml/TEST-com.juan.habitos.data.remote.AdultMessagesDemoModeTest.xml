@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.juan.habitos.data.remote.AdultMessagesDemoModeTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-11-16T00:15:28" hostname="DESKTOP-GEBU7OP" time="0.02">
+  <properties/>
+  <testcase name="independent messages flag requires debug and never changes global demo selection" classname="com.juan.habitos.data.remote.AdultMessagesDemoModeTest" time="0.013"/>
+  <testcase name="compiled flag can only be enabled in debug" classname="com.juan.habitos.data.remote.AdultMessagesDemoModeTest" time="0.001"/>
+  <testcase name="real errors never fall back to simulated history" classname="com.juan.habitos.data.remote.AdultMessagesDemoModeTest" time="0.006"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.juan.habitos.data.remote.AdultRepositoriesTest" tests="9" skipped="0" failures="0" errors="0" timestamp="2026-11-16T00:15:28" hostname="DESKTOP-GEBU7OP" time="0.087">
+  <properties/>
+  <testcase name="non demo repository does not accept fixed mock OTP" classname="com.juan.habitos.data.remote.AdultRepositoriesTest" time="0.019"/>
+  <testcase name="revoked link maps 409 and does not reactivate locally" classname="com.juan.habitos.data.remote.AdultRepositoriesTest" time="0.012"/>
+  <testcase name="adult profiles use Adult bearer and empty response stays empty" classname="com.juan.habitos.data.remote.AdultRepositoriesTest" time="0.01"/>
+  <testcase name="adult claim sends only code refreshes profiles and stores selected backend profile" classname="com.juan.habitos.data.remote.AdultRepositoriesTest" time="0.007"/>
+  <testcase name="OTP request and verify use entered values and persist real token" classname="com.juan.habitos.data.remote.AdultRepositoriesTest" time="0.008"/>
+  <testcase name="adult 401 clears only adult token and keeps child identity token and profile" classname="com.juan.habitos.data.remote.AdultRepositoriesTest" time="0.008"/>
+  <testcase name="adult 403 preserves adult token" classname="com.juan.habitos.data.remote.AdultRepositoriesTest" time="0.007"/>
+  <testcase name="adult me uses Adult bearer" classname="com.juan.habitos.data.remote.AdultRepositoriesTest" time="0.008"/>
+  <testcase name="invalid expired or used code maps to one neutral failure" classname="com.juan.habitos.data.remote.AdultRepositoriesTest" time="0.007"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.juan.habitos.ui.state.ChildDashboardDemoTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-11-16T00:15:30" hostname="DESKTOP-GEBU7OP" time="0.031">
+  <properties/>
+  <testcase name="Santiago child presentation reuses the exact adult dashboard totals and applications" classname="com.juan.habitos.ui.state.ChildDashboardDemoTest" time="0.012"/>
+  <testcase name="disabled mode preserves real child behavior for Santiago" classname="com.juan.habitos.ui.state.ChildDashboardDemoTest" time="0.01"/>
+  <testcase name="non matching profile keeps real child usage and applications" classname="com.juan.habitos.ui.state.ChildDashboardDemoTest" time="0.008"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.juan.habitos.ui.adult.MonitoringConsentNoticeTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-11-16T00:15:29" hostname="DESKTOP-GEBU7OP" time="0.008">
+  <properties/>
+  <testcase name="summary covers collection purpose storage and revocation without claiming deletion" classname="com.juan.habitos.ui.adult.MonitoringConsentNoticeTest" time="0.003"/>
+  <testcase name="acceptance explicitly identifies informed authorization" classname="com.juan.habitos.ui.adult.MonitoringConsentNoticeTest" time="0.0"/>
+  <testcase name="expanded information states limits and provides all seven topics without fictional retention periods" classname="com.juan.habitos.ui.adult.MonitoringConsentNoticeTest" time="0.005"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

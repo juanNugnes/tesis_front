@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.juan.habitos.data.remote.ActivityPreferencesRepositoryTest" tests="18" skipped="0" failures="0" errors="0" timestamp="2026-11-16T00:15:28" hostname="DESKTOP-GEBU7OP" time="0.113">
+  <properties/>
+  <testcase name="single running or jumping is rejected without widening semantics" classname="com.juan.habitos.data.remote.ActivityPreferencesRepositoryTest" time="0.007"/>
+  <testcase name="remote notes longer than ui limit are not silently truncated" classname="com.juan.habitos.data.remote.ActivityPreferencesRepositoryTest" time="0.006"/>
+  <testcase name="permanent consideration sends null valid until" classname="com.juan.habitos.data.remote.ActivityPreferencesRepositoryTest" time="0.002"/>
+  <testcase name="request serializes backend snake case contract" classname="com.juan.habitos.data.remote.ActivityPreferencesRepositoryTest" time="0.003"/>
+  <testcase name="multiple considerations including both mobility areas remain independent" classname="com.juan.habitos.data.remote.ActivityPreferencesRepositoryTest" time="0.001"/>
+  <testcase name="update sends full backend payload and stores response" classname="com.juan.habitos.data.remote.ActivityPreferencesRepositoryTest" time="0.03"/>
+  <testcase name="refresh with profile id updates cache and accepts neutral response" classname="com.juan.habitos.data.remote.ActivityPreferencesRepositoryTest" time="0.01"/>
+  <testcase name="all interests use explicit backend names and round trip" classname="com.juan.habitos.data.remote.ActivityPreferencesRepositoryTest" time="0.001"/>
+  <testcase name="omitted question sends answered false and empty considerations" classname="com.juan.habitos.data.remote.ActivityPreferencesRepositoryTest" time="0.0"/>
+  <testcase name="adult preferences GET and PUT use only Adult bearer" classname="com.juan.habitos.data.remote.ActivityPreferencesRepositoryTest" time="0.014"/>
+  <testcase name="restrictions map run jump none and every direct value" classname="com.juan.habitos.data.remote.ActivityPreferencesRepositoryTest" time="0.001"/>
+  <testcase name="failed or incompatible refresh preserves cache" classname="com.juan.habitos.data.remote.ActivityPreferencesRepositoryTest" time="0.013"/>
+  <testcase name="failed update preserves cache and missing profile id stays local" classname="com.juan.habitos.data.remote.ActivityPreferencesRepositoryTest" time="0.007"/>
+  <testcase name="temporary consideration sends its ISO date" classname="com.juan.habitos.data.remote.ActivityPreferencesRepositoryTest" time="0.0"/>
+  <testcase name="bound preferences use selected profile after adult login and never send to a changed profile" classname="com.juan.habitos.data.remote.ActivityPreferencesRepositoryTest" time="0.009"/>
+  <testcase name="explicit none sends answered true and empty considerations" classname="com.juan.habitos.data.remote.ActivityPreferencesRepositoryTest" time="0.001"/>
+  <testcase name="preferences response from another profile is rejected without overwriting local selections" classname="com.juan.habitos.data.remote.ActivityPreferencesRepositoryTest" time="0.006"/>
+  <testcase name="all considerations use explicit backend names and round trip" classname="com.juan.habitos.data.remote.ActivityPreferencesRepositoryTest" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

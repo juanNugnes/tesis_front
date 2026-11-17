@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.juan.habitos.data.remote.UsageRepositoriesTest" tests="13" skipped="0" failures="0" errors="0" timestamp="2026-11-16T00:15:29" hostname="DESKTOP-GEBU7OP" time="0.218">
+  <properties/>
+  <testcase name="FIFO conflicts quarantine only affected snapshots and later entries continue" classname="com.juan.habitos.data.remote.UsageRepositoriesTest" time="0.066"/>
+  <testcase name="pending queue survives coordinator recreation and remains isolated by profile" classname="com.juan.habitos.data.remote.UsageRepositoriesTest" time="0.011"/>
+  <testcase name="adult aggregation keeps latest measured night activity and its source timezone" classname="com.juan.habitos.data.remote.UsageRepositoriesTest" time="0.0"/>
+  <testcase name="prolonged outage fills bounded queue without discarding existing snapshots" classname="com.juan.habitos.data.remote.UsageRepositoriesTest" time="0.075"/>
+  <testcase name="adult reads selected profile and aggregates cumulative days" classname="com.juan.habitos.data.remote.UsageRepositoriesTest" time="0.01"/>
+  <testcase name="401 records expired credential and preserves pending snapshot" classname="com.juan.habitos.data.remote.UsageRepositoriesTest" time="0.006"/>
+  <testcase name="historical response without night activity remains unavailable" classname="com.juan.habitos.data.remote.UsageRepositoriesTest" time="0.001"/>
+  <testcase name="403 pauses retries until a different credential is stored" classname="com.juan.habitos.data.remote.UsageRepositoriesTest" time="0.01"/>
+  <testcase name="retry preserves immutable snapshot id and exact payload" classname="com.juan.habitos.data.remote.UsageRepositoriesTest" time="0.007"/>
+  <testcase name="valid adult monitoring authorization resumes only consent-blocked snapshots without changing payloads" classname="com.juan.habitos.data.remote.UsageRepositoriesTest" time="0.006"/>
+  <testcase name="non uniform backend periods are surfaced as incomplete" classname="com.juan.habitos.data.remote.UsageRepositoriesTest" time="0.0"/>
+  <testcase name="missing permission preserves queue and does not capture or send" classname="com.juan.habitos.data.remote.UsageRepositoriesTest" time="0.006"/>
+  <testcase name="shared coordinator serializes simultaneous UI and worker runs" classname="com.juan.habitos.data.remote.UsageRepositoriesTest" time="0.015"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

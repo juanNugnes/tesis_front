@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.juan.habitos.ui.adult.ParentalScreenTimeSectionTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-11-16T00:15:29" hostname="DESKTOP-GEBU7OP" time="0.005">
+  <properties/>
+  <testcase name="questions and all device scope use approved exact wording" classname="com.juan.habitos.ui.adult.ParentalScreenTimeSectionTest" time="0.0"/>
+  <testcase name="shared form uses approved considerations question and explicit non persistence notice" classname="com.juan.habitos.ui.adult.ParentalScreenTimeSectionTest" time="0.0"/>
+  <testcase name="original ordinal labels preserve category gaps and optional unavailable response" classname="com.juan.habitos.ui.adult.ParentalScreenTimeSectionTest" time="0.004"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

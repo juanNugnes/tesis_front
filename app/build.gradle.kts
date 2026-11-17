@@ -31,12 +31,20 @@ android {
             buildConfigField("boolean", "ADULT_MESSAGES_DEMO_MODE", providers.gradleProperty("adultMessagesDemoMode").orNull?.toBooleanStrictOrNull()?.toString() ?: "false")
             buildConfigField("boolean", "AUTOMATIC_ACTIVITIES_DEMO_MODE", providers.gradleProperty("automaticActivitiesDemoMode").orNull?.toBooleanStrictOrNull()?.toString() ?: "false")
             buildConfigField("boolean", "ALERTS_DEMO_MODE", providers.gradleProperty("alertsDemoMode").orNull?.toBooleanStrictOrNull()?.toString() ?: "false")
+            buildConfigField("boolean", "DASHBOARD_DEMO_MODE", providers.gradleProperty("dashboardDemoMode").orNull?.toBooleanStrictOrNull()?.toString() ?: "false")
+            buildConfigField("boolean", "F12_HISTORICAL_SUBMISSIONS_ENABLED", providers.gradleProperty("f12HistoricalSubmissionsEnabled").orNull?.toBooleanStrictOrNull()?.toString() ?: "false")
+            buildConfigField("boolean", "EXPERIMENTAL_PMUM_ENABLED", providers.gradleProperty("experimentalPmumEnabled").orNull?.toBooleanStrictOrNull()?.toString() ?: "false")
+            buildConfigField("boolean", "AUTOMATIC_OFFER_OPPORTUNITIES_ENABLED", providers.gradleProperty("automaticOfferOpportunitiesEnabled").orNull?.toBooleanStrictOrNull()?.toString() ?: "false")
         }
         release {
             buildConfigField("boolean", "DEMO_MODE", "false")
             buildConfigField("boolean", "ADULT_MESSAGES_DEMO_MODE", "false")
             buildConfigField("boolean", "AUTOMATIC_ACTIVITIES_DEMO_MODE", "false")
             buildConfigField("boolean", "ALERTS_DEMO_MODE", "false")
+            buildConfigField("boolean", "DASHBOARD_DEMO_MODE", "false")
+            buildConfigField("boolean", "F12_HISTORICAL_SUBMISSIONS_ENABLED", "false")
+            buildConfigField("boolean", "EXPERIMENTAL_PMUM_ENABLED", "false")
+            buildConfigField("boolean", "AUTOMATIC_OFFER_OPPORTUNITIES_ENABLED", "false")
         }
     }
     buildFeatures { compose = true; buildConfig = true }
@@ -126,4 +134,5 @@ dependencies {
     implementation("com.squareup.retrofit2:converter-gson:2.11.0")
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0")
+    testImplementation("com.squareup.okhttp3:mockwebserver:3.14.9")
 }

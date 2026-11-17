@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.juan.habitos.diagnostics.DiagnosticExportSampleTest" tests="4" skipped="0" failures="0" errors="0" timestamp="2026-11-16T00:15:29" hostname="DESKTOP-GEBU7OP" time="0.081">
+  <properties/>
+  <testcase name="both JSON files preserve shared capture evidence original events and full observation" classname="com.juan.habitos.diagnostics.DiagnosticExportSampleTest" time="0.071"/>
+  <testcase name="resolved sample date remains fixed across midnight and DST day is not forced to 24 hours" classname="com.juan.habitos.diagnostics.DiagnosticExportSampleTest" time="0.003"/>
+  <testcase name="yesterday follows device IANA date rather than UTC" classname="com.juan.habitos.diagnostics.DiagnosticExportSampleTest" time="0.001"/>
+  <testcase name="permission failure remains evidence and never becomes observed zero" classname="com.juan.habitos.diagnostics.DiagnosticExportSampleTest" time="0.005"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

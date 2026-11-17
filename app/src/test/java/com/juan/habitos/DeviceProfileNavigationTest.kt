@@ -3,6 +3,8 @@ package com.juan.habitos
 import com.juan.habitos.domain.model.DeviceMode
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class DeviceProfileNavigationTest {
@@ -28,5 +30,13 @@ class DeviceProfileNavigationTest {
         assertEquals(SAME_DEVICE_MONITORING_ROUTE, postAdultAuthenticationDestination(DeviceMode.CHILD))
         assertEquals("adultLink", postAdultAuthenticationDestination(DeviceMode.ADULT))
         assertEquals("adultLink", postAdultAuthenticationDestination(null))
+    }
+
+    @Test fun `experimental PMUM is enabled only for adult mode`() {
+        assertTrue(experimentalPmumEnabledFor(true, DeviceMode.ADULT, adultAuthenticated = true))
+        assertFalse(experimentalPmumEnabledFor(true, DeviceMode.ADULT, adultAuthenticated = false))
+        assertFalse(experimentalPmumEnabledFor(true, DeviceMode.CHILD, adultAuthenticated = true))
+        assertFalse(experimentalPmumEnabledFor(false, DeviceMode.ADULT, adultAuthenticated = true))
+        assertFalse(experimentalPmumEnabledFor(false, DeviceMode.CHILD, adultAuthenticated = false))
     }
 }

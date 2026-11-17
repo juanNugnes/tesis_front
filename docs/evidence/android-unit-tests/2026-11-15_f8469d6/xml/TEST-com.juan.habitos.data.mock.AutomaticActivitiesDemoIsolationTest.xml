@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.juan.habitos.data.mock.AutomaticActivitiesDemoIsolationTest" tests="2" skipped="0" failures="0" errors="0" timestamp="2026-11-16T00:15:27" hostname="DESKTOP-GEBU7OP" time="0.142">
+  <properties/>
+  <testcase name="demo never changes voluntary history count usage preferences or repository calls" classname="com.juan.habitos.data.mock.AutomaticActivitiesDemoIsolationTest" time="0.134"/>
+  <testcase name="voluntary network failure remains visible and demo never becomes its fallback" classname="com.juan.habitos.data.mock.AutomaticActivitiesDemoIsolationTest" time="0.008"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

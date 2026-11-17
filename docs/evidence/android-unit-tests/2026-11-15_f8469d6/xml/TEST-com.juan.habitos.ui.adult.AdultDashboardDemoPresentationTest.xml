@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.juan.habitos.ui.adult.AdultDashboardDemoPresentationTest" tests="2" skipped="0" failures="0" errors="0" timestamp="2026-11-16T00:15:29" hostname="DESKTOP-GEBU7OP" time="0.015">
+  <properties/>
+  <testcase name="dashboard local message uses explicit fictitious label" classname="com.juan.habitos.ui.adult.AdultDashboardDemoPresentationTest" time="0.014"/>
+  <testcase name="real messages have no demo label" classname="com.juan.habitos.ui.adult.AdultDashboardDemoPresentationTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

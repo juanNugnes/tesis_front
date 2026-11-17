@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.juan.habitos.ui.state.DeviceProfileLinkViewModelTest" tests="5" skipped="0" failures="0" errors="0" timestamp="2026-11-16T00:15:30" hostname="DESKTOP-GEBU7OP" time="0.041">
+  <properties/>
+  <testcase name="only exactly six digits enable claim" classname="com.juan.habitos.ui.state.DeviceProfileLinkViewModelTest" time="0.005"/>
+  <testcase name="410 shows invalid or expired message" classname="com.juan.habitos.ui.state.DeviceProfileLinkViewModelTest" time="0.008"/>
+  <testcase name="409 shows controlled conflict message" classname="com.juan.habitos.ui.state.DeviceProfileLinkViewModelTest" time="0.007"/>
+  <testcase name="successful claim refreshes profile data blocks double submit and navigates once" classname="com.juan.habitos.ui.state.DeviceProfileLinkViewModelTest" time="0.012"/>
+  <testcase name="activity preferences refresh failure never invalidates successful claim" classname="com.juan.habitos.ui.state.DeviceProfileLinkViewModelTest" time="0.007"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

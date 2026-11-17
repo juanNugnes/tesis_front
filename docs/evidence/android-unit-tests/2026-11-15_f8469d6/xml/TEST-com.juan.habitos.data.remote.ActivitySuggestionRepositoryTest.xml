@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.juan.habitos.data.remote.ActivitySuggestionRepositoryTest" tests="10" skipped="0" failures="0" errors="0" timestamp="2026-11-16T00:15:28" hostname="DESKTOP-GEBU7OP" time="0.208">
+  <properties/>
+  <testcase name="multiline instructions survive JSON decoding and DTO mapping without trimming or truncation" classname="com.juan.habitos.data.remote.ActivitySuggestionRepositoryTest" time="0.053"/>
+  <testcase name="response with one activity remains selectable" classname="com.juan.habitos.data.remote.ActivitySuggestionRepositoryTest" time="0.007"/>
+  <testcase name="selection count uses current profile Device bearer and exact day bounds" classname="com.juan.habitos.data.remote.ActivitySuggestionRepositoryTest" time="0.008"/>
+  <testcase name="empty response stays empty without fallback" classname="com.juan.habitos.data.remote.ActivitySuggestionRepositoryTest" time="0.007"/>
+  <testcase name="HTTP error is propagated instead of returning hardcoded activities" classname="com.juan.habitos.data.remote.ActivitySuggestionRepositoryTest" time="0.094"/>
+  <testcase name="current and historical IDs are preserved on suggestions and selection without aliases" classname="com.juan.habitos.data.remote.ActivitySuggestionRepositoryTest" time="0.01"/>
+  <testcase name="selection uses current profile Device bearer and exact payload" classname="com.juan.habitos.data.remote.ActivitySuggestionRepositoryTest" time="0.006"/>
+  <testcase name="selection count HTTP error is propagated" classname="com.juan.habitos.data.remote.ActivitySuggestionRepositoryTest" time="0.007"/>
+  <testcase name="response with activities uses current profile Device bearer voluntary context and keeps at most three" classname="com.juan.habitos.data.remote.ActivitySuggestionRepositoryTest" time="0.006"/>
+  <testcase name="response reason is preserved for UI mapping" classname="com.juan.habitos.data.remote.ActivitySuggestionRepositoryTest" time="0.008"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

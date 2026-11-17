@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.juan.habitos.ui.child.ActivityInstructionsPresentationTest" tests="21" skipped="0" failures="0" errors="0" timestamp="2026-11-16T00:15:29" hostname="DESKTOP-GEBU7OP" time="0.059">
+  <properties/>
+  <testcase name="qualified materials statements are not summarized as requiring nothing" classname="com.juan.habitos.ui.child.ActivityInstructionsPresentationTest" time="0.021"/>
+  <testcase name="multiline steps preserve CRLF paragraphs accents indentation and trailing text" classname="com.juan.habitos.ui.child.ActivityInstructionsPresentationTest" time="0.003"/>
+  <testcase name="analytics needs prefix becomes materials card before immediate numbered steps" classname="com.juan.habitos.ui.child.ActivityInstructionsPresentationTest" time="0.001"/>
+  <testcase name="legacy descriptions and unknown syntax fall back to exact complete text" classname="com.juan.habitos.ui.child.ActivityInstructionsPresentationTest" time="0.003"/>
+  <testcase name="blank separated numbered steps may follow explicit context without a steps header" classname="com.juan.habitos.ui.child.ActivityInstructionsPresentationTest" time="0.002"/>
+  <testcase name="unknown and retired activities use neutral visual instead of category inference" classname="com.juan.habitos.ui.child.ActivityInstructionsPresentationTest" time="0.0"/>
+  <testcase name="numbers inside text years and decimals are not step boundaries" classname="com.juan.habitos.ui.child.ActivityInstructionsPresentationTest" time="0.0"/>
+  <testcase name="more than three steps with mixed explicit markers are supported" classname="com.juan.habitos.ui.child.ActivityInstructionsPresentationTest" time="0.005"/>
+  <testcase name="professional activities with three or four steps keep every complete instruction" classname="com.juan.habitos.ui.child.ActivityInstructionsPresentationTest" time="0.006"/>
+  <testcase name="steps without materials do not fabricate a materials block" classname="com.juan.habitos.ui.child.ActivityInstructionsPresentationTest" time="0.0"/>
+  <testcase name="professional catalog maps all sixteen activity ids to specific visuals" classname="com.juan.habitos.ui.child.ActivityInstructionsPresentationTest" time="0.001"/>
+  <testcase name="all supported context headings keep their own identity" classname="com.juan.habitos.ui.child.ActivityInstructionsPresentationTest" time="0.002"/>
+  <testcase name="explicitly no materials uses requested label without losing original evidence" classname="com.juan.habitos.ui.child.ActivityInstructionsPresentationTest" time="0.001"/>
+  <testcase name="ambiguous material lists missing bodies gaps and duplicate numbering fall back intact" classname="com.juan.habitos.ui.child.ActivityInstructionsPresentationTest" time="0.002"/>
+  <testcase name="other person remains participants not physical materials" classname="com.juan.habitos.ui.child.ActivityInstructionsPresentationTest" time="0.001"/>
+  <testcase name="numbered materials list is not misclassified as activity steps" classname="com.juan.habitos.ui.child.ActivityInstructionsPresentationTest" time="0.0"/>
+  <testcase name="materials and three steps become separate blocks" classname="com.juan.habitos.ui.child.ActivityInstructionsPresentationTest" time="0.0"/>
+  <testcase name="step navigation advances retreats clamps at boundaries and reports progress" classname="com.juan.habitos.ui.child.ActivityInstructionsPresentationTest" time="0.003"/>
+  <testcase name="analytics no materials sentence stays complete in materials card" classname="com.juan.habitos.ui.child.ActivityInstructionsPresentationTest" time="0.0"/>
+  <testcase name="changing activity resets visual progress without touching activity content" classname="com.juan.habitos.ui.child.ActivityInstructionsPresentationTest" time="0.001"/>
+  <testcase name="running message is shown only for running and never changes the activity" classname="com.juan.habitos.ui.child.ActivityInstructionsPresentationTest" time="0.003"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

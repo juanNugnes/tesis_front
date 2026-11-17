@@ -4,6 +4,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.juan.habitos.domain.model.*
 import com.juan.habitos.domain.repository.*
+import com.juan.habitos.data.mock.AdultDashboardDemoFixture
+import com.juan.habitos.data.mock.dashboardDemoFixture
 import com.juan.habitos.ui.components.resolveApplicationDisplayName
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
@@ -461,11 +463,14 @@ data class ChildHomeUiState(
     val periodUsage: List<DayPeriodUsageUiModel> = emptyList(),
     val apps: List<AppUsage>? = null,
     val applicationsStatus: UsageMetricStatus = UsageMetricStatus.UNAVAILABLE,
+    val dashboardDemoActive: Boolean = false,
     val activityState: ActivityState = ActivityState.Loading,
     val chosenActivities: Int? = null,
     val selectionRegistrationFailed: Boolean = false,
     val showCompletionCelebration: Boolean = false,
     val completionCelebrationId: Long = 0,
+    val automaticOffer: Boolean = false,
+    val automaticOfferChannel: String? = null,
 )
 internal const val COMPLETION_CELEBRATION_MILLIS = 2_600L
 class ChildViewModel(
@@ -476,6 +481,8 @@ class ChildViewModel(
     private val nowEpochMillis: () -> Long = System::currentTimeMillis,
     private val currentDate: () -> LocalDate = LocalDate::now,
     private val zoneId: () -> ZoneId = ZoneId::systemDefault,
+    private val dashboardDemo: Boolean = false,
+    private val automaticOfferRepository: AutomaticOfferRepository? = null,
 ) : ViewModel() {
     private val _state = MutableStateFlow(ChildHomeUiState()); val state = _state.asStateFlow()
     private var suggestedActivities: List<SuggestedActivityUiModel> = emptyList()
@@ -484,16 +491,64 @@ class ChildViewModel(
     private var selectionRegistrationInFlight = false
     private var selectionCountRequestId = 0
     private var completionCelebrationJob: Job? = null
+    private var latestRealUsageOverview: UsageOverview? = null
+    private var automaticOfferId: String? = null
     init {
-        viewModelScope.launch { profileRepo.profile.filterNotNull().collect { profile -> _state.update { it.copy(profile = profile) } } }
+        viewModelScope.launch {
+            profileRepo.profile.filterNotNull().collect { profile ->
+                _state.update { it.copy(profile = profile) }
+                applyUsagePresentation()
+            }
+        }
         viewModelScope.launch {
             runCatching { usageRepo.overview() }.onSuccess { overview ->
-                _state.update { it.copy(usage = overview.usage, apps = overview.applications, applicationsStatus = overview.applicationsStatus) }
+                latestRealUsageOverview = overview
+                applyUsagePresentation()
             }.onFailure {
-                _state.update { state -> state.copy(usage = DailyUsage(null, null, null, informationMessage = "No pudimos obtener las métricas del dispositivo."), apps = null) }
+                latestRealUsageOverview = UsageOverview(
+                    usage = DailyUsage(null, null, null, informationMessage = "No pudimos obtener las métricas del dispositivo."),
+                    applications = null,
+                    applicationsStatus = UsageMetricStatus.UNAVAILABLE,
+                    recordCount = 0,
+                )
+                applyUsagePresentation()
             }
         }
         loadActivitySuggestions()
+        automaticOfferRepository?.let { repository ->
+            viewModelScope.launch {
+                repository.pendingOffer.collect { offer ->
+                    if (offer == null) return@collect
+                    val presentable = offer.activities.filter { !it.title.isNullOrBlank() }.map {
+                        SuggestedActivityUiModel(it.id, activityEmoji(it.id), requireNotNull(it.title), it.description.orEmpty(), it.category.orEmpty())
+                    }
+                    if (presentable.isEmpty()) return@collect
+                    automaticOfferId = offer.activityOfferId
+                    currentOfferId = offer.activityOfferId
+                    suggestedActivities = presentable
+                    _state.update { state -> state.copy(
+                        activityState = ActivityState.Suggested(presentable.first()),
+                        automaticOffer = true,
+                        automaticOfferChannel = offer.channel,
+                    ) }
+                }
+            }
+        }
+    }
+
+    private fun applyUsagePresentation() {
+        val dashboardDemoActive = dashboardDemo && dashboardDemoFixture.matches(state.value.profile)
+        val overview = if (dashboardDemoActive) {
+            dashboardDemoFixture.overview(DashboardPeriod.TODAY)
+        } else latestRealUsageOverview
+        _state.update {
+            it.copy(
+                usage = overview?.usage ?: DailyUsage(null, null, null),
+                apps = overview?.applications,
+                applicationsStatus = overview?.applicationsStatus ?: UsageMetricStatus.UNAVAILABLE,
+                dashboardDemoActive = dashboardDemoActive,
+            )
+        }
     }
     fun loadActivitySuggestions() = viewModelScope.launch {
         _state.update { it.copy(activityState = ActivityState.Loading) }
@@ -546,6 +601,12 @@ class ChildViewModel(
         }
         sendPendingSelection()
     }
+    fun confirmAutomaticOverlayPresented() {
+        if (!state.value.automaticOffer || state.value.automaticOfferChannel != "overlay") return
+        viewModelScope.launch {
+            runCatching { automaticOfferRepository?.confirmDelivered("overlay") }
+        }
+    }
     fun finishActivity() {
         val activity = (state.value.activityState as? ActivityState.Running)?.activity ?: return
         val celebrationId = state.value.completionCelebrationId + 1
@@ -574,11 +635,15 @@ class ChildViewModel(
         selectionRegistrationInFlight = true
         viewModelScope.launch {
             try {
-                activitySuggestionRepository.registerSelection(selection)
+                if (state.value.automaticOffer && selection.offerId == automaticOfferId) {
+                    requireNotNull(automaticOfferRepository).registerSelection(selection)
+                } else activitySuggestionRepository.registerSelection(selection)
                 if (pendingSelection == selection) {
                     pendingSelection = null
                     _state.update { it.copy(selectionRegistrationFailed = false) }
                     refreshActivitySelectionCount()
+                    automaticOfferId = null
+                    _state.update { it.copy(automaticOffer = false, automaticOfferChannel = null) }
                 }
             } catch (exception: CancellationException) {
                 throw exception
@@ -661,6 +726,7 @@ data class AdultAppsTabUiState(
 data class NightUsageDayUiModel(val label: String, val minutes: Int)
 data class AdultNightTabUiState(
     val bedtime: String? = null,
+    val restEnd: String? = null,
     val usageAfterBedtimeMinutes: Int? = null,
     val lastActivity: String? = null,
     val activeNightsThisWeek: Int? = null,
@@ -668,7 +734,7 @@ data class AdultNightTabUiState(
     val informationMessage: String? = "Todavía no hay información nocturna.",
 )
 data class AnalysisFactorUiModel(val icon: String, val title: String, val description: String)
-data class BehaviorComparisonUiModel(val label: String, val value: String)
+data class BehaviorComparisonUiModel(val label: String, val value: String, val detail: String? = null)
 data class AdultAttentionTabUiState(
     val factors: List<AnalysisFactorUiModel> = listOf(
         AnalysisFactorUiModel("📈", "Tiempo de uso", "Se observó un aumento respecto de períodos anteriores."),
@@ -690,6 +756,8 @@ data class AdultDashboardUiState(
     val apps: List<AppUsage> = emptyList(),
     val alerts: List<Alert> = emptyList(),
     val alertsDemo: Boolean = false,
+    val dashboardDemoRequested: Boolean = false,
+    val dashboardDemoActive: Boolean = false,
     val appsTab: AdultAppsTabUiState = AdultAppsTabUiState(),
     val nightTab: AdultNightTabUiState = AdultNightTabUiState(),
     val attentionTab: AdultAttentionTabUiState = AdultAttentionTabUiState(),
@@ -701,21 +769,72 @@ internal fun formatLastNightActivity(instant: Instant?, timezone: String?): Stri
     return DateTimeFormatter.ofPattern("HH:mm").format(instant.atZone(zone))
 }
 
+internal fun dashboardDemoAttentionState(
+    fixture: AdultDashboardDemoFixture = dashboardDemoFixture,
+): AdultAttentionTabUiState {
+    val duration = fixture.durationComparison
+    val sessions = fixture.sessionsComparison
+    val rest = fixture.restComparison
+    return AdultAttentionTabUiState(
+        factors = listOf(
+            AnalysisFactorUiModel(
+                "📈", "Duración diaria",
+                "Pasó de ${duration.habitual} a ${duration.recent} min por día: ${duration.difference} min más por día (+${duration.percentage} %).",
+            ),
+            AnalysisFactorUiModel(
+                "📱", "Frecuencia",
+                "Pasó de ${sessions.habitual} a ${sessions.recent} sesiones por día: ${sessions.difference} más por día (+${sessions.percentage} %).",
+            ),
+            AnalysisFactorUiModel(
+                "🌙", "Descanso configurado",
+                "Pasó de ${rest.habitual} a ${rest.recent} min por noche: ${rest.difference} min más por noche (+${rest.percentage} %).",
+            ),
+        ),
+        comparisons = listOf(
+            BehaviorComparisonUiModel(
+                "Duración diaria",
+                "${duration.habitual} → ${duration.recent} min/día",
+                "+${duration.difference} min/día (+${duration.percentage} %)",
+            ),
+            BehaviorComparisonUiModel(
+                "Sesiones",
+                "${sessions.habitual} → ${sessions.recent} por día",
+                "+${sessions.difference} (+${sessions.percentage} %)",
+            ),
+            BehaviorComparisonUiModel(
+                "Uso nocturno",
+                "${rest.habitual} → ${rest.recent} min/noche",
+                "+${rest.difference} min (+${rest.percentage} %)",
+            ),
+        ),
+    )
+}
+
 class AdultViewModel(
     profileRepo: ProfileRepository,
     private val usageRepo: UsageRepository,
     private val alertRepo: AlertRepository,
     alertsDemo: Boolean = false,
+    private val dashboardDemo: Boolean = false,
 ) : ViewModel() {
-    private val _state = MutableStateFlow(AdultDashboardUiState(alertsDemo = alertsDemo)); val state = _state.asStateFlow()
+    private val _state = MutableStateFlow(
+        AdultDashboardUiState(alertsDemo = alertsDemo, dashboardDemoRequested = dashboardDemo),
+    ); val state = _state.asStateFlow()
     private var requestId = 0
     private var observedProfile = false
     init {
         viewModelScope.launch {
             profileRepo.profile.filterNotNull().collect { profile ->
-                val changed = !observedProfile || state.value.profile.id != profile.id
+                val dashboardDemoActive = dashboardDemo && dashboardDemoFixture.matches(profile)
+                val changed = !observedProfile || state.value.profile.id != profile.id ||
+                    state.value.dashboardDemoActive != dashboardDemoActive
                 observedProfile = true
-                _state.update { it.copy(profile = profile) }
+                _state.update {
+                    it.copy(
+                        profile = profile,
+                        dashboardDemoActive = dashboardDemoActive,
+                    )
+                }
                 if (changed) load()
             }
         }
@@ -725,7 +844,8 @@ class AdultViewModel(
         val activeRequest = ++requestId
         val selectedPeriod = state.value.period
         try {
-            val overview = usageRepo.overview(selectedPeriod)
+            val dashboardDemoActive = state.value.dashboardDemoActive
+            val overview = if (dashboardDemoActive) dashboardDemoFixture.overview(selectedPeriod) else usageRepo.overview(selectedPeriod)
             val alerts = alertRepo.alerts()
             if (activeRequest != requestId) return@launch
             val apps = overview.applications.orEmpty()
@@ -752,18 +872,24 @@ class AdultViewModel(
                     ),
                     nightTab = AdultNightTabUiState(
                         bedtime = overview.nightWindowStart,
+                        restEnd = overview.nightWindowEnd.takeIf { dashboardDemoActive },
                         usageAfterBedtimeMinutes = overview.usage.nightUsageMinutes,
-                        lastActivity = formatLastNightActivity(
-                            overview.lastNightActivityAt,
-                            overview.lastNightActivityTimezone,
-                        ).takeIf { overview.usage.metricStatuses.lastNightActivityAt == UsageMetricStatus.MEASURED },
-                        informationMessage = overview.usage.informationMessage
-                            ?: when {
-                                overview.usage.nightUsageMinutes == null -> metricUnavailableMessage(overview.usage.metricStatuses.nightUsageMinutes)
-                                overview.lastNightActivityAt == null -> metricUnavailableMessage(overview.usage.metricStatuses.lastNightActivityAt)
-                                else -> null
-                            },
+                        lastActivity = if (dashboardDemoActive) dashboardDemoFixture.lastActivityLocalTime else {
+                            formatLastNightActivity(
+                                overview.lastNightActivityAt,
+                                overview.lastNightActivityTimezone,
+                            ).takeIf { overview.usage.metricStatuses.lastNightActivityAt == UsageMetricStatus.MEASURED }
+                        },
+                        informationMessage = if (dashboardDemoActive) null else {
+                            overview.usage.informationMessage
+                                ?: when {
+                                    overview.usage.nightUsageMinutes == null -> metricUnavailableMessage(overview.usage.metricStatuses.nightUsageMinutes)
+                                    overview.lastNightActivityAt == null -> metricUnavailableMessage(overview.usage.metricStatuses.lastNightActivityAt)
+                                    else -> null
+                                }
+                        },
                     ),
+                    attentionTab = if (dashboardDemoActive) dashboardDemoAttentionState() else AdultAttentionTabUiState(),
                 )
             }
         } catch (exception: CancellationException) {

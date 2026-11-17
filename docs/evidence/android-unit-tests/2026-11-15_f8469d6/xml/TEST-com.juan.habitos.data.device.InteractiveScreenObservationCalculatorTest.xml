@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.juan.habitos.data.device.InteractiveScreenObservationCalculatorTest" tests="18" skipped="0" failures="0" errors="0" timestamp="2026-11-16T00:15:27" hostname="DESKTOP-GEBU7OP" time="0.058">
+  <properties/>
+  <testcase name="gap between successful queries makes observation incomplete" classname="com.juan.habitos.data.device.InteractiveScreenObservationCalculatorTest" time="0.039"/>
+  <testcase name="failed query does not invalidate another successful run covering same interval" classname="com.juan.habitos.data.device.InteractiveScreenObservationCalculatorTest" time="0.007"/>
+  <testcase name="interval crossing midnight is allocated independently to each day" classname="com.juan.habitos.data.device.InteractiveScreenObservationCalculatorTest" time="0.001"/>
+  <testcase name="interactive interval still open is closed exactly at day end" classname="com.juan.habitos.data.device.InteractiveScreenObservationCalculatorTest" time="0.0"/>
+  <testcase name="overlapping queries use canonical half open segments without double counting" classname="com.juan.habitos.data.device.InteractiveScreenObservationCalculatorTest" time="0.001"/>
+  <testcase name="millis are summed before exact conversion to fractional minutes" classname="com.juan.habitos.data.device.InteractiveScreenObservationCalculatorTest" time="0.001"/>
+  <testcase name="valid empty capture with known non interactive state is observed zero" classname="com.juan.habitos.data.device.InteractiveScreenObservationCalculatorTest" time="0.0"/>
+  <testcase name="successful requested window defines F12 coverage independently of collection time" classname="com.juan.habitos.data.device.InteractiveScreenObservationCalculatorTest" time="0.001"/>
+  <testcase name="unknown initial state is incomplete and never zero" classname="com.juan.habitos.data.device.InteractiveScreenObservationCalculatorTest" time="0.0"/>
+  <testcase name="positive sub minute duration is observed and not observed zero" classname="com.juan.habitos.data.device.InteractiveScreenObservationCalculatorTest" time="0.001"/>
+  <testcase name="event exactly at day end is excluded" classname="com.juan.habitos.data.device.InteractiveScreenObservationCalculatorTest" time="0.0"/>
+  <testcase name="events sharing timestamp remain ordered by query ordinal and are not deduplicated" classname="com.juan.habitos.data.device.InteractiveScreenObservationCalculatorTest" time="0.001"/>
+  <testcase name="non twenty four hour day uses supplied real epoch bounds" classname="com.juan.habitos.data.device.InteractiveScreenObservationCalculatorTest" time="0.001"/>
+  <testcase name="known non interactive initial state sums multiple intervals" classname="com.juan.habitos.data.device.InteractiveScreenObservationCalculatorTest" time="0.0"/>
+  <testcase name="events outside half open day do not affect result" classname="com.juan.habitos.data.device.InteractiveScreenObservationCalculatorTest" time="0.001"/>
+  <testcase name="event exactly at day start is included" classname="com.juan.habitos.data.device.InteractiveScreenObservationCalculatorTest" time="0.0"/>
+  <testcase name="repeated screen states do not create duplicate or fictitious intervals" classname="com.juan.habitos.data.device.InteractiveScreenObservationCalculatorTest" time="0.001"/>
+  <testcase name="known interactive initial state begins interval exactly at day start" classname="com.juan.habitos.data.device.InteractiveScreenObservationCalculatorTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

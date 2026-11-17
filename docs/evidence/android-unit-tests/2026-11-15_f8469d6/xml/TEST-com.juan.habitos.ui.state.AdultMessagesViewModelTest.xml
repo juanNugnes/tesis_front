@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.juan.habitos.ui.state.AdultMessagesViewModelTest" tests="6" skipped="0" failures="0" errors="0" timestamp="2026-11-16T00:15:30" hostname="DESKTOP-GEBU7OP" time="0.139">
+  <properties/>
+  <testcase name="obsolete request cannot replace newly selected profile" classname="com.juan.habitos.ui.state.AdultMessagesViewModelTest" time="0.074"/>
+  <testcase name="service retry policy respects backend detail" classname="com.juan.habitos.ui.state.AdultMessagesViewModelTest" time="0.004"/>
+  <testcase name="authentication and authorization failures provide distinct non retry states" classname="com.juan.habitos.ui.state.AdultMessagesViewModelTest" time="0.011"/>
+  <testcase name="retry loads again and demo status is explicit" classname="com.juan.habitos.ui.state.AdultMessagesViewModelTest" time="0.011"/>
+  <testcase name="profile change clears messages while loading and after failed request" classname="com.juan.habitos.ui.state.AdultMessagesViewModelTest" time="0.022"/>
+  <testcase name="dashboard presentation predicate suppresses remote history without changing authentication" classname="com.juan.habitos.ui.state.AdultMessagesViewModelTest" time="0.016"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

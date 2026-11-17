@@ -50,6 +50,9 @@ internal fun childSetupDestination(linkExistingProfile: Boolean): String =
 internal fun postAdultAuthenticationDestination(mode: DeviceMode?): String =
     if (mode == DeviceMode.CHILD) SAME_DEVICE_MONITORING_ROUTE else "adultLink"
 
+internal fun experimentalPmumEnabledFor(flag: Boolean, mode: DeviceMode, adultAuthenticated: Boolean): Boolean =
+    flag && mode == DeviceMode.ADULT && adultAuthenticated
+
 internal fun adultPanelNavigationOptions() = navOptions { launchSingleTop = true }
 internal fun adultProfileListNavigationOptions() = navOptions {
     popUpTo("adult") { inclusive = true }
@@ -62,6 +65,8 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         if (!BuildConfig.DEMO_MODE) lifecycleScope.launch {
             (application as HabitosApplication).usageWorkController.reconcile()
+            (application as HabitosApplication).f12HistoricalWorkController.reconcile()
+            (application as HabitosApplication).automaticOfferOpportunityWorkController.reconcile()
         }
     }
 }
@@ -125,12 +130,25 @@ private inline fun <reified T : ViewModel> factory(crossinline create: () -> T) 
         composable("preferencesIntro") { val profile by app.profileRepository.profile.collectAsStateWithLifecycle(initialValue = null); PreferencesOnboardingIntro(profile?.name.orEmpty(), { nav.navigate("preferencesOnboarding") }, { scope.launch { app.profileRepository.completeOnboarding(); nav.navigate("child") { popUpTo("profile") { inclusive = true } } } }) }
         composable("preferencesOnboarding") { val vm: ChildPreferencesViewModel = viewModel(factory = factory { ChildPreferencesViewModel(app.childPreferencesRepository, app.profileRepository, BuildConfig.DEMO_MODE) }); val state by vm.state.collectAsStateWithLifecycle(); ChildPreferencesScreen(state, vm::toggleInterest, vm::omitConsiderations, vm::selectNoConsiderations, vm::toggleConsideration, vm::considerationDuration, vm::considerationValidUntil, vm::toggleRestriction, vm::notes, { vm.save { scope.launch { app.profileRepository.completeOnboarding(); nav.navigate("child") { popUpTo("profile") { inclusive = true } } } } }, { nav.popBackStack() }, onSimulatedScreenHabits = vm::simulateScreenHabits) }
         composable("child") { entry ->
-            val vm: ChildViewModel = viewModel(factory = factory { ChildViewModel(app.profileRepository, app.usageRepository, app.activitySuggestionRepository) })
+            val vm: ChildViewModel = viewModel(factory = factory {
+                ChildViewModel(
+                    app.profileRepository,
+                    app.usageRepository,
+                    app.activitySuggestionRepository,
+                    dashboardDemo = app.dashboardDemoEnabled,
+                    automaticOfferRepository = if (BuildConfig.AUTOMATIC_OFFER_OPPORTUNITIES_ENABLED) app.automaticOfferRepository else null,
+                )
+            })
             val state by vm.state.collectAsStateWithLifecycle()
             val preferencesUpdated by entry.savedStateHandle.getStateFlow(PREFERENCES_UPDATED_KEY, false).collectAsStateWithLifecycle()
             LaunchedEffect(Unit) { vm.refreshActivitySelectionCount() }
             LaunchedEffect(preferencesUpdated) {
                 if (preferencesUpdated) { entry.savedStateHandle[PREFERENCES_UPDATED_KEY] = false; vm.onPreferencesUpdated() }
+            }
+            LaunchedEffect(state.automaticOffer, state.automaticOfferChannel, state.activityState) {
+                if (state.automaticOffer && state.automaticOfferChannel == "overlay" && state.activityState is ActivityState.Suggested) {
+                    vm.confirmAutomaticOverlayPresented()
+                }
             }
             // Read the actual selected profile, not ChildHomeUiState's initial placeholder.
             val demoProfile = if (app.automaticActivitiesDemoEnabled) {
@@ -155,17 +173,46 @@ private inline fun <reified T : ViewModel> factory(crossinline create: () -> T) 
             val mode = session.mode ?: return@composable
             val profileRepository = if (mode == DeviceMode.ADULT) app.adultProfileRepository else app.profileRepository
             val usageRepository = if (mode == DeviceMode.ADULT) app.adultUsageRepository else app.usageRepository
-            val vm: AdultViewModel = viewModel(key = "adult-dashboard-$mode", factory = factory { AdultViewModel(profileRepository, usageRepository, app.alertRepository, app.alertsDemoEnabled) })
+            val vm: AdultViewModel = viewModel(key = "adult-dashboard-$mode", factory = factory {
+                AdultViewModel(
+                    profileRepository,
+                    usageRepository,
+                    app.alertRepository,
+                    alertsDemo = app.alertsDemoEnabled,
+                    dashboardDemo = app.dashboardDemoEnabled,
+                )
+            })
             val state by vm.state.collectAsStateWithLifecycle()
-            val messagesVm: AdultMessagesViewModel = viewModel(key = "adult-messages-$mode", factory = factory { AdultMessagesViewModel(profileRepository, app.adultMessagesRepository, BuildConfig.DEMO_MODE || app.adultMessagesDemoEnabled) })
-            val messages by messagesVm.state.collectAsStateWithLifecycle()
             val selectedProfile by profileRepository.profile.collectAsStateWithLifecycle(initialValue = null)
-            val visibleMessages = if (messages.profileId == selectedProfile?.id) messages else AdultMessagesUiState(
-                profileId = selectedProfile?.id, loading = selectedProfile?.id != null, demo = BuildConfig.DEMO_MODE || app.adultMessagesDemoEnabled,
-            )
+            val dashboardMessagesDemoActive = app.dashboardDemoActiveFor(selectedProfile)
+            var messagesVm: AdultMessagesViewModel? = null
+            val visibleMessages = when {
+                dashboardMessagesDemoActive -> dashboardDemoMessagesState(requireNotNull(selectedProfile))
+                selectedProfile == null -> AdultMessagesUiState()
+                else -> {
+                    val remoteMessagesVm: AdultMessagesViewModel = viewModel(
+                        key = "adult-messages-$mode",
+                        factory = factory {
+                            AdultMessagesViewModel(
+                                profileRepository,
+                                app.adultMessagesRepository,
+                                BuildConfig.DEMO_MODE || app.adultMessagesDemoEnabled,
+                                suppressRemoteForProfile = app::dashboardDemoActiveFor,
+                            )
+                        },
+                    )
+                    messagesVm = remoteMessagesVm
+                    val messages by remoteMessagesVm.state.collectAsStateWithLifecycle()
+                    if (messages.profileId == selectedProfile?.id) messages else AdultMessagesUiState(
+                        profileId = selectedProfile?.id,
+                        loading = true,
+                        demo = BuildConfig.DEMO_MODE || app.adultMessagesDemoEnabled,
+                    )
+                }
+            }
             val returnToProfiles = { nav.navigate("adultLink", adultProfileListNavigationOptions()) }
             BackHandler(enabled = mode == DeviceMode.ADULT, onBack = returnToProfiles)
-            AdultDashboardScreen(state, vm::period, { nav.navigate("adultProfile") }, visibleMessages, messagesVm::retry, { nav.navigate("adultAuth") }) {
+            AdultDashboardScreen(state, vm::period, { nav.navigate("adultProfile") }, visibleMessages, { messagesVm?.retry() }, { nav.navigate("adultAuth") }) {
                 if (mode == DeviceMode.CHILD) nav.navigate("child") { popUpTo("child") { inclusive = true } }
                 else returnToProfiles()
             }
@@ -229,8 +276,38 @@ private inline fun <reified T : ViewModel> factory(crossinline create: () -> T) 
             }
             val vm: ChildPreferencesViewModel = viewModel(key = "profile-preferences-$mode-${selectedProfile.id}", factory = factory { ChildPreferencesViewModel(preferencesRepository, profileRepository, BuildConfig.DEMO_MODE) })
             val state by vm.state.collectAsStateWithLifecycle()
-            // Screen habits are a local demonstration in the shared form, not a remote PMUM source.
-            val formVm: PreferencesFormViewModel = viewModel(key = "preferences-form-$mode-${selectedProfile.id}", factory = factory { PreferencesFormViewModel(vm, null) })
+            val pmumEnabled = experimentalPmumEnabledFor(
+                BuildConfig.EXPERIMENTAL_PMUM_ENABLED,
+                mode,
+                session.adultAuthenticated,
+            )
+            val parentalVm: ParentalScreenTimeViewModel? = if (pmumEnabled) {
+                val profileId = requireNotNull(selectedProfile.id)
+                viewModel(
+                    key = "parental-screen-time-$profileId",
+                    factory = factory { ParentalScreenTimeViewModel(app.parentalScreenTimeRepository, profileId, selectedProfile.age) },
+                )
+            } else null
+            val parentalState = if (parentalVm != null) parentalVm.state.collectAsStateWithLifecycle().value else null
+            val automaticSettingsVm: AutomaticOfferSettingsViewModel? = if (
+                BuildConfig.AUTOMATIC_OFFER_OPPORTUNITIES_ENABLED && adultActor && session.adultAuthenticated
+            ) {
+                val profileId = requireNotNull(selectedProfile.id)
+                viewModel(key = "automatic-offer-settings-$profileId", factory = factory {
+                    AutomaticOfferSettingsViewModel(app.automaticOfferSettingsRepository, profileId)
+                })
+            } else null
+            val automaticSettingsState = automaticSettingsVm?.state?.collectAsStateWithLifecycle()?.value
+            LaunchedEffect(automaticSettingsState?.authenticationRequired) {
+                if (automaticSettingsState?.authenticationRequired == true) {
+                    nav.navigate("adultAuth") { launchSingleTop = true }
+                    nav.getBackStackEntry("adultAuth").savedStateHandle[PREFERENCES_REAUTH_ENTRY_KEY] = entry.id
+                }
+            }
+            val formVm: PreferencesFormViewModel = viewModel(
+                key = "preferences-form-$mode-${selectedProfile.id}-$pmumEnabled",
+                factory = factory { PreferencesFormViewModel(vm, parentalVm) },
+            )
             val formState by formVm.state.collectAsStateWithLifecycle()
             val reauthenticated by entry.savedStateHandle.getStateFlow(PREFERENCES_REAUTHENTICATED_KEY, false).collectAsStateWithLifecycle()
             LaunchedEffect(reauthenticated) {
@@ -242,10 +319,18 @@ private inline fun <reified T : ViewModel> factory(crossinline create: () -> T) 
             ChildPreferencesScreen(state, vm::toggleInterest, vm::omitConsiderations, vm::selectNoConsiderations, vm::toggleConsideration, vm::considerationDuration, vm::considerationValidUntil, vm::toggleRestriction, vm::notes,
                 { formVm.save { if (returnToChild) { nav.getBackStackEntry("child").savedStateHandle[PREFERENCES_UPDATED_KEY] = true; nav.popBackStack("child", false) } } },
                 { nav.popBackStack() }, onSimulatedScreenHabits = vm::simulateScreenHabits, formState = formState,
+                parentalScreenTimeState = parentalState,
+                onParentalSex = { parentalVm?.sex(it) },
+                onParentalWeekday = { parentalVm?.weekday(it) },
+                onParentalWeekend = { parentalVm?.weekend(it) },
                 onLogin = {
                     nav.navigate("adultAuth") { launchSingleTop = true }
                     nav.getBackStackEntry("adultAuth").savedStateHandle[PREFERENCES_REAUTH_ENTRY_KEY] = entry.id
                 }, onRetry = formVm::refresh,
+                automaticOfferSettings = automaticSettingsState,
+                onAutomaticOffersEnabled = { automaticSettingsVm?.automaticEnabled(it) },
+                onSharedPhone = { automaticSettingsVm?.sharedPhone(it) },
+                onSaveAutomaticOfferSettings = { automaticSettingsVm?.save() },
             )
         }
         composable("profileContexts") {
@@ -298,7 +383,10 @@ private inline fun <reified T : ViewModel> factory(crossinline create: () -> T) 
                             app.monitoringConsentRepository,
                             profileId,
                             BuildConfig.DEMO_MODE,
-                            app.usageWorkController::resumeAfterMonitoringAuthorization,
+                            { authorizedProfileId ->
+                                app.usageWorkController.resumeAfterMonitoringAuthorization(authorizedProfileId)
+                                app.f12HistoricalWorkController.resumeAfterMonitoringAuthorization(authorizedProfileId)
+                            },
                         )
                     },
                 )

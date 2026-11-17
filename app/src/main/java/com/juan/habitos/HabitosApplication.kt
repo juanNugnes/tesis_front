@@ -5,6 +5,9 @@ import com.juan.habitos.data.local.*
 import com.juan.habitos.data.mock.*
 import com.juan.habitos.data.device.AndroidAggregatedUsageCollector
 import com.juan.habitos.data.device.AndroidDeviceUsageDataSource
+import com.juan.habitos.data.device.AutomaticOfferOpportunityCoordinator
+import com.juan.habitos.data.device.OpenInteractiveIntervalEvaluator
+import com.juan.habitos.data.device.AutomaticOfferNotificationPresenter
 import com.juan.habitos.data.remote.CachedProfileRepository
 import com.juan.habitos.data.remote.CachedChildPreferencesRepository
 import com.juan.habitos.data.remote.CachedProfileContextRepository
@@ -21,8 +24,17 @@ import com.juan.habitos.data.remote.AdultUsageRepository
 import com.juan.habitos.data.remote.DeviceUsageRepository
 import com.juan.habitos.data.remote.ProfileFormDiagnostics
 import com.juan.habitos.data.remote.UsageSyncCoordinator
+import com.juan.habitos.data.remote.F12HistoricalSyncCoordinator
+import com.juan.habitos.data.remote.HistoricalSubmissionRepository
+import com.juan.habitos.data.remote.AutomaticOfferSyncCoordinator
+import com.juan.habitos.data.remote.RemoteAutomaticOfferRepository
+import com.juan.habitos.data.remote.RemoteAutomaticOfferSettingsRepository
 import com.juan.habitos.data.sync.UsageWorkController
 import com.juan.habitos.data.sync.WorkManagerUsageWorkScheduler
+import com.juan.habitos.data.sync.F12HistoricalWorkController
+import com.juan.habitos.data.sync.WorkManagerF12HistoricalScheduler
+import com.juan.habitos.data.sync.AutomaticOfferOpportunityWorkController
+import com.juan.habitos.data.sync.WorkManagerAutomaticOfferOpportunityScheduler
 import com.juan.habitos.domain.model.*
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -65,15 +77,28 @@ class HabitosApplication : Application() {
         if (BuildConfig.DEMO_MODE) PreviewActivitySuggestionRepository()
         else RemoteActivitySuggestionRepository(localProfileStore, habitsApi, deviceRequestAuthorization)
     }
+    val automaticOfferRepository by lazy {
+        RemoteAutomaticOfferRepository(habitsApi, deviceRequestAuthorization, automaticOfferOpportunityStore, activitySuggestionRepository)
+    }
+    private val automaticOfferNotificationPresenter by lazy {
+        AutomaticOfferNotificationPresenter(this, automaticOfferRepository)
+    }
+    val automaticOfferSettingsRepository by lazy {
+        RemoteAutomaticOfferSettingsRepository(habitsApi, adultRequestAuthorization)
+    }
     val deviceSessionRepository by lazy { DataStoreDeviceSessionRepository(this) }
     val deviceRepository by lazy { RemoteDeviceRepository(localDeviceIdentityStore, localProfileStore, habitsApi) }
     val authRepository by lazy { if (BuildConfig.DEMO_MODE) MockAuthRepository() else RemoteAdultAuthRepository(habitsApi, deviceSessionRepository) }
     val linkRepository by lazy { if (BuildConfig.DEMO_MODE) MockLinkRepository(profileRepository, deviceSessionRepository) else RemoteLinkRepository(habitsApi, deviceSessionRepository, localProfileStore) }
     val pinStore by lazy { HashedPinStore(this) }
     private val pendingUsageSnapshotStore by lazy { EncryptedUsageSnapshotStore(this) }
+    private val historicalOutboxStore by lazy { EncryptedHistoricalOutboxStore(this) }
     private val androidUsageDataSource by lazy { AndroidDeviceUsageDataSource(this) }
+    private val automaticOfferOpportunityStore by lazy { SharedPreferencesAutomaticOfferOpportunityStore(this) }
     private val usageCollector by lazy { AndroidAggregatedUsageCollector(androidUsageDataSource) }
     private val usageWorkScheduler by lazy { WorkManagerUsageWorkScheduler(this) }
+    private val f12HistoricalWorkScheduler by lazy { WorkManagerF12HistoricalScheduler(this) }
+    private val automaticOfferOpportunityWorkScheduler by lazy { WorkManagerAutomaticOfferOpportunityScheduler(this) }
     val usageSyncCoordinator by lazy {
         UsageSyncCoordinator(
             localProfileStore,
@@ -96,6 +121,57 @@ class HabitosApplication : Application() {
             usageSyncCoordinator,
         )
     }
+    private val f12HistoricalSyncCoordinator by lazy {
+        F12HistoricalSyncCoordinator(
+            BuildConfig.F12_HISTORICAL_SUBMISSIONS_ENABLED,
+            localProfileStore,
+            localDeviceIdentityStore,
+            com.juan.habitos.data.device.AndroidF12HistoricalRequestCollector(androidUsageDataSource),
+            HistoricalSubmissionRepository(usageApi, deviceRequestAuthorization),
+            historicalOutboxStore,
+        )
+    }
+    val f12HistoricalWorkController by lazy {
+        F12HistoricalWorkController(
+            BuildConfig.F12_HISTORICAL_SUBMISSIONS_ENABLED,
+            deviceSessionRepository,
+            localProfileStore,
+            localDeviceIdentityStore,
+            androidUsageDataSource::hasUsageAccess,
+            f12HistoricalWorkScheduler,
+            f12HistoricalSyncCoordinator,
+        )
+    }
+    private val automaticOfferOpportunityCoordinator by lazy {
+        AutomaticOfferOpportunityCoordinator(
+            BuildConfig.AUTOMATIC_OFFER_OPPORTUNITIES_ENABLED,
+            localProfileStore,
+            localDeviceIdentityStore,
+            OpenInteractiveIntervalEvaluator(androidUsageDataSource, gameStateDetector = androidUsageDataSource::detectGameActive),
+            automaticOfferOpportunityStore,
+        )
+    }
+    private val automaticOfferSyncCoordinator by lazy {
+        AutomaticOfferSyncCoordinator(
+            habitsApi, deviceRequestAuthorization, automaticOfferOpportunityStore,
+            onOfferAvailable = {
+                automaticOfferRepository.refreshPendingOffer()
+                automaticOfferNotificationPresenter.presentIfPossible()
+            },
+        )
+    }
+    val automaticOfferOpportunityWorkController by lazy {
+        AutomaticOfferOpportunityWorkController(
+            BuildConfig.AUTOMATIC_OFFER_OPPORTUNITIES_ENABLED,
+            deviceSessionRepository,
+            localProfileStore,
+            localDeviceIdentityStore,
+            androidUsageDataSource::hasUsageAccess,
+            automaticOfferOpportunityWorkScheduler,
+            automaticOfferOpportunityCoordinator,
+            automaticOfferSyncCoordinator::synchronize,
+        )
+    }
     val usageRepository by lazy {
         if (BuildConfig.DEMO_MODE) FakeUsageRepository()
         else DeviceUsageRepository(usageSyncCoordinator)
@@ -105,6 +181,9 @@ class HabitosApplication : Application() {
         else AdultUsageRepository(localProfileStore, usageApi, adultRequestAuthorization)
     }
     val alertsDemoEnabled: Boolean get() = com.juan.habitos.data.mock.alertsDemoEnabled(BuildConfig.DEBUG, BuildConfig.ALERTS_DEMO_MODE)
+    val dashboardDemoEnabled: Boolean get() = com.juan.habitos.data.mock.dashboardDemoEnabled(BuildConfig.DEBUG, BuildConfig.DASHBOARD_DEMO_MODE)
+    fun dashboardDemoActiveFor(profile: Profile?): Boolean =
+        dashboardDemoEnabled && profile?.let(dashboardDemoFixture::matches) == true
     val alertRepository by lazy { alertRepositoryForMode(BuildConfig.DEBUG, BuildConfig.ALERTS_DEMO_MODE) }
     val adultMessagesDemoEnabled: Boolean get() = BuildConfig.DEBUG && BuildConfig.ADULT_MESSAGES_DEMO_MODE
     val automaticActivitiesDemoEnabled: Boolean get() = com.juan.habitos.ui.child.automaticActivitiesDemoEnabled(
@@ -121,7 +200,11 @@ class HabitosApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
-        if (!BuildConfig.DEMO_MODE) usageWorkController.start(applicationScope)
+        if (!BuildConfig.DEMO_MODE) {
+            usageWorkController.start(applicationScope)
+            f12HistoricalWorkController.start(applicationScope)
+            automaticOfferOpportunityWorkController.start(applicationScope)
+        }
     }
 
     suspend fun initializeDemoIfNeeded() {

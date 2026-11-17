@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.juan.habitos.data.remote.ParentalScreenTimeRepositoryTest" tests="11" skipped="0" failures="0" errors="0" timestamp="2026-11-16T00:15:28" hostname="DESKTOP-GEBU7OP" time="0.103">
+  <properties/>
+  <testcase name="different profile and unsupported stored values fail without inventing defaults" classname="com.juan.habitos.data.remote.ParentalScreenTimeRepositoryTest" time="0.012"/>
+  <testcase name="domain latest 404 verifies existence and adult permission before returning empty" classname="com.juan.habitos.data.remote.ParentalScreenTimeRepositoryTest" time="0.027"/>
+  <testcase name="device credentials cannot be used and invalid choices never send requests" classname="com.juan.habitos.data.remote.ParentalScreenTimeRepositoryTest" time="0.007"/>
+  <testcase name="401 clears adult token and 403 preserves it and rejects operation" classname="com.juan.habitos.data.remote.ParentalScreenTimeRepositoryTest" time="0.009"/>
+  <testcase name="POST domain 404 is a real missing profile only after profile lookup confirms it" classname="com.juan.habitos.data.remote.ParentalScreenTimeRepositoryTest" time="0.007"/>
+  <testcase name="network failure propagates and repository does not retry non idempotent save" classname="com.juan.habitos.data.remote.ParentalScreenTimeRepositoryTest" time="0.005"/>
+  <testcase name="null fields are explicit JSON nulls and request never contains age or estimate" classname="com.juan.habitos.data.remote.ParentalScreenTimeRepositoryTest" time="0.005"/>
+  <testcase name="both operations use linked adult bearer and exact profile with unchanged contract" classname="com.juan.habitos.data.remote.ParentalScreenTimeRepositoryTest" time="0.006"/>
+  <testcase name="Caddy and FastAPI routing 404 never become an empty questionnaire or deleted profile" classname="com.juan.habitos.data.remote.ParentalScreenTimeRepositoryTest" time="0.008"/>
+  <testcase name="technical estimation errors and unavailable model do not hide persisted response" classname="com.juan.habitos.data.remote.ParentalScreenTimeRepositoryTest" time="0.01"/>
+  <testcase name="latest 404 is empty form but POST 404 is not a saved answer" classname="com.juan.habitos.data.remote.ParentalScreenTimeRepositoryTest" time="0.006"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

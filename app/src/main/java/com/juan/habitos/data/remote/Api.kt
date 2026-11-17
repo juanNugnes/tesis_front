@@ -279,6 +279,14 @@ data class UsageDto(val profileId: String, val currentMinutes: Int, val expected
 data class AnalysisDto(val profileId: String, val summary: String)
 
 interface HabitsApi {
+    @POST("api/v1/profiles/{profileId}/child-offers/opportunities")
+    suspend fun postAutomaticOpportunity(@Path("profileId") profileId: String, @Header("Authorization") authorization: String, @Body request: AutomaticOpportunityRequest): AutomaticOpportunityResponseDto = error("Not implemented")
+    @POST("api/v1/profiles/{profileId}/child-offers/opportunities/events")
+    suspend fun postAutomaticOfferEvent(@Path("profileId") profileId: String, @Header("Authorization") authorization: String, @Body request: AutomaticOfferEventRequest): AutomaticOfferEventReceiptDto = error("Not implemented")
+    @GET("api/v1/profiles/{profileId}/child-offers/settings")
+    suspend fun getAutomaticOfferSettings(@Path("profileId") profileId: String, @Header("Authorization") authorization: String): AutomaticOfferSettingsDto = error("Not implemented")
+    @PUT("api/v1/profiles/{profileId}/child-offers/settings")
+    suspend fun putAutomaticOfferSettings(@Path("profileId") profileId: String, @Header("Authorization") authorization: String, @Body request: AutomaticOfferSettingsRequest): AutomaticOfferSettingsDto = error("Not implemented")
     @GET("api/v1/profiles/{profileId}/experimental-pmum/latest")
     suspend fun latestParentalScreenTime(@Path("profileId") profileId: String, @Header("Authorization") authorization: String): ParentalScreenTimeReviewDto = error("Not implemented")
     @POST("api/v1/profiles/{profileId}/experimental-pmum/responses")
@@ -339,6 +347,18 @@ interface HabitsApi {
         @Header("Authorization") authorization: String,
         @Body usage: UsageSnapshotRequest,
     ): UsageWriteResultDto = error("Not implemented")
+    @POST("api/v1/profiles/{profileId}/historical-submissions")
+    suspend fun postHistoricalSubmission(
+        @Path("profileId") profileId: String,
+        @Header("Authorization") authorization: String,
+        @Body request: HistoricalSubmissionRequest,
+    ): retrofit2.Response<HistoricalSubmissionResponse> = error("Not implemented")
+    @POST("api/v1/profiles/{profileId}/historical-submissions/{submissionId}/retry")
+    suspend fun retryHistoricalSubmission(
+        @Path("profileId") profileId: String,
+        @Path("submissionId") submissionId: String,
+        @Header("Authorization") authorization: String,
+    ): retrofit2.Response<HistoricalSubmissionResponse> = error("Not implemented")
     @GET("api/v1/profiles/{profileId}/usage")
     suspend fun getUsageRange(
         @Path("profileId") profileId: String,

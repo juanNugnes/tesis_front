@@ -8,6 +8,9 @@ class ParentalScreenTimeSectionTest {
     @Test fun `shared form uses approved considerations question and explicit non persistence notice`() {
         assertEquals("¿Tu hijo/a tiene alguna dificultad de movimiento, visual, auditiva o sensibilidad a los sonidos que debamos considerar?", CHILD_CONSIDERATIONS_QUESTION)
         assertEquals("Demostración · Estas respuestas todavía no se almacenan ni modifican las recomendaciones.", PARENTAL_DEMO_NOTICE)
+        assertTrue(PARENTAL_PERSISTED_NOTICE.contains("se guardan de forma independiente"))
+        assertTrue(PARENTAL_PERSISTED_NOTICE.contains("No constituyen un diagnóstico"))
+        assertFalse(PARENTAL_PERSISTED_NOTICE.contains("puntuación", ignoreCase = true))
     }
     @Test fun `questions and all device scope use approved exact wording`() {
         assertEquals("Pensando en los últimos 30 días, ¿cuánto tiempo total pasó tu hijo/a frente a pantallas en un día habitual de lunes a viernes?", PARENTAL_WEEKDAY_QUESTION)

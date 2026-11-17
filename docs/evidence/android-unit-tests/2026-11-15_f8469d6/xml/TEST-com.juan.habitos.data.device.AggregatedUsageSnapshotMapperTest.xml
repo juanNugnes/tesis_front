@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.juan.habitos.data.device.AggregatedUsageSnapshotMapperTest" tests="8" skipped="0" failures="0" errors="0" timestamp="2026-11-16T00:15:26" hostname="DESKTOP-GEBU7OP" time="0.534">
+  <properties/>
+  <testcase name="night window crossing midnight is clipped to the queried local day" classname="com.juan.habitos.data.device.AggregatedUsageSnapshotMapperTest" time="0.235"/>
+  <testcase name="maps real nighttime pause with source timezone and dedicated status" classname="com.juan.habitos.data.device.AggregatedUsageSnapshotMapperTest" time="0.113"/>
+  <testcase name="permission denial remains null and is never converted to zero" classname="com.juan.habitos.data.device.AggregatedUsageSnapshotMapperTest" time="0.002"/>
+  <testcase name="missing night schedule is unavailable and has no invented window" classname="com.juan.habitos.data.device.AggregatedUsageSnapshotMapperTest" time="0.005"/>
+  <testcase name="open nighttime application is incomplete and never receives a synthetic timestamp" classname="com.juan.habitos.data.device.AggregatedUsageSnapshotMapperTest" time="0.002"/>
+  <testcase name="null Android aggregates are capture errors rather than measured zero" classname="com.juan.habitos.data.device.AggregatedUsageSnapshotMapperTest" time="0.001"/>
+  <testcase name="maps Android aggregates to exact backend units timezone and identifiers" classname="com.juan.habitos.data.device.AggregatedUsageSnapshotMapperTest" time="0.172"/>
+  <testcase name="incomplete session evidence is marked partial per metric" classname="com.juan.habitos.data.device.AggregatedUsageSnapshotMapperTest" time="0.003"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

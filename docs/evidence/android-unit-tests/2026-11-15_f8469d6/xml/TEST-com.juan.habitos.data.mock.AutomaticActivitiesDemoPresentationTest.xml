@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.juan.habitos.data.mock.AutomaticActivitiesDemoPresentationTest" tests="7" skipped="0" failures="0" errors="0" timestamp="2026-11-16T00:15:28" hostname="DESKTOP-GEBU7OP" time="0.02">
+  <properties/>
+  <testcase name="accept start resume and finish keep declaration stages without real completion claims" classname="com.juan.habitos.data.mock.AutomaticActivitiesDemoPresentationTest" time="0.001"/>
+  <testcase name="outside back or close dismissal never counts as rejection nor reopens on reentry" classname="com.juan.habitos.data.mock.AutomaticActivitiesDemoPresentationTest" time="0.001"/>
+  <testcase name="retained activity store preserves dismissed offer across UI owner recreation" classname="com.juan.habitos.data.mock.AutomaticActivitiesDemoPresentationTest" time="0.014"/>
+  <testcase name="manual bedtime opens same presentation while abstention and waiting never open offer" classname="com.juan.habitos.data.mock.AutomaticActivitiesDemoPresentationTest" time="0.001"/>
+  <testcase name="initial entry opens daytime exactly once despite repeated entry effects" classname="com.juan.habitos.data.mock.AutomaticActivitiesDemoPresentationTest" time="0.001"/>
+  <testcase name="two explicit rejects close dialog and pause manual opportunities until reset" classname="com.juan.habitos.data.mock.AutomaticActivitiesDemoPresentationTest" time="0.0"/>
+  <testcase name="profile changes never transfer initial offer or dismissal state" classname="com.juan.habitos.data.mock.AutomaticActivitiesDemoPresentationTest" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

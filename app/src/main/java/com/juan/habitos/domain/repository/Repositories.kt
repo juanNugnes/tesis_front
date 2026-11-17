@@ -52,6 +52,16 @@ interface ActivitySuggestionRepository {
     suspend fun registerSelection(selection: ActivitySelection)
     suspend fun selectionCount(startEpochMillis: Long, endEpochMillis: Long): Int
 }
+interface AutomaticOfferRepository {
+    val pendingOffer: Flow<PendingAutomaticOffer?>
+    fun refreshPendingOffer()
+    suspend fun confirmDelivered(channel: String)
+    suspend fun registerSelection(selection: ActivitySelection)
+}
+interface AutomaticOfferSettingsRepository {
+    suspend fun load(profileId: String): AutomaticOfferSettings
+    suspend fun save(profileId: String, settings: AutomaticOfferSettings): AutomaticOfferSettings
+}
 interface AlertRepository { suspend fun alerts(): List<Alert> }
 interface PinStore { suspend fun save(pin: String); suspend fun verify(pin: String): Boolean }
 interface DeviceUsageDataSource { suspend fun getDailyUsage(): DailyUsage; suspend fun getApplicationUsage(): List<AppUsage> }

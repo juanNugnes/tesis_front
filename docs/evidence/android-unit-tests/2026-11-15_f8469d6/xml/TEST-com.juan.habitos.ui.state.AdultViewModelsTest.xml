@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.juan.habitos.ui.state.AdultViewModelsTest" tests="12" skipped="0" failures="0" errors="0" timestamp="2026-11-16T00:15:30" hostname="DESKTOP-GEBU7OP" time="0.139">
+  <properties/>
+  <testcase name="same device monitoring requires real adult authentication before linking" classname="com.juan.habitos.ui.state.AdultViewModelsTest" time="0.034"/>
+  <testcase name="adult claim uses six digit code and revoked link shows neutral error" classname="com.juan.habitos.ui.state.AdultViewModelsTest" time="0.015"/>
+  <testcase name="empty adult profile list is represented and backend profiles replace it" classname="com.juan.habitos.ui.state.AdultViewModelsTest" time="0.008"/>
+  <testcase name="real auth uses entered email and OTP and exposes dev code only when enabled" classname="com.juan.habitos.ui.state.AdultViewModelsTest" time="0.018"/>
+  <testcase name="same device monitoring creates and claims current profile link when missing" classname="com.juan.habitos.ui.state.AdultViewModelsTest" time="0.007"/>
+  <testcase name="demo mock OTP remains available" classname="com.juan.habitos.ui.state.AdultViewModelsTest" time="0.011"/>
+  <testcase name="adult authentication entered from child mode preserves child device mode" classname="com.juan.habitos.ui.state.AdultViewModelsTest" time="0.008"/>
+  <testcase name="same device monitoring preserves child link when device bearer is unavailable" classname="com.juan.habitos.ui.state.AdultViewModelsTest" time="0.006"/>
+  <testcase name="same device monitoring demo does not call real link services" classname="com.juan.habitos.ui.state.AdultViewModelsTest" time="0.005"/>
+  <testcase name="child link code state shows backend code and real expiry minutes" classname="com.juan.habitos.ui.state.AdultViewModelsTest" time="0.012"/>
+  <testcase name="same device monitoring reuses existing adult link without creating another code" classname="com.juan.habitos.ui.state.AdultViewModelsTest" time="0.006"/>
+  <testcase name="same device monitoring reports adult authorization errors without bypassing backend" classname="com.juan.habitos.ui.state.AdultViewModelsTest" time="0.009"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

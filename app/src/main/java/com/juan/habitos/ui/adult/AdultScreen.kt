@@ -20,6 +20,7 @@ import com.juan.habitos.domain.model.AppUsage
 import com.juan.habitos.domain.model.DashboardPeriod
 import com.juan.habitos.data.mock.ALERTS_DEMO_CARD_LABEL
 import com.juan.habitos.data.mock.ALERTS_DEMO_HEADER
+import com.juan.habitos.data.mock.DASHBOARD_DEMO_LABEL
 import com.juan.habitos.data.mock.activeAlerts
 import com.juan.habitos.data.mock.reviewAlerts
 import com.juan.habitos.ui.components.MetricCard
@@ -48,6 +49,30 @@ private val tabs = listOf("📊\nRESUMEN", "📱\nAPPS", "🌙\nNOCTURNO", "🧠
             }
             Text("›", Modifier.clickable(onClick = onProfile).padding(8.dp), color = AppColors.PurpleSoft, fontSize = 28.sp)
         }
+        if (state.dashboardDemoRequested && tab != ALERTS_TAB) {
+            Surface(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 4.dp),
+                color = AppColors.Purple.copy(alpha = .18f),
+                shape = RoundedCornerShape(12.dp),
+                border = BorderStroke(1.dp, AppColors.PurpleSoft.copy(alpha = .45f)),
+            ) {
+                Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Text(
+                        if (state.dashboardDemoActive) DASHBOARD_DEMO_LABEL else "Modo de demostración del panel",
+                        color = AppColors.PurpleSoft,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Text(
+                        if (state.dashboardDemoActive) "Resumen, Aplicaciones, Nocturno y las comparaciones de Análisis usan el escenario local de cuatro semanas; no son registros reales."
+                        else "Para el video, creá o seleccioná un perfil llamado Santiago, de 8 años. El perfil actual y sus datos no fueron modificados.",
+                        color = Color(0xFFCBD5E1),
+                        fontSize = 12.sp,
+                        lineHeight = 17.sp,
+                    )
+                }
+            }
+        }
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
             tabs.forEachIndexed { index, label ->
                 Column(Modifier.width(82.dp).clickable { tab = index }.padding(vertical = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -65,7 +90,7 @@ private val tabs = listOf("📊\nRESUMEN", "📱\nAPPS", "🌙\nNOCTURNO", "🧠
                 ALERTS_TAB -> AlertsScreen(
                     alerts = state.alerts,
                     alertsDemo = state.alertsDemo,
-                    demoAlert = adultMessageAlertForAlertsTab(state.alertsDemo, adultMessageDemoAlert(messages)),
+                    demoAlert = adultMessageAlertForAlertsTab(state.alertsDemo || messages.localOnly, adultMessageDemoAlert(messages)),
                 ) { target ->
                     openAdultMessageDemoAlert(target,
                         selectMessage = { id, version -> focusedMessageId = id; focusedMessageVersion = version },
@@ -96,7 +121,7 @@ private val tabs = listOf("📊\nRESUMEN", "📱\nAPPS", "🌙\nNOCTURNO", "🧠
         adultMessageSummaryTitle(messages)?.let { title ->
             Spacer(Modifier.height(20.dp))
             AdultSectionCard(title) {
-                if (messages.demo) Text(ADULT_MESSAGES_DEMO_LABEL, color = AppColors.PurpleSoft, fontSize = 12.sp)
+                adultMessagesDemoLabel(messages)?.let { Text(it, color = AppColors.PurpleSoft, fontSize = 12.sp) }
                 TextButton(onClick = onAnalysis) { Text("Ver análisis") }
             }
         }
@@ -108,10 +133,13 @@ internal fun adultMessageSummaryTitle(state: AdultMessagesUiState): String? =
     if (state.loading || state.error != null || state.profileId == null) null
     else state.current.firstOrNull()?.card?.title
 
+internal fun adultMessagesDemoLabel(state: AdultMessagesUiState): String? =
+    if (state.demo) state.demoLabel ?: ADULT_MESSAGES_DEMO_LABEL else null
+
 @Composable private fun AdultMessagesSection(state: AdultMessagesUiState, onRetry: () -> Unit, onSignIn: () -> Unit, focusedMessageId: String? = null, focusedVersion: Int = 0) {
     var showHistory by rememberSaveable(state.profileId) { mutableStateOf(false) }
     AdultSectionCard("Mensajes para acompañarte") {
-        if (state.demo) Text(ADULT_MESSAGES_DEMO_LABEL, color = AppColors.PurpleSoft)
+        adultMessagesDemoLabel(state)?.let { Text(it, color = AppColors.PurpleSoft) }
         when {
             state.loading -> CircularProgressIndicator(Modifier.size(28.dp), color = AppColors.PurpleSoft)
             state.error != null -> {
@@ -138,25 +166,28 @@ internal fun adultMessageSummaryTitle(state: AdultMessagesUiState): String? =
                             Text(if (showOpening) "Ver seguimiento" else "Ver versión inicial")
                         }
                     }
-                    AdultMessageContent(if (showOpening && opening != null) opening.card else latest.card, demo = state.demo)
+                    AdultMessageContent(
+                        if (showOpening && opening != null) opening.card else latest.card,
+                        demoLabel = adultMessagesDemoLabel(state),
+                    )
                 }
                 if (state.archived.isNotEmpty()) {
                     TextButton(onClick = { showHistory = !showHistory }) {
                         Text(if (showHistory) "Ocultar historial" else "Ver historial")
                     }
-                    if (showHistory) state.archived.forEach { AdultMessageContent(it.card, demo = state.demo) }
+                    if (showHistory) state.archived.forEach { AdultMessageContent(it.card, demoLabel = adultMessagesDemoLabel(state)) }
                 }
-                TextButton(onClick = onRetry) { Text("Actualizar mensajes") }
+                if (!state.localOnly) TextButton(onClick = onRetry) { Text("Actualizar mensajes") }
             }
         }
     }
 }
 
-@Composable private fun AdultMessageContent(card: AdultMessageCard, demo: Boolean = false) {
+@Composable private fun AdultMessageContent(card: AdultMessageCard, demoLabel: String? = null) {
     var expanded by rememberSaveable(card.cardId, card.updatedDate, card.evaluationDate) { mutableStateOf(false) }
     Surface(color = AppColors.Surface, shape = RoundedCornerShape(14.dp), border = BorderStroke(1.dp, AppColors.Divider)) {
         Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (demo) Text(ADULT_MESSAGES_DEMO_LABEL, color = AppColors.PurpleSoft, fontSize = 12.sp)
+            demoLabel?.let { Text(it, color = AppColors.PurpleSoft, fontSize = 12.sp) }
             Text(messageStatusLabel(card.status), color = AppColors.PurpleSoft, fontSize = 12.sp)
             Text(card.title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 17.sp)
             Text(card.text, color = Color(0xFFCBD5E1))
@@ -201,7 +232,16 @@ internal fun adultMessageSummaryTitle(state: AdultMessagesUiState): String? =
 @Composable private fun NightScreen(state: AdultNightTabUiState) {
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         item { AdultContentHeader("Uso nocturno", "Actividad durante el horario de descanso configurado") }
-        item { AdultSectionCard("Horario habitual de acostarse") { Text(state.bedtime?.let { "🌙  $it" } ?: "Sin horario disponible", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold) } }
+        item {
+            val restWindow = when {
+                state.bedtime != null && state.restEnd != null -> "${state.bedtime}–${state.restEnd}"
+                state.bedtime != null -> state.bedtime
+                else -> null
+            }
+            AdultSectionCard(if (state.restEnd != null) "Horario de descanso configurado" else "Horario habitual de acostarse") {
+                Text(restWindow?.let { "🌙  $it" } ?: "Sin horario disponible", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+            }
+        }
         item {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Box(Modifier.weight(1f)) { NightMetricCard("Uso durante el horario de descanso", state.usageAfterBedtimeMinutes?.let(::formatMinutes) ?: "Sin datos") }
@@ -241,11 +281,22 @@ internal fun adultMessageSummaryTitle(state: AdultMessagesUiState): String? =
         }
         item {
             AdultSectionCard("Comparación con su comportamiento habitual") {
-                state.comparisons.forEach { comparison ->
-                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        Text(comparison.label, Modifier.weight(1f), color = Color(0xFFCBD5E1))
-                        Surface(color = AppColors.Purple.copy(alpha = .18f), shape = RoundedCornerShape(9.dp)) { Text(comparison.value, Modifier.padding(horizontal = 10.dp, vertical = 6.dp), color = AppColors.PurpleSoft, fontWeight = FontWeight.Bold) }
+                state.comparisons.forEachIndexed { index, comparison ->
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        color = AppColors.Surface.copy(alpha = .72f),
+                        shape = RoundedCornerShape(12.dp),
+                        border = BorderStroke(1.dp, AppColors.Divider),
+                    ) {
+                        Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                            Text(comparison.label, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                            Text(comparison.value, color = Color(0xFFCBD5E1), fontSize = 14.sp, lineHeight = 20.sp)
+                            comparison.detail?.let { detail ->
+                                Text(detail, color = AppColors.PurpleSoft, fontWeight = FontWeight.Bold, fontSize = 14.sp, lineHeight = 20.sp)
+                            }
+                        }
                     }
+                    if (index < state.comparisons.lastIndex) Spacer(Modifier.height(2.dp))
                 }
             }
         }

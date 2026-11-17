@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.juan.habitos.data.mock.AdultMessagesDemoTest" tests="4" skipped="0" failures="0" errors="0" timestamp="2026-11-16T00:15:27" hostname="DESKTOP-GEBU7OP" time="0.52">
+  <properties/>
+  <testcase name="opening and follow up share identity and decrease belongs to older archived episode" classname="com.juan.habitos.data.mock.AdultMessagesDemoTest" time="0.456"/>
+  <testcase name="mock repository never calls remote client or changes its history" classname="com.juan.habitos.data.mock.AdultMessagesDemoTest" time="0.029"/>
+  <testcase name="demo alert targets exact opening version and stays unique across repeated visits" classname="com.juan.habitos.data.mock.AdultMessagesDemoTest" time="0.024"/>
+  <testcase name="examples have stable profile scoped identities and updates without duplicates" classname="com.juan.habitos.data.mock.AdultMessagesDemoTest" time="0.011"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

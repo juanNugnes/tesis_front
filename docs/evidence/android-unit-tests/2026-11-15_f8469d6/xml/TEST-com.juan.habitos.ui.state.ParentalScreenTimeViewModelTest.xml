@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.juan.habitos.ui.state.ParentalScreenTimeViewModelTest" tests="13" skipped="0" failures="0" errors="0" timestamp="2026-11-16T00:15:30" hostname="DESKTOP-GEBU7OP" time="0.067">
+  <properties/>
+  <testcase name="lost POST response is reconciled by GET and never blindly resubmitted" classname="com.juan.habitos.ui.state.ParentalScreenTimeViewModelTest" time="0.012"/>
+  <testcase name="profiles keep independent answers and an old async result cannot populate another profile" classname="com.juan.habitos.ui.state.ParentalScreenTimeViewModelTest" time="0.004"/>
+  <testcase name="reconciliation preserves newer edits when earlier POST was already persisted" classname="com.juan.habitos.ui.state.ParentalScreenTimeViewModelTest" time="0.004"/>
+  <testcase name="existing answers restore edit and unchanged normalized answers never post" classname="com.juan.habitos.ui.state.ParentalScreenTimeViewModelTest" time="0.007"/>
+  <testcase name="single choices map exact dataset codes and category codes without minutes" classname="com.juan.habitos.ui.state.ParentalScreenTimeViewModelTest" time="0.004"/>
+  <testcase name="forbidden and connection errors remain distinct from no previous response" classname="com.juan.habitos.ui.state.ParentalScreenTimeViewModelTest" time="0.004"/>
+  <testcase name="explicit unavailable and omitted answers send null without fabricated selections on reload" classname="com.juan.habitos.ui.state.ParentalScreenTimeViewModelTest" time="0.006"/>
+  <testcase name="opening empty form never preselects answers or creates revision" classname="com.juan.habitos.ui.state.ParentalScreenTimeViewModelTest" time="0.004"/>
+  <testcase name="failed save preserves edits and retries only after confirming latest data" classname="com.juan.habitos.ui.state.ParentalScreenTimeViewModelTest" time="0.005"/>
+  <testcase name="authorization errors have local messages and do not permit saving unloaded data" classname="com.juan.habitos.ui.state.ParentalScreenTimeViewModelTest" time="0.004"/>
+  <testcase name="unloaded authentication failure permits local choices but never permits POST" classname="com.juan.habitos.ui.state.ParentalScreenTimeViewModelTest" time="0.004"/>
+  <testcase name="age is read from profile and changing it requires an explicit save not opening a form" classname="com.juan.habitos.ui.state.ParentalScreenTimeViewModelTest" time="0.005"/>
+  <testcase name="unpublished latest endpoint is not empty data and cannot trigger POST or lose edits" classname="com.juan.habitos.ui.state.ParentalScreenTimeViewModelTest" time="0.004"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

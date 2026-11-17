@@ -4,6 +4,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.juan.habitos.data.remote.*
 import com.juan.habitos.domain.repository.*
+import com.juan.habitos.domain.model.Profile
+import com.juan.habitos.data.mock.DASHBOARD_DEMO_MESSAGE_LABEL
+import com.juan.habitos.data.mock.dashboardDemoFixture
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
@@ -31,26 +34,45 @@ data class AdultMessagesUiState(
     val error: String? = null,
     val retryable: Boolean = false,
     val demo: Boolean = false,
+    val demoLabel: String? = null,
+    val localOnly: Boolean = false,
     val authenticationRequired: Boolean = false,
 ) {
     val current get() = history?.latestCards().orEmpty().filter { it.card.status in currentMessageStatuses }
     val archived get() = history?.latestCards().orEmpty().filter { it.card.status !in currentMessageStatuses }
 }
 
+internal fun dashboardDemoMessagesState(profile: Profile): AdultMessagesUiState {
+    require(dashboardDemoFixture.matches(profile))
+    val presentationProfileId = profile.id ?: "dashboard-demo-santiago"
+    return AdultMessagesUiState(
+        profileId = presentationProfileId,
+        history = dashboardDemoFixture.messageHistory(presentationProfileId),
+        demo = true,
+        demoLabel = DASHBOARD_DEMO_MESSAGE_LABEL,
+        localOnly = true,
+    )
+}
+
+internal fun shouldLoadRemoteAdultMessages(profile: Profile?, dashboardDemoActive: Boolean): Boolean =
+    profile != null && !dashboardDemoActive
+
 class AdultMessagesViewModel(
     profiles: ProfileRepository,
     private val repository: AdultMessagesRepository,
     private val demo: Boolean = false,
+    private val suppressRemoteForProfile: (Profile) -> Boolean = { false },
 ) : ViewModel() {
     private val retries = MutableStateFlow(0)
     private val _state = MutableStateFlow(AdultMessagesUiState(demo = demo))
     val state = _state.asStateFlow()
     init {
         viewModelScope.launch {
-            combine(profiles.profile.map { it?.id }.distinctUntilChanged(), retries) { id, _ -> id }
-                .collectLatest { id ->
+            combine(profiles.profile.distinctUntilChanged(), retries) { profile, _ -> profile }
+                .collectLatest { profile ->
+                    val id = profile?.id
                     _state.value = AdultMessagesUiState(profileId = id, loading = id != null, demo = demo)
-                    if (id != null) {
+                    if (id != null && !suppressRemoteForProfile(requireNotNull(profile))) {
                         try {
                             val history = repository.history(id)
                             currentCoroutineContext().ensureActive()
@@ -69,6 +91,8 @@ class AdultMessagesViewModel(
                                 retryable = adultMessageRetryable(e), demo = demo,
                                 authenticationRequired = e is AdultAuthenticationRequiredException)
                         }
+                    } else if (id != null) {
+                        _state.value = AdultMessagesUiState(profileId = id, demo = demo)
                     }
                 }
         }

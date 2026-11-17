@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.juan.habitos.data.device.UsageDiagnosticsCalculatorTest" tests="11" skipped="0" failures="0" errors="0" timestamp="2026-11-16T00:15:27" hostname="DESKTOP-GEBU7OP" time="0.013">
+  <properties/>
+  <testcase name="initial closing event without opening is ignored" classname="com.juan.habitos.data.device.UsageDiagnosticsCalculatorTest" time="0.001"/>
+  <testcase name="duplicate screen events do not duplicate sessions" classname="com.juan.habitos.data.device.UsageDiagnosticsCalculatorTest" time="0.0"/>
+  <testcase name="summary calculates average and maximum session" classname="com.juan.habitos.data.device.UsageDiagnosticsCalculatorTest" time="0.005"/>
+  <testcase name="multiple pairs create multiple sessions" classname="com.juan.habitos.data.device.UsageDiagnosticsCalculatorTest" time="0.0"/>
+  <testcase name="duplicate activity events do not duplicate foreground time" classname="com.juan.habitos.data.device.UsageDiagnosticsCalculatorTest" time="0.003"/>
+  <testcase name="one complete screen pair creates one session" classname="com.juan.habitos.data.device.UsageDiagnosticsCalculatorTest" time="0.0"/>
+  <testcase name="empty input exposes unavailable experimental metrics" classname="com.juan.habitos.data.device.UsageDiagnosticsCalculatorTest" time="0.001"/>
+  <testcase name="multiple app openings create separate intervals and correct total" classname="com.juan.habitos.data.device.UsageDiagnosticsCalculatorTest" time="0.001"/>
+  <testcase name="final opening event without closing is ignored" classname="com.juan.habitos.data.device.UsageDiagnosticsCalculatorTest" time="0.0"/>
+  <testcase name="incomplete sessions are reported separately" classname="com.juan.habitos.data.device.UsageDiagnosticsCalculatorTest" time="0.001"/>
+  <testcase name="unlock count is available only when keyguard hidden exists" classname="com.juan.habitos.data.device.UsageDiagnosticsCalculatorTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

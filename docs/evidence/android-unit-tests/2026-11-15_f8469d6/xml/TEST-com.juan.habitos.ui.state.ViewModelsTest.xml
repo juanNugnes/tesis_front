@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.juan.habitos.ui.state.ViewModelsTest" tests="82" skipped="0" failures="0" errors="0" timestamp="2026-11-16T00:15:30" hostname="DESKTOP-GEBU7OP" time="0.555">
+  <properties/>
+  <testcase name="unified form retains successful preferences and retries only failed habits" classname="com.juan.habitos.ui.state.ViewModelsTest" time="0.043"/>
+  <testcase name="child state loads confirmed count for exact local day boundaries" classname="com.juan.habitos.ui.state.ViewModelsTest" time="0.01"/>
+  <testcase name="successful preferences save event requests suggestions again" classname="com.juan.habitos.ui.state.ViewModelsTest" time="0.006"/>
+  <testcase name="upper and lower body considerations can be selected together" classname="com.juan.habitos.ui.state.ViewModelsTest" time="0.006"/>
+  <testcase name="remote profile error keeps cached profile and exposes a friendly message" classname="com.juan.habitos.ui.state.ViewModelsTest" time="0.01"/>
+  <testcase name="remote schedule save uses settings operation and exposes success" classname="com.juan.habitos.ui.state.ViewModelsTest" time="0.012"/>
+  <testcase name="count failure keeps neutral state when no value was confirmed" classname="com.juan.habitos.ui.state.ViewModelsTest" time="0.006"/>
+  <testcase name="schedule editor rejects invalid times" classname="com.juan.habitos.ui.state.ViewModelsTest" time="0.006"/>
+  <testcase name="null offer starts locally without generating or sending selection" classname="com.juan.habitos.ui.state.ViewModelsTest" time="0.007"/>
+  <testcase name="explicit none clears selected considerations and remains answered" classname="com.juan.habitos.ui.state.ViewModelsTest" time="0.004"/>
+  <testcase name="dashboard changes period" classname="com.juan.habitos.ui.state.ViewModelsTest" time="0.005"/>
+  <testcase name="preferences support multiple interests and demo persists locally" classname="com.juan.habitos.ui.state.ViewModelsTest" time="0.005"/>
+  <testcase name="demo save remains local with both sleep times and never invokes remote create" classname="com.juan.habitos.ui.state.ViewModelsTest" time="0.006"/>
+  <testcase name="single backend activity remains selected when asking for another idea" classname="com.juan.habitos.ui.state.ViewModelsTest" time="0.006"/>
+  <testcase name="remote settings refresh failure keeps cached schedule" classname="com.juan.habitos.ui.state.ViewModelsTest" time="0.006"/>
+  <testcase name="preferences and parental answers save and retry independently without losing successful data" classname="com.juan.habitos.ui.state.ViewModelsTest" time="0.006"/>
+  <testcase name="incorrect pin clears and shows error" classname="com.juan.habitos.ui.state.ViewModelsTest" time="0.01"/>
+  <testcase name="consecutive completed activities restart celebration timeout safely" classname="com.juan.habitos.ui.state.ViewModelsTest" time="0.01"/>
+  <testcase name="expired adult session blocks both writes and reauthentication reload preserves unsaved answers" classname="com.juan.habitos.ui.state.ViewModelsTest" time="0.012"/>
+  <testcase name="selection retry reuses exact same id and payload" classname="com.juan.habitos.ui.state.ViewModelsTest" time="0.007"/>
+  <testcase name="schedule validation permits cross midnight and rejects equal bounds" classname="com.juan.habitos.ui.state.ViewModelsTest" time="0.001"/>
+  <testcase name="failed preferences save does not emit refresh event" classname="com.juan.habitos.ui.state.ViewModelsTest" time="0.006"/>
+  <testcase name="remote considerations restore exact durations and dates" classname="com.juan.habitos.ui.state.ViewModelsTest" time="0.006"/>
+  <testcase name="eligibility unknown maps to preferences required" classname="com.juan.habitos.ui.state.ViewModelsTest" time="0.005"/>
+  <testcase name="unified form reconciles lost response without duplicating persisted PMUM revision" classname="com.juan.habitos.ui.state.ViewModelsTest" time="0.011"/>
+  <testcase name="missing or rejected device JWT exposes relink state without deleting cache" classname="com.juan.habitos.ui.state.ViewModelsTest" time="0.004"/>
+  <testcase name="empty response without explicit reason is technical error" classname="com.juan.habitos.ui.state.ViewModelsTest" time="0.005"/>
+  <testcase name="adult night card formats measured activity in child timezone" classname="com.juan.habitos.ui.state.ViewModelsTest" time="0.006"/>
+  <testcase name="cross midnight sleep schedule is valid" classname="com.juan.habitos.ui.state.ViewModelsTest" time="0.001"/>
+  <testcase name="adult dashboard preserves unavailable application state" classname="com.juan.habitos.ui.state.ViewModelsTest" time="0.004"/>
+  <testcase name="remote note over local limit is editable without truncation" classname="com.juan.habitos.ui.state.ViewModelsTest" time="0.005"/>
+  <testcase name="temporary consideration with expired date cannot save" classname="com.juan.habitos.ui.state.ViewModelsTest" time="0.007"/>
+  <testcase name="old plain descriptions and unchanged IDs remain available throughout activity lifecycle" classname="com.juan.habitos.ui.state.ViewModelsTest" time="0.014"/>
+  <testcase name="device registration retry never creates a second profile" classname="com.juan.habitos.ui.state.ViewModelsTest" time="0.008"/>
+  <testcase name="remote preferences save succeeds through update" classname="com.juan.habitos.ui.state.ViewModelsTest" time="0.005"/>
+  <testcase name="profile schedule summary formats values without seconds" classname="com.juan.habitos.ui.state.ViewModelsTest" time="0.004"/>
+  <testcase name="remote schedule editor refreshes settings once and normalizes display" classname="com.juan.habitos.ui.state.ViewModelsTest" time="0.006"/>
+  <testcase name="finishing activity returns to suggestions without duplicating history" classname="com.juan.habitos.ui.state.ViewModelsTest" time="0.008"/>
+  <testcase name="onboarding and panel send only real preferences and never call experimental PMUM" classname="com.juan.habitos.ui.state.ViewModelsTest" time="0.018"/>
+  <testcase name="unconfirmed selection does not increment count" classname="com.juan.habitos.ui.state.ViewModelsTest" time="0.005"/>
+  <testcase name="remote profile creation uses selected sleep start and end" classname="com.juan.habitos.ui.state.ViewModelsTest" time="0.005"/>
+  <testcase name="profile schedule summary handles missing and placeholder values" classname="com.juan.habitos.ui.state.ViewModelsTest" time="0.0"/>
+  <testcase name="another idea does not register and start records currently visible activity with UUID and tap timestamp" classname="com.juan.habitos.ui.state.ViewModelsTest" time="0.006"/>
+  <testcase name="normal state observation does not duplicate suggestion requests" classname="com.juan.habitos.ui.state.ViewModelsTest" time="0.004"/>
+  <testcase name="activity id visual stays identical when suggestion starts running" classname="com.juan.habitos.ui.state.ViewModelsTest" time="0.007"/>
+  <testcase name="temporary consideration without date cannot save" classname="com.juan.habitos.ui.state.ViewModelsTest" time="0.007"/>
+  <testcase name="count refresh failure keeps last confirmed value" classname="com.juan.habitos.ui.state.ViewModelsTest" time="0.004"/>
+  <testcase name="complete instructions remain accessible after start and repeated reading never duplicates selection" classname="com.juan.habitos.ui.state.ViewModelsTest" time="0.007"/>
+  <testcase name="unselecting consideration removes its duration and date state" classname="com.juan.habitos.ui.state.ViewModelsTest" time="0.006"/>
+  <testcase name="preferences double submit is blocked" classname="com.juan.habitos.ui.state.ViewModelsTest" time="0.006"/>
+  <testcase name="omitting considerations differs from explicit none" classname="com.juan.habitos.ui.state.ViewModelsTest" time="0.006"/>
+  <testcase name="401 from preferences stops subsequent POST and retained changes save after login" classname="com.juan.habitos.ui.state.ViewModelsTest" time="0.012"/>
+  <testcase name="no eligible activities maps to neutral unavailable state" classname="com.juan.habitos.ui.state.ViewModelsTest" time="0.005"/>
+  <testcase name="remote preferences save failure keeps cache and edits for retry" classname="com.juan.habitos.ui.state.ViewModelsTest" time="0.006"/>
+  <testcase name="restriction none never coexists with concrete restrictions" classname="com.juan.habitos.ui.state.ViewModelsTest" time="0.007"/>
+  <testcase name="unified form only saves modified domains and ignores reverted preferences" classname="com.juan.habitos.ui.state.ViewModelsTest" time="0.01"/>
+  <testcase name="unified demo preferences save locally and never create parental responses" classname="com.juan.habitos.ui.state.ViewModelsTest" time="0.007"/>
+  <testcase name="schedule editor loads profile and demo saves locally" classname="com.juan.habitos.ui.state.ViewModelsTest" time="0.005"/>
+  <testcase name="profile including complete sleep schedule is persisted" classname="com.juan.habitos.ui.state.ViewModelsTest" time="0.006"/>
+  <testcase name="remote schedule failure keeps cache and shows friendly error" classname="com.juan.habitos.ui.state.ViewModelsTest" time="0.006"/>
+  <testcase name="successful selection refreshes confirmed count from backend" classname="com.juan.habitos.ui.state.ViewModelsTest" time="0.005"/>
+  <testcase name="changing temporary consideration to permanent clears its date" classname="com.juan.habitos.ui.state.ViewModelsTest" time="0.004"/>
+  <testcase name="correct pin invokes completion" classname="com.juan.habitos.ui.state.ViewModelsTest" time="0.005"/>
+  <testcase name="simulated options remain editable without an adult session and do not trigger authentication" classname="com.juan.habitos.ui.state.ViewModelsTest" time="0.007"/>
+  <testcase name="edited considerations are sent with exact structured state" classname="com.juan.habitos.ui.state.ViewModelsTest" time="0.005"/>
+  <testcase name="preferences update replaces eligibility unknown with new backend activity" classname="com.juan.habitos.ui.state.ViewModelsTest" time="0.006"/>
+  <testcase name="simulation is optional does not persist and is independent of real preference validation" classname="com.juan.habitos.ui.state.ViewModelsTest" time="0.006"/>
+  <testcase name="marking a consideration after none replaces none" classname="com.juan.habitos.ui.state.ViewModelsTest" time="0.006"/>
+  <testcase name="night activity formatter rejects absent or invalid source timezone" classname="com.juan.habitos.ui.state.ViewModelsTest" time="0.001"/>
+  <testcase name="real finish emits one celebration and repeated state reads do not retrigger it" classname="com.juan.habitos.ui.state.ViewModelsTest" time="0.007"/>
+  <testcase name="another idea rotates through backend activities and wraps to first" classname="com.juan.habitos.ui.state.ViewModelsTest" time="0.005"/>
+  <testcase name="adult dashboard reloads applications when selected child profile changes" classname="com.juan.habitos.ui.state.ViewModelsTest" time="0.006"/>
+  <testcase name="profile requires valid name avatar age and school schedule" classname="com.juan.habitos.ui.state.ViewModelsTest" time="0.001"/>
+  <testcase name="school schedules support multiple selections" classname="com.juan.habitos.ui.state.ViewModelsTest" time="0.0"/>
+  <testcase name="suggestion error shows retry state and retry can recover" classname="com.juan.habitos.ui.state.ViewModelsTest" time="0.005"/>
+  <testcase name="remote preferences load cache then refresh once" classname="com.juan.habitos.ui.state.ViewModelsTest" time="0.006"/>
+  <testcase name="equal sleep times are invalid" classname="com.juan.habitos.ui.state.ViewModelsTest" time="0.0"/>
+  <testcase name="unified form retains successful habits and retries only failed preferences" classname="com.juan.habitos.ui.state.ViewModelsTest" time="0.009"/>
+  <testcase name="remote preferences refresh failure keeps cache and exposes error" classname="com.juan.habitos.ui.state.ViewModelsTest" time="0.005"/>
+  <testcase name="adult dashboard keeps every application and derives readable remote names" classname="com.juan.habitos.ui.state.ViewModelsTest" time="0.009"/>
+  <testcase name="PMUM routing failure keeps pending answers without repeating successful preferences" classname="com.juan.habitos.ui.state.ViewModelsTest" time="0.013"/>
+  <testcase name="pin creation accepts four digits and supports delete" classname="com.juan.habitos.ui.state.ViewModelsTest" time="0.006"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

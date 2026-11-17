@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.juan.habitos.ui.state.LinkedDevicesViewModelTest" tests="7" skipped="0" failures="0" errors="0" timestamp="2026-11-16T00:15:30" hostname="DESKTOP-GEBU7OP" time="0.104">
+  <properties/>
+  <testcase name="demo data is read only and identifiers are absent from visible values" classname="com.juan.habitos.ui.state.LinkedDevicesViewModelTest" time="0.043"/>
+  <testcase name="empty list has completed loading state" classname="com.juan.habitos.ui.state.LinkedDevicesViewModelTest" time="0.007"/>
+  <testcase name="profile change starts isolated state and never shows previous devices" classname="com.juan.habitos.ui.state.LinkedDevicesViewModelTest" time="0.006"/>
+  <testcase name="successful list exposes active inactive and neutral duplicate labels" classname="com.juan.habitos.ui.state.LinkedDevicesViewModelTest" time="0.024"/>
+  <testcase name="confirmed deactivation is single flight and keeps inactive device visible" classname="com.juan.habitos.ui.state.LinkedDevicesViewModelTest" time="0.011"/>
+  <testcase name="network 401 403 and 404 produce distinct safe states" classname="com.juan.habitos.ui.state.LinkedDevicesViewModelTest" time="0.006"/>
+  <testcase name="cancel confirmation never calls repository" classname="com.juan.habitos.ui.state.LinkedDevicesViewModelTest" time="0.006"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

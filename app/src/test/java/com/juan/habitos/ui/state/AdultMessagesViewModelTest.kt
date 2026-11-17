@@ -91,6 +91,30 @@ class AdultMessagesViewModelTest {
         }
     }
 
+    @Test fun `dashboard presentation predicate suppresses remote history without changing authentication`() = runTest(dispatcher) {
+        val profiles = Profiles().apply {
+            profile.value = Profile("Santiago", "fox", 8, id = "demo-profile")
+        }
+        var calls = 0
+        val vm = AdultMessagesViewModel(
+            profiles,
+            AdultMessagesRepository { calls++; messageFixture() },
+            suppressRemoteForProfile = { it.name == "Santiago" && it.age == 8 },
+        )
+
+        advanceUntilIdle()
+        assertEquals(0, calls)
+        assertEquals("demo-profile", vm.state.value.profileId)
+        assertNull(vm.state.value.history)
+        assertNull(vm.state.value.error)
+        assertFalse(vm.state.value.authenticationRequired)
+
+        profiles.profile.value = Profile("Perfil real", "fox", 8, id = "real-profile")
+        advanceUntilIdle()
+        assertEquals(1, calls)
+        assertNotNull(vm.state.value.history)
+    }
+
     @Test fun `service retry policy respects backend detail`() {
         fun failure(body: String) = retrofit2.HttpException(retrofit2.Response.error<Any>(
             503, okhttp3.ResponseBody.create(okhttp3.MediaType.parse("application/json"), body),

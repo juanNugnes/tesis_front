@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.juan.habitos.data.local.DeviceIdentityPreferencesTest" tests="5" skipped="0" failures="0" errors="0" timestamp="2026-11-16T00:15:27" hostname="DESKTOP-GEBU7OP" time="0.221">
+  <properties/>
+  <testcase name="installation id is generated once and reused" classname="com.juan.habitos.data.local.DeviceIdentityPreferencesTest" time="0.209"/>
+  <testcase name="new installation id is a random UUID" classname="com.juan.habitos.data.local.DeviceIdentityPreferencesTest" time="0.001"/>
+  <testcase name="profile device and installation ids use independent keys" classname="com.juan.habitos.data.local.DeviceIdentityPreferencesTest" time="0.005"/>
+  <testcase name="bootstrap credentials are stored independently until registration" classname="com.juan.habitos.data.local.DeviceIdentityPreferencesTest" time="0.001"/>
+  <testcase name="empty preferences simulate a new installation with another id" classname="com.juan.habitos.data.local.DeviceIdentityPreferencesTest" time="0.003"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

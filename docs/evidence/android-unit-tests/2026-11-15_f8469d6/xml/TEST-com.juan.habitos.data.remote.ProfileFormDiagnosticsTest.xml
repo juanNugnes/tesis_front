@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.juan.habitos.data.remote.ProfileFormDiagnosticsTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-11-16T00:15:29" hostname="DESKTOP-GEBU7OP" time="0.032">
+  <properties/>
+  <testcase name="401 and 403 reach existing authorization handler unchanged" classname="com.juan.habitos.data.remote.ProfileFormDiagnosticsTest" time="0.009"/>
+  <testcase name="metadata contains operation method template and actual failed status without private data" classname="com.juan.habitos.data.remote.ProfileFormDiagnosticsTest" time="0.013"/>
+  <testcase name="only profile GET domain 404 can establish a missing profile" classname="com.juan.habitos.data.remote.ProfileFormDiagnosticsTest" time="0.01"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

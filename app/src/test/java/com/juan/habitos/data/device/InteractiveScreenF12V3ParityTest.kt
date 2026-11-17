@@ -13,11 +13,13 @@ class InteractiveScreenF12V3ParityTest {
     private val gson = GsonBuilder().serializeNulls().setPrettyPrinting().create()
 
     @Test fun `real Kotlin calculator matches all shared F12 v3 vectors and exports comparator results`() {
-        val fixturePath = System.getProperty("f12.vectors.path")
-            ?.let(Path::of)
-            ?: frontendRoot().parent.resolve("modera-modelo/tests/fixtures/interactive_screen_vectors_v3.json")
-        require(Files.isRegularFile(fixturePath)) { "F12 v3 fixture not found: $fixturePath" }
-        val fixture = Files.newBufferedReader(fixturePath).use { gson.fromJson(it, Fixture::class.java) }
+        val fixture = System.getProperty("f12.vectors.path")?.let(Path::of)?.let { fixturePath ->
+            require(Files.isRegularFile(fixturePath)) { "F12 v3 fixture not found: $fixturePath" }
+            Files.newBufferedReader(fixturePath).use { gson.fromJson(it, Fixture::class.java) }
+        } ?: requireNotNull(javaClass.getResourceAsStream("/interactive_screen_vectors_v3.json")) {
+            "Bundled F12 v3 fixture not found"
+        }.bufferedReader().use { gson.fromJson(it, Fixture::class.java) }
+        assertEquals("interactive-screen-vectors-v3-draft", fixture.schemaVersion)
         assertEquals("The shared reference must contain exactly 15 vectors", 15, fixture.vectors.size)
 
         val rows = fixture.vectors.map { vector ->
@@ -113,6 +115,7 @@ class InteractiveScreenF12V3ParityTest {
     }
 
     private data class Fixture(
+        @com.google.gson.annotations.SerializedName("schema_version") val schemaVersion: String,
         val default_day_start_utc: String,
         val default_day_end_utc: String,
         val vectors: List<Vector>,

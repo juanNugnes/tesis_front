@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.juan.habitos.data.remote.DeviceRepositoryTest" tests="11" skipped="0" failures="0" errors="0" timestamp="2026-11-16T00:15:28" hostname="DESKTOP-GEBU7OP" time="0.099">
+  <properties/>
+  <testcase name="expired bootstrap is cleared and registration is not attempted" classname="com.juan.habitos.data.remote.DeviceRepositoryTest" time="0.022"/>
+  <testcase name="410 and 409 claims map to controlled reasons without storing a profile" classname="com.juan.habitos.data.remote.DeviceRepositoryTest" time="0.013"/>
+  <testcase name="device requests serialize snake case installation and android platform" classname="com.juan.habitos.data.remote.DeviceRepositoryTest" time="0.002"/>
+  <testcase name="409 registration does not overwrite previous ids" classname="com.juan.habitos.data.remote.DeviceRepositoryTest" time="0.008"/>
+  <testcase name="200 idempotent device registration is also accepted and reused" classname="com.juan.habitos.data.remote.DeviceRepositoryTest" time="0.008"/>
+  <testcase name="installation id survives repository recreation and new storage gets another id" classname="com.juan.habitos.data.remote.DeviceRepositoryTest" time="0.007"/>
+  <testcase name="successful claim keeps installation and persists profile device and profile ids" classname="com.juan.habitos.data.remote.DeviceRepositoryTest" time="0.007"/>
+  <testcase name="201 device registration saves independent profile and device ids" classname="com.juan.habitos.data.remote.DeviceRepositoryTest" time="0.008"/>
+  <testcase name="403 preserves device JWT and identity" classname="com.juan.habitos.data.remote.DeviceRepositoryTest" time="0.007"/>
+  <testcase name="adult profile link code uses local profile id and device bearer" classname="com.juan.habitos.data.remote.DeviceRepositoryTest" time="0.007"/>
+  <testcase name="401 clears only device JWT and preserves identity and profile cache" classname="com.juan.habitos.data.remote.DeviceRepositoryTest" time="0.009"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

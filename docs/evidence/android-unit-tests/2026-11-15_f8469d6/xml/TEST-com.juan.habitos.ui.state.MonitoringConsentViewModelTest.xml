@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.juan.habitos.ui.state.MonitoringConsentViewModelTest" tests="16" skipped="0" failures="0" errors="0" timestamp="2026-11-16T00:15:30" hostname="DESKTOP-GEBU7OP" time="0.085">
+  <properties/>
+  <testcase name="pending verification never queries current consent or enables grant" classname="com.juan.habitos.ui.state.MonitoringConsentViewModelTest" time="0.012"/>
+  <testcase name="unchecking and leaving screen require a new voluntary acceptance" classname="com.juan.habitos.ui.state.MonitoringConsentViewModelTest" time="0.004"/>
+  <testcase name="explicit grant sends fixed version and purpose then reloads backend state" classname="com.juan.habitos.ui.state.MonitoringConsentViewModelTest" time="0.007"/>
+  <testcase name="revoked old consent requires fresh acceptance for version 1_1" classname="com.juan.habitos.ui.state.MonitoringConsentViewModelTest" time="0.004"/>
+  <testcase name="information remains available with active consent and never grants or revokes" classname="com.juan.habitos.ui.state.MonitoringConsentViewModelTest" time="0.004"/>
+  <testcase name="missing verification stays neutral and never implies pending" classname="com.juan.habitos.ui.state.MonitoringConsentViewModelTest" time="0.005"/>
+  <testcase name="old active consent retains version and cannot be silently replaced" classname="com.juan.habitos.ui.state.MonitoringConsentViewModelTest" time="0.004"/>
+  <testcase name="acceptance cannot bypass missing pending or rejected representative verification" classname="com.juan.habitos.ui.state.MonitoringConsentViewModelTest" time="0.004"/>
+  <testcase name="grant is disabled while submitting and acceptance is not inherited after reload" classname="com.juan.habitos.ui.state.MonitoringConsentViewModelTest" time="0.003"/>
+  <testcase name="approved verification without active consent enables explicit grant" classname="com.juan.habitos.ui.state.MonitoringConsentViewModelTest" time="0.003"/>
+  <testcase name="authorization failure clears acceptance and prevents resubmission" classname="com.juan.habitos.ui.state.MonitoringConsentViewModelTest" time="0.004"/>
+  <testcase name="rejected verification never queries current consent" classname="com.juan.habitos.ui.state.MonitoringConsentViewModelTest" time="0.006"/>
+  <testcase name="adult 401 requests login while 403 stays on screen" classname="com.juan.habitos.ui.state.MonitoringConsentViewModelTest" time="0.005"/>
+  <testcase name="direct grant without accepting notice never submits or resumes synchronization" classname="com.juan.habitos.ui.state.MonitoringConsentViewModelTest" time="0.007"/>
+  <testcase name="active consent requires confirmation and revoke reloads deactivated state" classname="com.juan.habitos.ui.state.MonitoringConsentViewModelTest" time="0.007"/>
+  <testcase name="demo mode never accesses backend" classname="com.juan.habitos.ui.state.MonitoringConsentViewModelTest" time="0.004"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

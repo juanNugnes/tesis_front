@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.juan.habitos.ui.adult.AdultMessageSummaryTest" tests="2" skipped="0" failures="0" errors="0" timestamp="2026-11-16T00:15:29" hostname="DESKTOP-GEBU7OP" time="0.008">
+  <properties/>
+  <testcase name="summary occupies no space for empty history or retired latest version" classname="com.juan.habitos.ui.adult.AdultMessageSummaryTest" time="0.004"/>
+  <testcase name="summary uses only latest current message title including correction date ordering" classname="com.juan.habitos.ui.adult.AdultMessageSummaryTest" time="0.004"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

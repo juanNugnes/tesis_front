@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.juan.habitos.data.mock.AutomaticActivitiesDemoTest" tests="10" skipped="0" failures="0" errors="0" timestamp="2026-11-16T00:15:28" hostname="DESKTOP-GEBU7OP" time="0.015">
+  <properties/>
+  <testcase name="rapid scenario taps cannot replace active offer and repeated reads cannot duplicate delivery" classname="com.juan.habitos.data.mock.AutomaticActivitiesDemoTest" time="0.001"/>
+  <testcase name="daytime scenario is reproducible and explicitly not a real measurement" classname="com.juan.habitos.data.mock.AutomaticActivitiesDemoTest" time="0.001"/>
+  <testcase name="profiles have distinct offer identities and independent local states" classname="com.juan.habitos.data.mock.AutomaticActivitiesDemoTest" time="0.0"/>
+  <testcase name="nothing is generated just by creating or observing the simulator" classname="com.juan.habitos.data.mock.AutomaticActivitiesDemoTest" time="0.0"/>
+  <testcase name="ineligible and waiting scenarios generate no offer" classname="com.juan.habitos.data.mock.AutomaticActivitiesDemoTest" time="0.001"/>
+  <testcase name="generated presented accepted started and completed are separate idempotent transitions" classname="com.juan.habitos.data.mock.AutomaticActivitiesDemoTest" time="0.001"/>
+  <testcase name="bedtime scenario uses only illustrative context not device bedtime" classname="com.juan.habitos.data.mock.AutomaticActivitiesDemoTest" time="0.001"/>
+  <testcase name="only current offer is retained after many demonstration rounds" classname="com.juan.habitos.data.mock.AutomaticActivitiesDemoTest" time="0.006"/>
+  <testcase name="two explicit rejections represent pause until reset with no duplicate counting" classname="com.juan.habitos.data.mock.AutomaticActivitiesDemoTest" time="0.001"/>
+  <testcase name="reset is repeatable but late callbacks never affect a new offer" classname="com.juan.habitos.data.mock.AutomaticActivitiesDemoTest" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

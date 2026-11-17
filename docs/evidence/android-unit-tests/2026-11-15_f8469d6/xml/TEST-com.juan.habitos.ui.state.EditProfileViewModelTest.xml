@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.juan.habitos.ui.state.EditProfileViewModelTest" tests="7" skipped="0" failures="0" errors="0" timestamp="2026-11-16T00:15:30" hostname="DESKTOP-GEBU7OP" time="0.058">
+  <properties/>
+  <testcase name="loads current name age and avatar" classname="com.juan.habitos.ui.state.EditProfileViewModelTest" time="0.013"/>
+  <testcase name="missing profile is handled without submitting" classname="com.juan.habitos.ui.state.EditProfileViewModelTest" time="0.008"/>
+  <testcase name="double submit is blocked synchronously" classname="com.juan.habitos.ui.state.EditProfileViewModelTest" time="0.01"/>
+  <testcase name="demo mode saves locally and never invokes remote update" classname="com.juan.habitos.ui.state.EditProfileViewModelTest" time="0.007"/>
+  <testcase name="blank name and ages outside six to twelve are invalid" classname="com.juan.habitos.ui.state.EditProfileViewModelTest" time="0.005"/>
+  <testcase name="remote save updates only editable fields and preserves the rest" classname="com.juan.habitos.ui.state.EditProfileViewModelTest" time="0.007"/>
+  <testcase name="remote failure preserves cache and keeps edits for retry" classname="com.juan.habitos.ui.state.EditProfileViewModelTest" time="0.008"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

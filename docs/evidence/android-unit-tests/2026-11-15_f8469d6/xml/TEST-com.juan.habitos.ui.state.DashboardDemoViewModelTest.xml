@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.juan.habitos.ui.state.DashboardDemoViewModelTest" tests="5" skipped="0" failures="0" errors="0" timestamp="2026-11-16T00:15:30" hostname="DESKTOP-GEBU7OP" time="0.063">
+  <properties/>
+  <testcase name="dashboard demo provides a local fictitious message and bypasses remote loading decision" classname="com.juan.habitos.ui.state.DashboardDemoViewModelTest" time="0.001"/>
+  <testcase name="disabled dashboard demo preserves repository behavior even for Santiago" classname="com.juan.habitos.ui.state.DashboardDemoViewModelTest" time="0.028"/>
+  <testcase name="demo analysis computes differences and percentages from the fixture" classname="com.juan.habitos.ui.state.DashboardDemoViewModelTest" time="0.017"/>
+  <testcase name="different real profile is never renamed or overlaid with fixture data" classname="com.juan.habitos.ui.state.DashboardDemoViewModelTest" time="0.008"/>
+  <testcase name="matching demo profile uses fixture without reading or writing real usage" classname="com.juan.habitos.ui.state.DashboardDemoViewModelTest" time="0.009"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>
