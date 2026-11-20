@@ -87,7 +87,7 @@ class DiagnosticExportSampleTest {
         val sample = DiagnosticExportSample.from(historical, true)
         assertEquals(InteractiveScreenObservationStatus.MISSING, sample.observation?.status)
         assertNull(sample.observation?.interactiveScreenMillis)
-        assertTrue(sample.historicalJson.contains("USAGE_PERMISSION_NOT_AVAILABLE"))
+        assertTrue(sample.historicalJson.contains("USAGE_ACCESS_NOT_GRANTED"))
         assertNull(DiagnosticExportSample.from(historical, false).observation)
     }
 }

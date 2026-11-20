@@ -5,6 +5,7 @@ import com.juan.habitos.data.local.*
 import com.juan.habitos.data.mock.*
 import com.juan.habitos.data.device.AndroidAggregatedUsageCollector
 import com.juan.habitos.data.device.AndroidDeviceUsageDataSource
+import com.juan.habitos.data.device.F12RawEvidenceCaptureCoordinator
 import com.juan.habitos.data.device.AutomaticOfferOpportunityCoordinator
 import com.juan.habitos.data.device.OpenInteractiveIntervalEvaluator
 import com.juan.habitos.data.device.AutomaticOfferNotificationPresenter
@@ -93,6 +94,7 @@ class HabitosApplication : Application() {
     val pinStore by lazy { HashedPinStore(this) }
     private val pendingUsageSnapshotStore by lazy { EncryptedUsageSnapshotStore(this) }
     private val historicalOutboxStore by lazy { EncryptedHistoricalOutboxStore(this) }
+    private val f12RawEvidenceStore by lazy { EncryptedF12RawEvidenceStore(this) }
     private val androidUsageDataSource by lazy { AndroidDeviceUsageDataSource(this) }
     private val automaticOfferOpportunityStore by lazy { SharedPreferencesAutomaticOfferOpportunityStore(this) }
     private val usageCollector by lazy { AndroidAggregatedUsageCollector(androidUsageDataSource) }
@@ -140,6 +142,15 @@ class HabitosApplication : Application() {
             androidUsageDataSource::hasUsageAccess,
             f12HistoricalWorkScheduler,
             f12HistoricalSyncCoordinator,
+        )
+    }
+    val f12RawEvidenceCaptureCoordinator by lazy {
+        F12RawEvidenceCaptureCoordinator(
+            BuildConfig.F12_RAW_EVIDENCE_CAPTURE_ENABLED,
+            localProfileStore,
+            localDeviceIdentityStore,
+            androidUsageDataSource,
+            f12RawEvidenceStore,
         )
     }
     private val automaticOfferOpportunityCoordinator by lazy {

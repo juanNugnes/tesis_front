@@ -33,6 +33,7 @@ android {
             buildConfigField("boolean", "ALERTS_DEMO_MODE", providers.gradleProperty("alertsDemoMode").orNull?.toBooleanStrictOrNull()?.toString() ?: "false")
             buildConfigField("boolean", "DASHBOARD_DEMO_MODE", providers.gradleProperty("dashboardDemoMode").orNull?.toBooleanStrictOrNull()?.toString() ?: "false")
             buildConfigField("boolean", "F12_HISTORICAL_SUBMISSIONS_ENABLED", providers.gradleProperty("f12HistoricalSubmissionsEnabled").orNull?.toBooleanStrictOrNull()?.toString() ?: "false")
+            buildConfigField("boolean", "F12_RAW_EVIDENCE_CAPTURE_ENABLED", providers.gradleProperty("f12RawEvidenceCaptureEnabled").orNull?.toBooleanStrictOrNull()?.toString() ?: "false")
             buildConfigField("boolean", "EXPERIMENTAL_PMUM_ENABLED", providers.gradleProperty("experimentalPmumEnabled").orNull?.toBooleanStrictOrNull()?.toString() ?: "false")
             buildConfigField("boolean", "AUTOMATIC_OFFER_OPPORTUNITIES_ENABLED", providers.gradleProperty("automaticOfferOpportunitiesEnabled").orNull?.toBooleanStrictOrNull()?.toString() ?: "false")
         }
@@ -43,6 +44,7 @@ android {
             buildConfigField("boolean", "ALERTS_DEMO_MODE", "false")
             buildConfigField("boolean", "DASHBOARD_DEMO_MODE", "false")
             buildConfigField("boolean", "F12_HISTORICAL_SUBMISSIONS_ENABLED", "false")
+            buildConfigField("boolean", "F12_RAW_EVIDENCE_CAPTURE_ENABLED", "false")
             buildConfigField("boolean", "EXPERIMENTAL_PMUM_ENABLED", "false")
             buildConfigField("boolean", "AUTOMATIC_OFFER_OPPORTUNITIES_ENABLED", "false")
         }

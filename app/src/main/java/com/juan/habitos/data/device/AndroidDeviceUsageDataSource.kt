@@ -54,7 +54,7 @@ class AndroidDeviceUsageDataSource(private val context: Context) : DeviceUsageDa
             val event = UsageEvents.Event()
             while (stream.hasNextEvent()) {
                 stream.getNextEvent(event)
-                add(RawUsageEvent(event.timeStamp, event.packageName?.takeIf { it.isNotBlank() }, event.eventType, eventName(event.eventType), event.className?.takeIf { it.isNotBlank() }))
+                add(RawUsageEvent(event.timeStamp, event.packageName?.takeIf { it.isNotBlank() }, event.eventType, eventName(event.eventType, Build.VERSION.SDK_INT), event.className?.takeIf { it.isNotBlank() }))
             }
         }.sortedBy { it.timestamp }
         val sessionAnalysis = UsageDiagnosticsCalculator.analyzeSessions(events)
@@ -80,7 +80,7 @@ class AndroidDeviceUsageDataSource(private val context: Context) : DeviceUsageDa
                     val event = UsageEvents.Event()
                     while (stream.hasNextEvent()) {
                         stream.getNextEvent(event)
-                        add(RawUsageEvent(event.timeStamp, event.packageName?.takeIf(String::isNotBlank), event.eventType, eventName(event.eventType), event.className?.takeIf(String::isNotBlank)))
+                        add(RawUsageEvent(event.timeStamp, event.packageName?.takeIf(String::isNotBlank), event.eventType, eventName(event.eventType, Build.VERSION.SDK_INT), event.className?.takeIf(String::isNotBlank)))
                     }
                 }.sortedBy(RawUsageEvent::timestamp)
             }
@@ -103,6 +103,9 @@ class AndroidDeviceUsageDataSource(private val context: Context) : DeviceUsageDa
         val collectorRunId = UUID.randomUUID().toString()
         val androidVersion = "${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})"
         val deviceModel = Build.MODEL
+        val androidApiLevel = Build.VERSION.SDK_INT
+        val manufacturer = Build.MANUFACTURER
+        val collectedAt = System.currentTimeMillis()
         val usagePermissionAvailable = try {
             hasUsageAccess()
         } catch (exception: Exception) {
@@ -111,9 +114,11 @@ class AndroidDeviceUsageDataSource(private val context: Context) : DeviceUsageDa
                 collectorRunId = collectorRunId,
                 requestedStartEpochMillis = requestedStartEpochMillis,
                 requestedEndEpochMillis = requestedEndEpochMillis,
-                collectedAtEpochMillis = System.currentTimeMillis(),
+                collectedAtEpochMillis = collectedAt,
                 androidVersion = androidVersion,
                 deviceModel = deviceModel,
+                androidApiLevel = androidApiLevel,
+                manufacturer = manufacturer,
                 throwable = exception,
                 usagePermissionAvailable = false,
             )
@@ -123,9 +128,11 @@ class AndroidDeviceUsageDataSource(private val context: Context) : DeviceUsageDa
                 collectorRunId = collectorRunId,
                 requestedStartEpochMillis = requestedStartEpochMillis,
                 requestedEndEpochMillis = requestedEndEpochMillis,
-                collectedAtEpochMillis = System.currentTimeMillis(),
+                collectedAtEpochMillis = collectedAt,
                 androidVersion = androidVersion,
                 deviceModel = deviceModel,
+                androidApiLevel = androidApiLevel,
+                manufacturer = manufacturer,
             )
         }
         return try {
@@ -134,21 +141,25 @@ class AndroidDeviceUsageDataSource(private val context: Context) : DeviceUsageDa
                     collectorRunId = collectorRunId,
                     requestedStartEpochMillis = requestedStartEpochMillis,
                     requestedEndEpochMillis = requestedEndEpochMillis,
-                    collectedAtEpochMillis = System.currentTimeMillis(),
+                    collectedAtEpochMillis = collectedAt,
                     androidVersion = androidVersion,
                     deviceModel = deviceModel,
+                    androidApiLevel = androidApiLevel,
+                    manufacturer = manufacturer,
                 )
             val events = buildList {
                 val event = UsageEvents.Event()
                 while (stream.hasNextEvent()) {
-                    stream.getNextEvent(event)
+                    check(stream.getNextEvent(event)) {
+                        "UsageEvents.hasNextEvent was true but getNextEvent returned false"
+                    }
                     add(
                         CollectedUsageEvent(
                             timestampEpochMillis = event.timeStamp,
                             eventTypeCode = event.eventType,
-                            eventTypeName = eventName(event.eventType),
-                            packageName = event.packageName?.takeIf { it.isNotBlank() },
-                            className = event.className?.takeIf { it.isNotBlank() },
+                            eventTypeName = eventName(event.eventType, androidApiLevel),
+                            packageName = event.packageName,
+                            className = event.className,
                         )
                     )
                 }
@@ -157,21 +168,38 @@ class AndroidDeviceUsageDataSource(private val context: Context) : DeviceUsageDa
                 collectorRunId = collectorRunId,
                 requestedStartEpochMillis = requestedStartEpochMillis,
                 requestedEndEpochMillis = requestedEndEpochMillis,
-                collectedAtEpochMillis = System.currentTimeMillis(),
+                collectedAtEpochMillis = collectedAt,
                 androidVersion = androidVersion,
                 deviceModel = deviceModel,
                 eventsInQueryOrder = events,
+                androidApiLevel = androidApiLevel,
+                manufacturer = manufacturer,
             )
-        } catch (exception: Exception) {
+        } catch (exception: SecurityException) {
+            Log.e(TAG, "queryEvents denied for collectorRunId=$collectorRunId", exception)
+            UsageCollectorRunFactory.exception(
+                collectorRunId = collectorRunId,
+                requestedStartEpochMillis = requestedStartEpochMillis,
+                requestedEndEpochMillis = requestedEndEpochMillis,
+                collectedAtEpochMillis = collectedAt,
+                androidVersion = androidVersion,
+                deviceModel = deviceModel,
+                throwable = exception,
+                androidApiLevel = androidApiLevel,
+                manufacturer = manufacturer,
+            )
+        } catch (exception: RuntimeException) {
             Log.e(TAG, "queryEvents failed for collectorRunId=$collectorRunId", exception)
             UsageCollectorRunFactory.exception(
                 collectorRunId = collectorRunId,
                 requestedStartEpochMillis = requestedStartEpochMillis,
                 requestedEndEpochMillis = requestedEndEpochMillis,
-                collectedAtEpochMillis = System.currentTimeMillis(),
+                collectedAtEpochMillis = collectedAt,
                 androidVersion = androidVersion,
                 deviceModel = deviceModel,
                 throwable = exception,
+                androidApiLevel = androidApiLevel,
+                manufacturer = manufacturer,
             )
         }
     }
@@ -194,7 +222,29 @@ class AndroidDeviceUsageDataSource(private val context: Context) : DeviceUsageDa
     companion object {
         private const val TAG = "UsageCollector"
 
-        fun eventName(type: Int): String = when (type) {
+        fun eventName(type: Int, apiLevel: Int = 29): String = UsageEventTypeNameMapper.nameFor(type, apiLevel)
+    }
+}
+
+object UsageEventTypeNameMapper {
+    fun nameFor(type: Int, apiLevel: Int): String {
+        if (apiLevel < 29) {
+            return when (type) {
+                0 -> "NONE"
+                1 -> "MOVE_TO_FOREGROUND"
+                2 -> "MOVE_TO_BACKGROUND"
+                5 -> "CONFIGURATION_CHANGE"
+                7 -> "USER_INTERACTION"
+                8 -> "SHORTCUT_INVOCATION"
+                11 -> "STANDBY_BUCKET_CHANGED"
+                15 -> "SCREEN_INTERACTIVE"
+                16 -> "SCREEN_NON_INTERACTIVE"
+                17 -> "KEYGUARD_SHOWN"
+                18 -> "KEYGUARD_HIDDEN"
+                else -> "EVENT_TYPE_$type"
+            }
+        }
+        return when (type) {
             0 -> "NONE"
             1 -> "ACTIVITY_RESUMED"
             2 -> "ACTIVITY_PAUSED"
@@ -211,7 +261,7 @@ class AndroidDeviceUsageDataSource(private val context: Context) : DeviceUsageDa
             23 -> "ACTIVITY_STOPPED"
             26 -> "DEVICE_SHUTDOWN"
             27 -> "DEVICE_STARTUP"
-            else -> "UNKNOWN_$type"
+            else -> "EVENT_TYPE_$type"
         }
     }
 }

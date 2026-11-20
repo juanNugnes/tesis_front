@@ -54,7 +54,7 @@ class HistoricalUsageDiagnosticsTest {
         assertEquals("SCREEN_INTERACTIVE", AndroidDeviceUsageDataSource.eventName(15))
         assertEquals("SCREEN_NON_INTERACTIVE", AndroidDeviceUsageDataSource.eventName(16))
         assertEquals("ACTIVITY_STOPPED", AndroidDeviceUsageDataSource.eventName(23))
-        assertEquals("UNKNOWN_987", AndroidDeviceUsageDataSource.eventName(987))
+        assertEquals("EVENT_TYPE_987", AndroidDeviceUsageDataSource.eventName(987))
     }
 
     @Test fun `permission null exception and successful empty query are different outcomes`() {

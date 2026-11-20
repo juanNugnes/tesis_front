@@ -8,9 +8,15 @@ import java.util.UUID
 const val HISTORICAL_DIAGNOSTIC_FORMAT_VERSION = 1
 
 object CollectorErrorCode {
-    const val USAGE_PERMISSION_NOT_AVAILABLE = "USAGE_PERMISSION_NOT_AVAILABLE"
-    const val QUERY_EVENTS_RETURNED_NULL = "QUERY_EVENTS_RETURNED_NULL"
-    const val QUERY_EVENTS_EXCEPTION = "QUERY_EVENTS_EXCEPTION"
+    const val USAGE_ACCESS_NOT_GRANTED = "USAGE_ACCESS_NOT_GRANTED"
+    const val QUERY_RETURNED_NULL = "QUERY_RETURNED_NULL"
+    const val SECURITY_EXCEPTION = "SECURITY_EXCEPTION"
+    const val QUERY_RUNTIME_EXCEPTION = "QUERY_RUNTIME_EXCEPTION"
+
+    // Source-compatible aliases for the existing diagnostics callers.
+    const val USAGE_PERMISSION_NOT_AVAILABLE = USAGE_ACCESS_NOT_GRANTED
+    const val QUERY_EVENTS_RETURNED_NULL = QUERY_RETURNED_NULL
+    const val QUERY_EVENTS_EXCEPTION = QUERY_RUNTIME_EXCEPTION
 }
 
 data class CollectedUsageEvent(
@@ -48,6 +54,8 @@ data class UsageCollectorRun(
     val androidVersion: String,
     val deviceModel: String,
     val events: List<RawCollectorEvent>,
+    val androidApiLevel: Int = 28,
+    val manufacturer: String = "",
 ) {
     val successful: Boolean
         get() = usagePermissionAvailable && !queryReturnedNull && errorCode == null
@@ -86,6 +94,8 @@ object UsageCollectorRunFactory {
         androidVersion: String,
         deviceModel: String,
         eventsInQueryOrder: List<CollectedUsageEvent>,
+        androidApiLevel: Int = 28,
+        manufacturer: String = "",
     ): UsageCollectorRun {
         val exportedEvents = eventsInQueryOrder.mapIndexed { ordinal, event ->
             RawCollectorEvent(
@@ -113,6 +123,8 @@ object UsageCollectorRunFactory {
             androidVersion = androidVersion,
             deviceModel = deviceModel,
             events = exportedEvents,
+            androidApiLevel = androidApiLevel,
+            manufacturer = manufacturer,
         )
     }
 
@@ -123,6 +135,8 @@ object UsageCollectorRunFactory {
         collectedAtEpochMillis: Long,
         androidVersion: String,
         deviceModel: String,
+        androidApiLevel: Int = 28,
+        manufacturer: String = "",
     ) = failedRun(
         collectorRunId, requestedStartEpochMillis, requestedEndEpochMillis, collectedAtEpochMillis,
         usagePermissionAvailable = false,
@@ -131,6 +145,8 @@ object UsageCollectorRunFactory {
         errorMessage = "Usage access is not available",
         androidVersion = androidVersion,
         deviceModel = deviceModel,
+        androidApiLevel = androidApiLevel,
+        manufacturer = manufacturer,
     )
 
     fun queryReturnedNull(
@@ -140,6 +156,8 @@ object UsageCollectorRunFactory {
         collectedAtEpochMillis: Long,
         androidVersion: String,
         deviceModel: String,
+        androidApiLevel: Int = 28,
+        manufacturer: String = "",
     ) = failedRun(
         collectorRunId, requestedStartEpochMillis, requestedEndEpochMillis, collectedAtEpochMillis,
         usagePermissionAvailable = true,
@@ -148,6 +166,8 @@ object UsageCollectorRunFactory {
         errorMessage = "UsageStatsManager.queryEvents returned null",
         androidVersion = androidVersion,
         deviceModel = deviceModel,
+        androidApiLevel = androidApiLevel,
+        manufacturer = manufacturer,
     )
 
     fun exception(
@@ -159,14 +179,22 @@ object UsageCollectorRunFactory {
         deviceModel: String,
         throwable: Throwable,
         usagePermissionAvailable: Boolean = true,
+        androidApiLevel: Int = 28,
+        manufacturer: String = "",
     ) = failedRun(
         collectorRunId, requestedStartEpochMillis, requestedEndEpochMillis, collectedAtEpochMillis,
         usagePermissionAvailable = usagePermissionAvailable,
         queryReturnedNull = false,
-        errorCode = CollectorErrorCode.QUERY_EVENTS_EXCEPTION,
+        errorCode = if (throwable is SecurityException) {
+            CollectorErrorCode.SECURITY_EXCEPTION
+        } else {
+            CollectorErrorCode.QUERY_RUNTIME_EXCEPTION
+        },
         errorMessage = (throwable.message?.takeIf { it.isNotBlank() } ?: throwable.javaClass.simpleName).take(500),
         androidVersion = androidVersion,
         deviceModel = deviceModel,
+        androidApiLevel = androidApiLevel,
+        manufacturer = manufacturer,
     )
 
     private fun failedRun(
@@ -180,10 +208,14 @@ object UsageCollectorRunFactory {
         errorMessage: String,
         androidVersion: String,
         deviceModel: String,
+        androidApiLevel: Int,
+        manufacturer: String,
     ) = baseRun(
         collectorRunId, requestedStartEpochMillis, requestedEndEpochMillis, collectedAtEpochMillis,
         usagePermissionAvailable, queryReturnedNull, errorCode, errorMessage, androidVersion, deviceModel,
         events = emptyList(),
+        androidApiLevel = androidApiLevel,
+        manufacturer = manufacturer,
     )
 
     private fun baseRun(
@@ -198,6 +230,8 @@ object UsageCollectorRunFactory {
         androidVersion: String,
         deviceModel: String,
         events: List<RawCollectorEvent>,
+        androidApiLevel: Int = 28,
+        manufacturer: String = "",
     ) = UsageCollectorRun(
         collectorRunId = collectorRunId,
         requestedStartEpochMillis = requestedStartEpochMillis,
@@ -211,6 +245,8 @@ object UsageCollectorRunFactory {
         androidVersion = androidVersion,
         deviceModel = deviceModel,
         events = events,
+        androidApiLevel = androidApiLevel,
+        manufacturer = manufacturer,
     )
 }
 
