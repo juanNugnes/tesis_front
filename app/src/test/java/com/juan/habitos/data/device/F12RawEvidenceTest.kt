@@ -123,6 +123,23 @@ class F12RawEvidenceTest {
         assertThrows(IllegalArgumentException::class.java) { F12RawEvidenceContract.export(outside) }
     }
 
+    @Test fun `unavailable sentinel and authenticated capture id match backend fixture`() {
+        val record = F12RawEvidenceContract.unavailableRecord(
+            profileId = "4ff83bca-72b1-4a9d-b944-b07985053947",
+            deviceId = "11111111-2222-4333-8444-555555555555",
+            localDate = "2026-11-18",
+            timezoneId = "America/Argentina/Buenos_Aires",
+            revision = 2,
+            createdAt = Instant.parse("2026-11-19T03:02:00Z"),
+        )
+
+        assertEquals(F12EvidenceState.UNAVAILABLE, record.evidenceState)
+        assertEquals(F12_UNAVAILABLE_REASON_NOT_EXPORTED, record.unavailableReason)
+        assertTrue(record.exportPairs.isEmpty())
+        assertEquals("cbac546a927d0362b35a726ee080eceba4a6a02da1346fa583bf06a93e4552d1", record.contentSha256)
+        assertEquals("052a5478d66df714474c61ab247d81b494f56408d7a8ad126bcad8b2d489aa8b", record.captureId)
+    }
+
     private fun diagnostic(previous: UsageCollectorRun, day: UsageCollectorRun) = DailyHistoricalUsageDiagnostic(
         profileId = "profile-1",
         deviceId = "device-1",

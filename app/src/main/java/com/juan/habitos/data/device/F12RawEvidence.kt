@@ -11,6 +11,8 @@ const val F12_RAW_EVENT_SCHEMA_VERSION = "raw-usage-event-v1"
 const val F12_MAX_EXPORT_BYTES = 32 * 1024 * 1024
 const val F12_MAX_EVENTS_PER_RUN = 100_000
 const val F12_MAX_RUNS = 10_000
+const val F12_UNAVAILABLE_REASON_NOT_EXPORTED = "NOT_EXPORTED"
+private const val F12_UNAVAILABLE_MARKER = "modera-f12-unavailable-v1"
 
 data class F12RawExportPair(
     val collectorRunId: String,
@@ -60,6 +62,43 @@ data class F12RawEvidenceRecord(
     val contentSha256: String,
     val quality: F12CaptureQuality,
     val exportPairs: List<F12RawExportPair>,
+    val evidenceState: F12EvidenceState = F12EvidenceState.AVAILABLE,
+    val unavailableReason: String? = null,
+    val delivery: F12EvidenceDelivery = F12EvidenceDelivery(),
+)
+
+enum class F12EvidenceState { AVAILABLE, UNAVAILABLE }
+
+enum class F12EvidenceDeliveryState {
+    LOCAL_ONLY,
+    RETRY_PENDING,
+    DELIVERED,
+    AUTHENTICATION_BLOCKED,
+    CONFLICT,
+    PERMANENT_FAILURE,
+}
+
+data class F12EvidenceReceipt(
+    val receiptId: String,
+    val captureId: String,
+    val status: String,
+    val evidenceState: F12EvidenceState,
+    val localDate: String,
+    val revision: Int,
+    val contentSha256: String,
+    val pairCount: Int,
+    val totalBytes: Long,
+    val receivedAt: String,
+    val expiresAt: String?,
+)
+
+data class F12EvidenceDelivery(
+    val state: F12EvidenceDeliveryState = F12EvidenceDeliveryState.LOCAL_ONLY,
+    val attemptCount: Int = 0,
+    val lastAttemptAtEpochMillis: Long? = null,
+    val lastHttpCode: Int? = null,
+    val lastErrorCode: String? = null,
+    val receipt: F12EvidenceReceipt? = null,
 )
 
 /** Produces only the exact summary JSON and event JSONL accepted by Analytics. */
@@ -151,16 +190,8 @@ object F12RawEvidenceContract {
             eventCount == 0 -> F12CaptureAssessment.NO_EVENTS_OBSERVED
             else -> F12CaptureAssessment.CAPTURE_OBSERVED_UNVERIFIED
         }
-        val contentDigest = MessageDigest.getInstance("SHA-256").apply {
-            pairs.forEach {
-                update(it.summaryBytes)
-                update(byteArrayOf(0))
-                update(it.eventsBytes)
-                update(byteArrayOf(0))
-            }
-        }.digest().hex()
-        val captureId = listOf(profileId, deviceId, diagnostic.localDate, revision.toString(), contentDigest)
-            .joinToString("\u0000").toByteArray(Charsets.UTF_8).sha256()
+        val contentDigest = contentSha256(pairs)
+        val captureId = captureId(profileId, deviceId, diagnostic.localDate, revision, contentDigest)
         return F12RawEvidenceRecord(
             captureId = captureId,
             profileId = profileId,
@@ -183,6 +214,63 @@ object F12RawEvidenceContract {
             exportPairs = pairs,
         )
     }
+
+    fun unavailableRecord(
+        profileId: String,
+        deviceId: String,
+        localDate: String,
+        timezoneId: String,
+        revision: Int,
+        createdAt: Instant = Instant.now(),
+    ): F12RawEvidenceRecord {
+        require(profileId.isNotBlank() && deviceId.isNotBlank())
+        require(revision > 0)
+        val contentDigest = unavailableContentSha256()
+        return F12RawEvidenceRecord(
+            captureId = captureId(profileId, deviceId, localDate, revision, contentDigest),
+            profileId = profileId,
+            deviceId = deviceId,
+            localDate = localDate,
+            timezoneId = timezoneId,
+            revision = revision,
+            createdAtEpochMillis = createdAt.toEpochMilli(),
+            contentSha256 = contentDigest,
+            quality = F12CaptureQuality(
+                assessment = F12CaptureAssessment.CAPTURE_FAILED,
+                successfulRunCount = 0,
+                failedRunCount = 0,
+                eventCount = 0,
+                dayQuerySucceeded = false,
+                priorScreenStateObserved = false,
+                deviceRestartObserved = false,
+                qualityFlags = listOf("DAY_COMPLETENESS_NOT_ASSERTED", "NOT_EXPORTED"),
+            ),
+            exportPairs = emptyList(),
+            evidenceState = F12EvidenceState.UNAVAILABLE,
+            unavailableReason = F12_UNAVAILABLE_REASON_NOT_EXPORTED,
+        )
+    }
+
+    fun contentSha256(pairs: List<F12RawExportPair>): String = MessageDigest.getInstance("SHA-256").apply {
+        pairs.forEach {
+            update(it.summaryBytes)
+            update(byteArrayOf(0))
+            update(it.eventsBytes)
+            update(byteArrayOf(0))
+        }
+    }.digest().hex()
+
+    fun unavailableContentSha256(): String =
+        "$F12_UNAVAILABLE_MARKER\u0000$F12_UNAVAILABLE_REASON_NOT_EXPORTED".toByteArray(Charsets.US_ASCII).sha256()
+
+    fun captureId(
+        profileId: String,
+        deviceId: String,
+        localDate: String,
+        revision: Int,
+        contentSha256: String,
+    ): String = listOf(profileId, deviceId, localDate, revision.toString(), contentSha256)
+        .joinToString("\u0000").toByteArray(Charsets.UTF_8).sha256()
 
     private fun validate(run: UsageCollectorRun) {
         val runId = runCatching { UUID.fromString(run.collectorRunId) }.getOrNull()

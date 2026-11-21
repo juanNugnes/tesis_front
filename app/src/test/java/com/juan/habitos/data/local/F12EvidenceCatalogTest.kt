@@ -3,6 +3,7 @@ package com.juan.habitos.data.local
 import com.juan.habitos.data.device.F12CaptureAssessment
 import com.juan.habitos.data.device.F12CaptureQuality
 import com.juan.habitos.data.device.F12RawEvidenceRecord
+import com.juan.habitos.data.device.F12RawEvidenceContract
 import com.juan.habitos.data.device.F12RawExportPair
 import com.juan.habitos.data.device.sha256
 import org.junit.Assert.assertEquals
@@ -61,9 +62,18 @@ class F12EvidenceCatalogTest {
     ): F12RawEvidenceRecord {
         val summary = bytes.toByteArray()
         val events = "$bytes\n".toByteArray()
-        val content = (bytes + revision).toByteArray().sha256()
+        val pairs = listOf(
+            F12RawExportPair(
+                collectorRunId = "e12f9120-7641-4ae2-a988-d6c43d4cfd17",
+                summaryBytes = summary,
+                eventsBytes = events,
+                summarySha256 = summary.sha256(),
+                eventsSha256 = events.sha256(),
+            )
+        )
+        val content = F12RawEvidenceContract.contentSha256(pairs)
         return F12RawEvidenceRecord(
-            captureId = ("$date|$revision|$content").toByteArray().sha256(),
+            captureId = F12RawEvidenceContract.captureId("profile-1", "device-1", date, revision, content),
             profileId = "profile-1",
             deviceId = "device-1",
             localDate = date,
@@ -81,15 +91,7 @@ class F12EvidenceCatalogTest {
                 deviceRestartObserved = false,
                 qualityFlags = listOf("DAY_COMPLETENESS_NOT_ASSERTED"),
             ),
-            exportPairs = listOf(
-                F12RawExportPair(
-                    collectorRunId = "e12f9120-7641-4ae2-a988-d6c43d4cfd17",
-                    summaryBytes = summary,
-                    eventsBytes = events,
-                    summarySha256 = summary.sha256(),
-                    eventsSha256 = events.sha256(),
-                )
-            ),
+            exportPairs = pairs,
         )
     }
 }

@@ -7,6 +7,9 @@ import android.util.AtomicFile
 import android.util.Base64
 import com.google.gson.Gson
 import com.juan.habitos.data.device.F12CaptureQuality
+import com.juan.habitos.data.device.F12EvidenceDelivery
+import com.juan.habitos.data.device.F12EvidenceState
+import com.juan.habitos.data.device.F12RawEvidenceContract
 import com.juan.habitos.data.device.F12RawEvidenceRecord
 import com.juan.habitos.data.device.F12RawExportPair
 import com.juan.habitos.data.device.sha256
@@ -33,6 +36,10 @@ interface F12RawEvidenceStore {
     suspend fun save(record: F12RawEvidenceRecord): F12EvidenceSaveResult
     suspend fun list(profileId: String): List<F12RawEvidenceRecord>
     suspend fun read(captureId: String): F12RawEvidenceRecord?
+    suspend fun updateDelivery(
+        captureId: String,
+        transform: (F12EvidenceDelivery) -> F12EvidenceDelivery,
+    ): F12RawEvidenceRecord
 }
 
 /**
@@ -53,15 +60,7 @@ class EncryptedF12RawEvidenceStore(context: Context) : F12RawEvidenceStore {
             require(directory.exists() || directory.mkdirs()) { "Unable to create encrypted F12 evidence directory" }
             val file = file(record.captureId)
             check(!file.exists()) { "F12 evidence file already exists" }
-            val atomic = AtomicFile(file)
-            val stream = atomic.startWrite()
-            try {
-                stream.write(encrypt(encode(record)))
-                atomic.finishWrite(stream)
-            } catch (failure: Throwable) {
-                atomic.failWrite(stream)
-                throw failure
-            }
+            write(file, record)
             decision.evictedCaptureIds.forEach { captureId ->
                 check(file(captureId).delete() || !file(captureId).exists()) { "Unable to apply F12 retention limit" }
             }
@@ -75,6 +74,33 @@ class EncryptedF12RawEvidenceStore(context: Context) : F12RawEvidenceStore {
 
     override suspend fun read(captureId: String): F12RawEvidenceRecord? = withContext(Dispatchers.IO) {
         mutex.withLock { file(captureId).takeIf(File::isFile)?.readBytes()?.let(::decrypt)?.let(::decode) }
+    }
+
+    override suspend fun updateDelivery(
+        captureId: String,
+        transform: (F12EvidenceDelivery) -> F12EvidenceDelivery,
+    ): F12RawEvidenceRecord = withContext(Dispatchers.IO) {
+        mutex.withLock {
+            val file = file(captureId)
+            val current = file.takeIf(File::isFile)?.readBytes()?.let(::decrypt)?.let(::decode)
+                ?: throw IllegalArgumentException("F12 evidence not found")
+            val updated = current.copy(delivery = transform(current.delivery))
+            F12EvidenceCatalog.validate(updated)
+            write(file, updated)
+            updated
+        }
+    }
+
+    private fun write(file: File, record: F12RawEvidenceRecord) {
+        val atomic = AtomicFile(file)
+        val stream = atomic.startWrite()
+        try {
+            stream.write(encrypt(encode(record)))
+            atomic.finishWrite(stream)
+        } catch (failure: Throwable) {
+            atomic.failWrite(stream)
+            throw failure
+        }
     }
 
     private fun readAll(): List<F12RawEvidenceRecord> {
@@ -103,6 +129,9 @@ class EncryptedF12RawEvidenceStore(context: Context) : F12RawEvidenceStore {
             createdAtEpochMillis = record.createdAtEpochMillis,
             contentSha256 = record.contentSha256,
             quality = record.quality,
+            evidenceState = record.evidenceState.name,
+            unavailableReason = record.unavailableReason,
+            delivery = record.delivery,
             exportPairs = record.exportPairs.map {
                 PersistedPair(
                     it.collectorRunId,
@@ -129,6 +158,9 @@ class EncryptedF12RawEvidenceStore(context: Context) : F12RawEvidenceStore {
             createdAtEpochMillis = stored.createdAtEpochMillis,
             contentSha256 = stored.contentSha256,
             quality = stored.quality,
+            evidenceState = stored.evidenceState?.let(F12EvidenceState::valueOf) ?: F12EvidenceState.AVAILABLE,
+            unavailableReason = stored.unavailableReason,
+            delivery = stored.delivery ?: F12EvidenceDelivery(),
             exportPairs = stored.exportPairs.map {
                 F12RawExportPair(
                     collectorRunId = it.collectorRunId,
@@ -182,6 +214,9 @@ class EncryptedF12RawEvidenceStore(context: Context) : F12RawEvidenceStore {
         val createdAtEpochMillis: Long,
         val contentSha256: String,
         val quality: F12CaptureQuality,
+        val evidenceState: String?,
+        val unavailableReason: String?,
+        val delivery: F12EvidenceDelivery?,
         val exportPairs: List<PersistedPair>,
     )
 
@@ -255,13 +290,39 @@ internal object F12EvidenceCatalog {
         require(record.profileId.isNotBlank() && record.deviceId.isNotBlank())
         require(record.captureId.matches(Regex("[0-9a-f]{64}")))
         require(record.contentSha256.matches(Regex("[0-9a-f]{64}")))
-        require(record.exportPairs.isNotEmpty())
+        when (record.evidenceState) {
+            F12EvidenceState.AVAILABLE -> {
+                require(record.exportPairs.isNotEmpty() && record.unavailableReason == null)
+                require(record.contentSha256 == F12RawEvidenceContract.contentSha256(record.exportPairs)) {
+                    "F12 content SHA-256 does not match original pairs"
+                }
+            }
+            F12EvidenceState.UNAVAILABLE -> {
+                require(record.exportPairs.isEmpty())
+                require(record.unavailableReason == com.juan.habitos.data.device.F12_UNAVAILABLE_REASON_NOT_EXPORTED)
+                require(record.contentSha256 == F12RawEvidenceContract.unavailableContentSha256())
+            }
+        }
+        require(
+            record.captureId == F12RawEvidenceContract.captureId(
+                record.profileId,
+                record.deviceId,
+                record.localDate,
+                record.revision,
+                record.contentSha256,
+            )
+        ) { "F12 captureId does not match its authenticated binding" }
         require(record.sourceByteSize() <= com.juan.habitos.data.device.F12_MAX_EXPORT_BYTES) {
             "F12 source bytes exceed the Analytics limit"
         }
         record.exportPairs.forEach {
             require(it.summarySha256 == it.summaryBytes.sha256()) { "Summary bytes do not match stored SHA-256" }
             require(it.eventsSha256 == it.eventsBytes.sha256()) { "Event bytes do not match stored SHA-256" }
+        }
+        record.delivery.receipt?.let { receipt ->
+            require(receipt.captureId == record.captureId)
+            require(receipt.contentSha256 == record.contentSha256)
+            require(receipt.revision == record.revision)
         }
     }
 

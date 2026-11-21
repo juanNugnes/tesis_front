@@ -6,6 +6,7 @@ import com.juan.habitos.data.mock.*
 import com.juan.habitos.data.device.AndroidAggregatedUsageCollector
 import com.juan.habitos.data.device.AndroidDeviceUsageDataSource
 import com.juan.habitos.data.device.F12RawEvidenceCaptureCoordinator
+import com.juan.habitos.data.device.F12RawEvidenceManualCoordinator
 import com.juan.habitos.data.device.AutomaticOfferOpportunityCoordinator
 import com.juan.habitos.data.device.OpenInteractiveIntervalEvaluator
 import com.juan.habitos.data.device.AutomaticOfferNotificationPresenter
@@ -26,6 +27,8 @@ import com.juan.habitos.data.remote.DeviceUsageRepository
 import com.juan.habitos.data.remote.ProfileFormDiagnostics
 import com.juan.habitos.data.remote.UsageSyncCoordinator
 import com.juan.habitos.data.remote.F12HistoricalSyncCoordinator
+import com.juan.habitos.data.remote.F12EvidenceRepository
+import com.juan.habitos.data.remote.F12EvidenceTransportCoordinator
 import com.juan.habitos.data.remote.HistoricalSubmissionRepository
 import com.juan.habitos.data.remote.AutomaticOfferSyncCoordinator
 import com.juan.habitos.data.remote.RemoteAutomaticOfferRepository
@@ -151,6 +154,22 @@ class HabitosApplication : Application() {
             localDeviceIdentityStore,
             androidUsageDataSource,
             f12RawEvidenceStore,
+        )
+    }
+    val f12RawEvidenceTransportCoordinator by lazy {
+        F12EvidenceTransportCoordinator(
+            BuildConfig.DEBUG && BuildConfig.F12_RAW_EVIDENCE_TRANSPORT_ENABLED,
+            f12RawEvidenceStore,
+            F12EvidenceRepository(HabitsApiClient.f12EvidenceApi, deviceRequestAuthorization),
+            onAuthenticationRequired = localDeviceIdentityStore::clearDeviceAccessToken,
+        )
+    }
+    val f12RawEvidenceManualCoordinator by lazy {
+        F12RawEvidenceManualCoordinator(
+            localProfileStore,
+            f12RawEvidenceStore,
+            f12RawEvidenceCaptureCoordinator,
+            f12RawEvidenceTransportCoordinator,
         )
     }
     private val automaticOfferOpportunityCoordinator by lazy {

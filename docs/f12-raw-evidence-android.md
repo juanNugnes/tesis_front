@@ -44,11 +44,10 @@ La flag `F12_RAW_EVIDENCE_CAPTURE_ENABLED` permanece desactivada por defecto en 
 release. Para una futura captura manual de desarrollo puede compilarse debug con
 `-Pf12RawEvidenceCaptureEnabled=true`; esto no habilita el envío histórico existente ni procesamiento automático.
 
-## Integración pendiente
+## Validación pendiente
 
-Antes de transmitir evidencia se necesita un endpoint de backend que defina autenticación, multipart o encoding,
-límites, recibo idempotente y asociación del sobre con el binding que exige Analytics. El backend deberá enviar a
-Analytics exactamente los bytes archivados y decidir explícitamente el caso sin exportación.
+El endpoint receptor ya está integrado. Sigue pendiente habilitar en el backend el paso separado que tome los
+bytes conservados y los entregue a Analytics; Android no inicia C1 ni crea `historical-submissions` desde este flujo.
 
 También queda pendiente una prueba instrumentada en dispositivo del cifrado Android Keystore, recuperación tras
 reinicio del proceso y retención con archivos reales. Las reglas de idempotencia, revisión, formato y retención se
@@ -59,3 +58,57 @@ El contrato no representa un fallo ocurrido al consultar el propio estado de per
 local detiene el archivado en vez de producir un par que Analytics rechazaría. Los estados representables
 (`USAGE_ACCESS_NOT_GRANTED`, `QUERY_RETURNED_NULL`, `SECURITY_EXCEPTION` y `QUERY_RUNTIME_EXCEPTION`) sí se
 conservan como evidencia, incluso sin eventos.
+
+## Transporte al backend
+
+`F12EvidenceTransportCoordinator` implementa el envío explícito a
+`POST /api/v1/profiles/{profile_id}/f12-evidence/v1`. Utiliza la autorización de dispositivo existente y no posee
+un token propio. El cliente OkHttp tiene desactivado el reintento automático: cada nuevo intento es decidido por el
+coordinador y vuelve a leer el mismo registro cifrado.
+
+El recorrido es:
+
+1. `EncryptedF12RawEvidenceStore` descifra el sobre y verifica nuevamente hashes y `capture_id`.
+2. Se serializa solamente el manifest. Los arrays `summaryBytes` y `eventsBytes` se agregan directamente como
+   `RequestBody`; no se interpretan ni reserializan.
+3. El multipart agrega `manifest` como campo de texto y luego cada `summary`/`events` en el orden de `pairs`.
+4. Se calcula `contentLength()` antes de enviar y se rechaza localmente un body desconocido o mayor a 48 MiB.
+5. Sólo una respuesta 200/201 con recibo consistente marca `DELIVERED`. El recibo completo se guarda dentro del
+   sobre cifrado. Un timeout conserva `RETRY_PENDING`; 401/403, 409 y fallos permanentes quedan diferenciados.
+
+`UNAVAILABLE/NOT_EXPORTED` usa el marcador SHA-256 definido por backend y se envía sin partes `summary` ni
+`events`. No se genera a partir de un día observado con cero eventos.
+
+Las flags `F12_RAW_EVIDENCE_CAPTURE_ENABLED` y `F12_RAW_EVIDENCE_TRANSPORT_ENABLED` son `false` por defecto.
+Release fuerza ambas a `false`; no existe worker ni planificación periódica para este transporte.
+
+## Prueba manual debug
+
+Requisitos: dispositivo vinculado, token de dispositivo vigente, autorización `USAGE_MONITORING`, Usage Access y
+un día local ya cerrado. La APK de desarrollo se compila explícitamente:
+
+```powershell
+.\gradlew.bat assembleDebug `
+  -PdemoMode=false `
+  -PapiBaseUrl=https://modera-api.duckdns.org/ `
+  -Pf12RawEvidenceCaptureEnabled=true `
+  -Pf12RawEvidenceTransportEnabled=true
+```
+
+Después de instalarla, el receptor existe únicamente en debug y exige el permiso de sistema `android.permission.DUMP`,
+por lo que se invoca desde ADB shell:
+
+```powershell
+adb shell am broadcast `
+  -n com.juan.habitos/com.juan.habitos.diagnostics.F12EvidenceDebugReceiver `
+  -a com.juan.habitos.debug.SEND_F12_EVIDENCE `
+  --es local_date 2026-11-18 `
+  --ei revision 1
+
+adb logcat -s F12EvidenceDebug:I
+```
+
+El log sólo informa estado, `capture_id`, `receipt_id`, revisión y código de error; nunca token, manifest ni eventos.
+Repetir el comando con igual fecha y revisión reutiliza la evidencia guardada. Una corrección real debe usar una
+revisión mayor. Esta prueba sólo valida recepción y persistencia: no activa `historical-submissions`, Analytics C1
+ni procesamiento automático.

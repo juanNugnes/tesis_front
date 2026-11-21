@@ -384,6 +384,13 @@ object HabitsApiClient {
             .addConverterFactory(GsonConverterFactory.create(GsonBuilder().serializeNulls().create()))
             .build().create(HabitsApi::class.java)
     }
+    /** Raw F12 evidence is retried only by the explicit idempotent transport coordinator. */
+    val f12EvidenceApi: F12EvidenceApi by lazy {
+        Retrofit.Builder().baseUrl(BuildConfig.API_BASE_URL)
+            .client(okhttp3.OkHttpClient.Builder().retryOnConnectionFailure(false).build())
+            .addConverterFactory(GsonConverterFactory.create(GsonBuilder().serializeNulls().create()))
+            .build().create(F12EvidenceApi::class.java)
+    }
     val adultMessagesApi: AdultMessagesApi by lazy {
         Retrofit.Builder()
             .baseUrl(BuildConfig.API_BASE_URL)

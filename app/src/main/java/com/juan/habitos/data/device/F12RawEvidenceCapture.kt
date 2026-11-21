@@ -2,6 +2,9 @@ package com.juan.habitos.data.device
 
 import com.juan.habitos.data.local.F12EvidenceSaveResult
 import com.juan.habitos.data.local.F12RawEvidenceStore
+import com.juan.habitos.data.remote.F12EvidenceTransportCoordinator
+import com.juan.habitos.data.remote.F12EvidenceTransportOutcome
+import com.juan.habitos.data.remote.F12EvidenceTransportStatus
 import com.juan.habitos.domain.repository.DeviceIdentityLocalStore
 import com.juan.habitos.domain.repository.ProfileLocalStore
 import java.time.Clock
@@ -61,5 +64,43 @@ class F12RawEvidenceCaptureCoordinator(
         )
         val record = F12RawEvidenceContract.record(diagnostic, revision, clock.instant())
         F12RawCaptureOutcome(F12RawCaptureStatus.STORED, evidenceStore.save(record))
+    }
+}
+
+data class F12ManualEvidenceOutcome(
+    val capture: F12RawCaptureOutcome?,
+    val transport: F12EvidenceTransportOutcome,
+)
+
+/** Debug entry point: retries a stored revision instead of collecting replacement bytes. */
+class F12RawEvidenceManualCoordinator(
+    private val profileStore: ProfileLocalStore,
+    private val evidenceStore: F12RawEvidenceStore,
+    private val captureCoordinator: F12RawEvidenceCaptureCoordinator,
+    private val transportCoordinator: F12EvidenceTransportCoordinator,
+) {
+    suspend fun captureAndDeliver(
+        localDate: LocalDate,
+        zoneId: ZoneId = ZoneId.systemDefault(),
+        revision: Int = 1,
+    ): F12ManualEvidenceOutcome {
+        val profileId = profileStore.profile.first()?.id
+            ?: return F12ManualEvidenceOutcome(
+                null,
+                F12EvidenceTransportOutcome(F12EvidenceTransportStatus.EVIDENCE_NOT_FOUND),
+            )
+        val existing = evidenceStore.list(profileId).firstOrNull {
+            it.localDate == localDate.toString() && it.revision == revision
+        }
+        if (existing != null) {
+            return F12ManualEvidenceOutcome(null, transportCoordinator.deliver(existing.captureId))
+        }
+        val capture = captureCoordinator.captureClosedDay(localDate, zoneId, revision)
+        val captureId = capture.saveResult?.record?.captureId
+            ?: return F12ManualEvidenceOutcome(
+                capture,
+                F12EvidenceTransportOutcome(F12EvidenceTransportStatus.DISABLED),
+            )
+        return F12ManualEvidenceOutcome(capture, transportCoordinator.deliver(captureId))
     }
 }

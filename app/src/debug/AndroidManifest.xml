@@ -1,6 +1,14 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <application android:usesCleartextTraffic="true">
         <activity android:name="com.juan.habitos.diagnostics.UsageDiagnosticsActivity" android:exported="false" android:label="Diagnóstico de uso" />
+        <receiver
+            android:name="com.juan.habitos.diagnostics.F12EvidenceDebugReceiver"
+            android:exported="true"
+            android:permission="android.permission.DUMP">
+            <intent-filter>
+                <action android:name="com.juan.habitos.debug.SEND_F12_EVIDENCE" />
+            </intent-filter>
+        </receiver>
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.diagnostics.fileprovider"
