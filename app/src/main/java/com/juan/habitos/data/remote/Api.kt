@@ -397,6 +397,12 @@ object HabitsApiClient {
             .addConverterFactory(GsonConverterFactory.create())
             .build().create(AdultMessagesApi::class.java)
     }
+    val adultHistoricalEvaluationsApi: AdultHistoricalEvaluationsApi by lazy {
+        Retrofit.Builder()
+            .baseUrl(BuildConfig.API_BASE_URL)
+            .addConverterFactory(GsonConverterFactory.create())
+            .build().create(AdultHistoricalEvaluationsApi::class.java)
+    }
     val api: HabitsApi by lazy {
         Retrofit.Builder()
             .baseUrl(BuildConfig.API_BASE_URL)

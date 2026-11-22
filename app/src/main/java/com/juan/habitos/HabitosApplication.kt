@@ -227,6 +227,16 @@ class HabitosApplication : Application() {
             demoMessages = ::createAdultMessagesDemoRepository,
         )
     }
+    val adultHistoricalEvaluationsRepository by lazy {
+        if (BuildConfig.DEMO_MODE) {
+            com.juan.habitos.data.remote.AdultHistoricalEvaluationsRepository { emptyList() }
+        } else {
+            com.juan.habitos.data.remote.RemoteAdultHistoricalEvaluationsRepository(
+                HabitsApiClient.adultHistoricalEvaluationsApi,
+                adultRequestAuthorization,
+            )
+        }
+    }
 
     override fun onCreate() {
         super.onCreate()

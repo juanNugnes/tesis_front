@@ -36,7 +36,18 @@ internal const val ANALYSIS_TAB = 3
 private const val ALERTS_TAB = 4
 private val tabs = listOf("📊\nRESUMEN", "📱\nAPPS", "🌙\nNOCTURNO", "🧠\nANÁLISIS", "🔔\nALERTAS")
 
-@Composable fun AdultDashboardScreen(state: AdultDashboardUiState, onPeriod: (DashboardPeriod) -> Unit, onProfile: () -> Unit, messages: AdultMessagesUiState = AdultMessagesUiState(), onRetryMessages: () -> Unit = {}, onMessagesSignIn: () -> Unit = {}, onExit: () -> Unit) {
+@Composable fun AdultDashboardScreen(
+    state: AdultDashboardUiState,
+    onPeriod: (DashboardPeriod) -> Unit,
+    onProfile: () -> Unit,
+    messages: AdultMessagesUiState = AdultMessagesUiState(),
+    onRetryMessages: () -> Unit = {},
+    onMessagesSignIn: () -> Unit = {},
+    historicalEvaluations: AdultHistoricalEvaluationsUiState = AdultHistoricalEvaluationsUiState(),
+    onRefreshHistoricalEvaluations: () -> Unit = {},
+    onHistoricalEvaluationsSignIn: () -> Unit = {},
+    onExit: () -> Unit,
+) {
     var tab by rememberSaveable { mutableIntStateOf(SUMMARY_TAB) }
     var focusedMessageId by rememberSaveable(messages.profileId) { mutableStateOf<String?>(null) }
     var focusedMessageVersion by rememberSaveable(messages.profileId) { mutableIntStateOf(0) }
@@ -86,7 +97,17 @@ private val tabs = listOf("📊\nRESUMEN", "📱\nAPPS", "🌙\nNOCTURNO", "🧠
                 SUMMARY_TAB -> Summary(state, onPeriod, messages) { tab = ANALYSIS_TAB }
                 1 -> AppsScreen(state.appsTab)
                 2 -> NightScreen(state.nightTab)
-                ANALYSIS_TAB -> AttentionScreen(state.attentionTab, messages, onRetryMessages, onMessagesSignIn, focusedMessageId, focusedMessageVersion)
+                ANALYSIS_TAB -> AttentionScreen(
+                    state.attentionTab,
+                    messages,
+                    onRetryMessages,
+                    onMessagesSignIn,
+                    historicalEvaluations,
+                    onRefreshHistoricalEvaluations,
+                    onHistoricalEvaluationsSignIn,
+                    focusedMessageId,
+                    focusedMessageVersion,
+                )
                 ALERTS_TAB -> AlertsScreen(
                     alerts = state.alerts,
                     alertsDemo = state.alertsDemo,
@@ -96,6 +117,70 @@ private val tabs = listOf("📊\nRESUMEN", "📱\nAPPS", "🌙\nNOCTURNO", "🧠
                         selectMessage = { id, version -> focusedMessageId = id; focusedMessageVersion = version },
                         selectTab = { tab = it },
                     )
+                }
+            }
+        }
+    }
+}
+
+@Composable private fun HistoricalEvaluationsSection(
+    state: AdultHistoricalEvaluationsUiState,
+    onRefresh: () -> Unit,
+    onSignIn: () -> Unit,
+) {
+    AdultSectionCard("Evaluaciones históricas C1") {
+        Text(
+            "Comparaciones históricas ya realizadas. Son independientes de los mensajes y avisos semanales.",
+            color = Color(0xFFCBD5E1),
+            fontSize = 13.sp,
+            lineHeight = 19.sp,
+        )
+        when {
+            state.loading -> CircularProgressIndicator(Modifier.size(28.dp), color = AppColors.PurpleSoft)
+            state.profileId == null -> Text(
+                "Seleccioná un perfil infantil para consultar sus evaluaciones.",
+                color = Color(0xFFCBD5E1),
+            )
+            else -> {
+                if (state.refreshing) LinearProgressIndicator(
+                    modifier = Modifier.fillMaxWidth(),
+                    color = AppColors.PurpleSoft,
+                    trackColor = AppColors.Divider,
+                )
+                state.error?.let { error ->
+                    Text(error, color = Color(0xFFCBD5E1))
+                    when {
+                        state.authenticationRequired -> TextButton(onClick = onSignIn) {
+                            Text("Iniciar sesión adulta")
+                        }
+                        !state.forbidden -> TextButton(onClick = onRefresh) { Text("Reintentar") }
+                    }
+                }
+                if (state.loaded && state.items.isEmpty()) Text(
+                    "Todavía no existen evaluaciones históricas para este perfil.",
+                    color = Color(0xFFCBD5E1),
+                )
+                state.items.forEach { item ->
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        color = AppColors.Surface.copy(alpha = .72f),
+                        shape = RoundedCornerShape(12.dp),
+                        border = BorderStroke(1.dp, AppColors.Divider),
+                    ) {
+                        Column(
+                            Modifier.fillMaxWidth().padding(14.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            Text(item.date, color = AppColors.PurpleSoft, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            Text(item.title, color = Color.White, fontWeight = FontWeight.Bold)
+                            Text(item.description, color = Color(0xFFCBD5E1), fontSize = 13.sp, lineHeight = 19.sp)
+                        }
+                    }
+                }
+                if (state.error == null && !state.authenticationRequired && !state.forbidden && !state.loading) {
+                    TextButton(onClick = onRefresh, enabled = !state.refreshing) {
+                        Text(if (state.refreshing) "Actualizando…" else "Actualizar evaluaciones")
+                    }
                 }
             }
         }
@@ -260,13 +345,30 @@ internal fun adultMessagesDemoLabel(state: AdultMessagesUiState): String? =
     }
 }
 
-@Composable private fun AttentionScreen(state: AdultAttentionTabUiState, messages: AdultMessagesUiState, onRetryMessages: () -> Unit, onMessagesSignIn: () -> Unit, focusedMessageId: String?, focusedVersion: Int) {
+@Composable private fun AttentionScreen(
+    state: AdultAttentionTabUiState,
+    messages: AdultMessagesUiState,
+    onRetryMessages: () -> Unit,
+    onMessagesSignIn: () -> Unit,
+    historicalEvaluations: AdultHistoricalEvaluationsUiState,
+    onRefreshHistoricalEvaluations: () -> Unit,
+    onHistoricalEvaluationsSignIn: () -> Unit,
+    focusedMessageId: String?,
+    focusedVersion: Int,
+) {
     val listState = rememberLazyListState()
     LaunchedEffect(focusedMessageId, focusedVersion) {
         if (focusedMessageId != null) listState.scrollToItem(1)
     }
     LazyColumn(Modifier.fillMaxSize(), state = listState, contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         item { AdultContentHeader("Análisis del comportamiento", "Patrones observados a partir del historial de uso") }
+        item {
+            HistoricalEvaluationsSection(
+                historicalEvaluations,
+                onRefreshHistoricalEvaluations,
+                onHistoricalEvaluationsSignIn,
+            )
+        }
         item { AdultMessagesSection(messages, onRetryMessages, onMessagesSignIn, focusedMessageId, focusedVersion) }
         item {
             AdultSectionCard("Patrones observados") {

@@ -186,6 +186,7 @@ private inline fun <reified T : ViewModel> factory(crossinline create: () -> T) 
             val selectedProfile by profileRepository.profile.collectAsStateWithLifecycle(initialValue = null)
             val dashboardMessagesDemoActive = app.dashboardDemoActiveFor(selectedProfile)
             var messagesVm: AdultMessagesViewModel? = null
+            var historicalEvaluationsVm: AdultHistoricalEvaluationsViewModel? = null
             val visibleMessages = when {
                 dashboardMessagesDemoActive -> dashboardDemoMessagesState(requireNotNull(selectedProfile))
                 selectedProfile == null -> AdultMessagesUiState()
@@ -210,9 +211,36 @@ private inline fun <reified T : ViewModel> factory(crossinline create: () -> T) 
                     )
                 }
             }
+            val visibleHistoricalEvaluations = if (selectedProfile == null) {
+                AdultHistoricalEvaluationsUiState()
+            } else {
+                val remoteHistoricalEvaluationsVm: AdultHistoricalEvaluationsViewModel = viewModel(
+                    key = "adult-historical-evaluations-$mode",
+                    factory = factory {
+                        AdultHistoricalEvaluationsViewModel(
+                            profileRepository,
+                            app.adultHistoricalEvaluationsRepository,
+                        )
+                    },
+                )
+                historicalEvaluationsVm = remoteHistoricalEvaluationsVm
+                val historicalEvaluations by remoteHistoricalEvaluationsVm.state.collectAsStateWithLifecycle()
+                if (historicalEvaluations.profileId == selectedProfile?.id) historicalEvaluations
+                else AdultHistoricalEvaluationsUiState(profileId = selectedProfile?.id, loading = true)
+            }
             val returnToProfiles = { nav.navigate("adultLink", adultProfileListNavigationOptions()) }
             BackHandler(enabled = mode == DeviceMode.ADULT, onBack = returnToProfiles)
-            AdultDashboardScreen(state, vm::period, { nav.navigate("adultProfile") }, visibleMessages, { messagesVm?.retry() }, { nav.navigate("adultAuth") }) {
+            AdultDashboardScreen(
+                state = state,
+                onPeriod = vm::period,
+                onProfile = { nav.navigate("adultProfile") },
+                messages = visibleMessages,
+                onRetryMessages = { messagesVm?.retry() },
+                onMessagesSignIn = { nav.navigate("adultAuth") },
+                historicalEvaluations = visibleHistoricalEvaluations,
+                onRefreshHistoricalEvaluations = { historicalEvaluationsVm?.refresh() },
+                onHistoricalEvaluationsSignIn = { nav.navigate("adultAuth") },
+            ) {
                 if (mode == DeviceMode.CHILD) nav.navigate("child") { popUpTo("child") { inclusive = true } }
                 else returnToProfiles()
             }
