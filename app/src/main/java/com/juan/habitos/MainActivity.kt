@@ -414,6 +414,7 @@ private inline fun <reified T : ViewModel> factory(crossinline create: () -> T) 
                             { authorizedProfileId ->
                                 app.usageWorkController.resumeAfterMonitoringAuthorization(authorizedProfileId)
                                 app.f12HistoricalWorkController.resumeAfterMonitoringAuthorization(authorizedProfileId)
+                                app.f12RawEvidenceWorkController.resumeAfterMonitoringAuthorization(authorizedProfileId)
                             },
                         )
                     },

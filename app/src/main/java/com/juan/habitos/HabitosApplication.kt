@@ -37,6 +37,9 @@ import com.juan.habitos.data.sync.UsageWorkController
 import com.juan.habitos.data.sync.WorkManagerUsageWorkScheduler
 import com.juan.habitos.data.sync.F12HistoricalWorkController
 import com.juan.habitos.data.sync.WorkManagerF12HistoricalScheduler
+import com.juan.habitos.data.sync.F12RawEvidenceAutomationCoordinator
+import com.juan.habitos.data.sync.F12RawEvidenceWorkController
+import com.juan.habitos.data.sync.WorkManagerF12RawEvidenceScheduler
 import com.juan.habitos.data.sync.AutomaticOfferOpportunityWorkController
 import com.juan.habitos.data.sync.WorkManagerAutomaticOfferOpportunityScheduler
 import com.juan.habitos.domain.model.*
@@ -47,6 +50,9 @@ import kotlinx.coroutines.flow.first
 
 class HabitosApplication : Application() {
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private val f12RawEvidenceAutomationEnabled
+        get() = BuildConfig.DEBUG && BuildConfig.F12_RAW_EVIDENCE_AUTOMATION_ENABLED &&
+            BuildConfig.F12_RAW_EVIDENCE_CAPTURE_ENABLED && BuildConfig.F12_RAW_EVIDENCE_TRANSPORT_ENABLED
     private val localProfileStore by lazy { DataStoreProfileRepository(this) }
     private val localChildPreferencesStore by lazy { DataStoreChildPreferencesRepository(this) }
     private val localProfileContextStore by lazy { DataStoreProfileContextStore(this) }
@@ -103,6 +109,7 @@ class HabitosApplication : Application() {
     private val usageCollector by lazy { AndroidAggregatedUsageCollector(androidUsageDataSource) }
     private val usageWorkScheduler by lazy { WorkManagerUsageWorkScheduler(this) }
     private val f12HistoricalWorkScheduler by lazy { WorkManagerF12HistoricalScheduler(this) }
+    private val f12RawEvidenceWorkScheduler by lazy { WorkManagerF12RawEvidenceScheduler(this) }
     private val automaticOfferOpportunityWorkScheduler by lazy { WorkManagerAutomaticOfferOpportunityScheduler(this) }
     val usageSyncCoordinator by lazy {
         UsageSyncCoordinator(
@@ -170,6 +177,26 @@ class HabitosApplication : Application() {
             f12RawEvidenceStore,
             f12RawEvidenceCaptureCoordinator,
             f12RawEvidenceTransportCoordinator,
+        )
+    }
+    private val f12RawEvidenceAutomationCoordinator by lazy {
+        F12RawEvidenceAutomationCoordinator(
+            f12RawEvidenceAutomationEnabled,
+            localProfileStore,
+            localDeviceIdentityStore,
+            f12RawEvidenceStore,
+            f12RawEvidenceCaptureCoordinator,
+            f12RawEvidenceTransportCoordinator,
+        )
+    }
+    val f12RawEvidenceWorkController by lazy {
+        F12RawEvidenceWorkController(
+            f12RawEvidenceAutomationEnabled,
+            deviceSessionRepository,
+            localProfileStore,
+            localDeviceIdentityStore,
+            f12RawEvidenceWorkScheduler,
+            f12RawEvidenceAutomationCoordinator,
         )
     }
     private val automaticOfferOpportunityCoordinator by lazy {
@@ -243,6 +270,7 @@ class HabitosApplication : Application() {
         if (!BuildConfig.DEMO_MODE) {
             usageWorkController.start(applicationScope)
             f12HistoricalWorkController.start(applicationScope)
+            f12RawEvidenceWorkController.start(applicationScope)
             automaticOfferOpportunityWorkController.start(applicationScope)
         }
     }

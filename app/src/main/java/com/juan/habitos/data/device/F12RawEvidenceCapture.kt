@@ -65,6 +65,42 @@ class F12RawEvidenceCaptureCoordinator(
         val record = F12RawEvidenceContract.record(diagnostic, revision, clock.instant())
         F12RawCaptureOutcome(F12RawCaptureStatus.STORED, evidenceStore.save(record))
     }
+
+    /**
+     * Persists the contract sentinel when Android cannot export a closed day at all. Query failures
+     * that can be represented by the original summaries must continue through [captureClosedDay]
+     * instead, so they are never mistaken for a measured zero.
+     */
+    suspend fun recordUnavailableClosedDay(
+        localDate: LocalDate,
+        zoneId: ZoneId = ZoneId.systemDefault(),
+        revision: Int = 1,
+    ): F12RawCaptureOutcome = mutex.withLock {
+        if (!enabled) return@withLock F12RawCaptureOutcome(F12RawCaptureStatus.DISABLED)
+        require(localDate < LocalDate.now(clock.withZone(zoneId))) { "F12 raw evidence requires a closed local day" }
+        val profile = profileStore.profile.first()
+            ?: return@withLock F12RawCaptureOutcome(F12RawCaptureStatus.MISSING_CONFIGURATION)
+        val profileId = profile.id?.takeIf(String::isNotBlank)
+            ?: return@withLock F12RawCaptureOutcome(F12RawCaptureStatus.MISSING_CONFIGURATION)
+        if (!profile.active || !profileStore.onboardingComplete.first()) {
+            return@withLock F12RawCaptureOutcome(F12RawCaptureStatus.MISSING_CONFIGURATION)
+        }
+        val identity = identityStore.identity.first()
+        val deviceId = identity.deviceId?.takeIf(String::isNotBlank)
+            ?: return@withLock F12RawCaptureOutcome(F12RawCaptureStatus.MISSING_CONFIGURATION)
+        if (identity.profileId != profileId) {
+            return@withLock F12RawCaptureOutcome(F12RawCaptureStatus.MISSING_CONFIGURATION)
+        }
+        val record = F12RawEvidenceContract.unavailableRecord(
+            profileId = profileId,
+            deviceId = deviceId,
+            localDate = localDate.toString(),
+            timezoneId = zoneId.id,
+            revision = revision,
+            createdAt = clock.instant(),
+        )
+        F12RawCaptureOutcome(F12RawCaptureStatus.STORED, evidenceStore.save(record))
+    }
 }
 
 data class F12ManualEvidenceOutcome(
